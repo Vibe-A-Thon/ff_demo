@@ -3,9 +3,9 @@ markdown
 # Fraud Forge - Technical Requirements Specification
 
 ## System Overview
-**Product:** Fraud Forge - Autonomous Fraud Simulation & Self-Healing Defense Platform  
-**Architecture:** Hybrid Multi-Agent System with Lifecycle Workflow Engine  
-**Target Environment:** Bank-grade, Multi-tenant, Production-ready  
+**Product:** Fraud Forge - Autonomous Fraud Simulation & Self-Healing Defense Platform
+**Architecture:** Hybrid Multi-Agent System with Lifecycle Workflow Engine
+**Target Environment:** Bank-grade, Multi-tenant, Production-ready
 **Core Technology:** RAG-based Learning, LangGraph Orchestration, Vector Memory
 
 ---
@@ -158,28 +158,28 @@ services:
     image: ollama/ollama:latest
     ports: ["11434:11434"]
     volumes: ["./models:/root/.ollama"]
-    
+
   chromadb:
     image: chromadb/chroma:latest
     ports: ["8001:8000"]
     volumes: ["./chroma_data:/chroma/chroma"]
-    
+
   postgres:
     image: postgres:15
     ports: ["5432:5432"]
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes: ["./pg_data:/var/lib/postgresql/data"]
-    
+
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
-    
+
   api:
     build: ./src
     ports: ["8000:8000"]
     depends_on: [ollama, chromadb, postgres, redis]
-    
+
   ui:
     build: ./ui
     ports: ["8501:8501"]
@@ -203,7 +203,7 @@ openapi: 3.0.0
 info:
   title: Fraud Forge API
   version: 1.0.0
-  
+
 paths:
   /api/v1/battles:
     post:
@@ -216,17 +216,17 @@ paths:
       responses:
         '201':
           description: Battle created
-  
+
   /api/v1/agents/{agent_id}/stop:
     post:
       summary: Kill switch for agent
       security:
         - BearerAuth: []
-  
+
   /api/v1/apmc/export:
     post:
       summary: Export agent as APMC file
-      
+
   /api/v1/apmc/import:
     post:
       summary: Import APMC file to agent
@@ -248,7 +248,7 @@ tools:
   - Docker Desktop
   - VS Code with Python extensions
   - Git for version control
-  
+
 dependencies:
   - poetry for dependency management
   - pre-commit hooks
@@ -1143,9 +1143,9 @@ text
 # Fraud Forge - Implementation Plan
 
 ## Executive Summary
-**Project Duration:** 5 Weeks (25 Business Days)  
-**Team Size:** 3-5 Developers + 1 Product Manager  
-**Success Criteria:** Working prototype winning hackathons with 95%+ probability  
+**Project Duration:** 5 Weeks (25 Business Days)
+**Team Size:** 3-5 Developers + 1 Product Manager
+**Success Criteria:** Working prototype winning hackathons with 95%+ probability
 **Key Deliverables:** Complete 8-team system with demo capabilities
 
 ---
@@ -1206,11 +1206,11 @@ class BaseAgent:
         self.role = role
         self.memory = memory
         self.tools = tools
-    
+
     async def think(self, context):
         # RAG-based reasoning
         pass
-    
+
     async def act(self, decision):
         # Tool execution
         pass
@@ -1259,7 +1259,7 @@ class WarLoopStateMachine:
     def __init__(self):
         self.graph = StateGraph(BattleState)
         self._build_graph()
-    
+
     def _build_graph(self):
         self.graph.add_node("red_attack", red_attack_node)
         self.graph.add_edge("red_attack", "blue_detect")
