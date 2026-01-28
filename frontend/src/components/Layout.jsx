@@ -4,8 +4,9 @@ import { ScrollArea } from "../components/ui/scroll-area";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { seedData } from "../lib/api";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth, ROLE_DEFINITIONS } from "../contexts/AuthContext";
 import { useAlerts } from "../contexts/AlertContext";
 import { AlertHistoryPanel, ThresholdConfigPanel } from "./AlertPanels";
 import { toast } from "sonner";
@@ -28,6 +29,12 @@ import {
   Settings,
   PlayCircle,
   Lock,
+  Crown,
+  Shield,
+  Wrench,
+  Scale,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 
 const navItems = [
@@ -59,6 +66,13 @@ const ROLE_PERMISSIONS = {
   compliance: ["metrics", "evidence", "approvals", "battle-replay"],
 };
 
+const ROLE_ICONS = {
+  admin: Crown,
+  analyst: Shield,
+  engineer: Wrench,
+  compliance: Scale,
+};
+
 const hasAccess = (userRole, routePath) => {
   const permissions = ROLE_PERMISSIONS[userRole] || [];
   if (permissions.includes("*")) return true;
@@ -72,7 +86,7 @@ const Layout = () => {
   const [thresholdPanelOpen, setThresholdPanelOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isDemoUser, switchRole, roleDefinitions } = useAuth();
   const { unreadCount, criticalCount, currentPreset } = useAlerts();
 
   const handleSeedData = async () => {
@@ -92,6 +106,18 @@ const Layout = () => {
     navigate("/login");
     toast.success("Logged out successfully");
   };
+
+  const handleRoleSwitch = (newRole) => {
+    switchRole(newRole);
+    toast.success(
+      <div className="flex items-center gap-2">
+        <RefreshCw className="h-4 w-4" />
+        <span>Switched to <strong>{roleDefinitions[newRole]?.label}</strong> role</span>
+      </div>
+    );
+  };
+
+  const RoleIcon = user?.role ? ROLE_ICONS[user.role] : User;
 
   return (
     <div className="flex h-screen bg-background" data-testid="layout-container">
@@ -127,16 +153,26 @@ const Layout = () => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start gap-3 h-auto py-2" data-testid="user-menu-btn">
-                  <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-                    <User className="h-4 w-4 text-blue-400" />
+                  <div className={`w-8 h-8 rounded-full ${roleDefinitions[user.role]?.bgColor || 'bg-blue-500/20'} flex items-center justify-center`}>
+                    <RoleIcon className={`h-4 w-4 ${roleDefinitions[user.role]?.color || 'text-blue-400'}`} />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="text-sm font-medium">{user.name}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{user.name}</p>
+                      {isDemoUser && (
+                        <Badge className="bg-purple-500/20 text-purple-400 text-[10px] px-1.5 py-0">
+                          <Sparkles className="h-2.5 w-2.5 mr-0.5" />
+                          DEMO
+                        </Badge>
+                      )}
+                    </div>
+                    <p className={`text-xs ${roleDefinitions[user.role]?.color || 'text-muted-foreground'}`}>
+                      {roleDefinitions[user.role]?.label || user.role}
+                    </p>
                   </div>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuContent align="start" className="w-64">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
@@ -164,6 +200,37 @@ const Layout = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Demo User Role Switcher */}
+            {isDemoUser && (
+              <div className="mt-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                  <span className="text-xs font-medium text-purple-400">Demo Role Switcher</span>
+                </div>
+                <Select value={user.role} onValueChange={handleRoleSwitch}>
+                  <SelectTrigger className="h-9" data-testid="demo-role-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(roleDefinitions).map(([roleKey, roleDef]) => {
+                      const Icon = ROLE_ICONS[roleKey];
+                      return (
+                        <SelectItem key={roleKey} value={roleKey}>
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${roleDef.color}`} />
+                            <div>
+                              <span className="font-medium">{roleDef.label}</span>
+                              <p className="text-xs text-muted-foreground">{roleDef.description}</p>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         )}
 
