@@ -37,6 +37,10 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - ✅ **Streaming AI Thinking** - Real-time text streaming with LIVE indicators
 - ✅ **Demo Autoplay Mode** - Automated battle progression with variable pacing
 - ✅ **Real-time Alerts** - Threshold-based alerts for TTI, Success Rate, Money at Risk
+- ✅ **Alert History Panel** - Persistent history with filter tabs, mark as read, clear all
+- ✅ **Configurable Thresholds** - Bank risk profiles (Conservative, Moderate, High-Volume, Fintech)
+- ✅ **Role-based Access Control** - Admin, Analyst, Engineer, Compliance roles with route protection
+- ✅ **Battle Replay & Comparison** - Before/after comparison with playback controls
 - ✅ Brain Surgery Station - Force-directed graph with drag-drop nodes
 - ✅ Metrics Dashboard - KPIs, charts, time-to-immunity trends
 - ✅ RSB Manager - Package list, import, test, merge
@@ -44,7 +48,7 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - ✅ Evidence Pack Viewer - XAI narrative, export ZIP
 - ✅ Rule Editor - Form builder, code view, test results
 - ✅ Approvals - Queue, approve/reject, SoD checks
-- ✅ Sidebar navigation with user profile dropdown
+- ✅ Sidebar navigation with user profile dropdown and role indicators
 
 ## Prioritized Backlog
 
@@ -54,23 +58,27 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - Demo autoplay mode ✅
 - Real-time alerts ✅
 - WebSocket streaming ✅
+- Alert History Panel ✅
+- Configurable Thresholds ✅
+- Role-based Access Control ✅
+- Battle Replay & Comparison ✅
 
 ### P1 (High Priority)
-- Role-based route protection enforcement
-- Persistent alert history panel
-- Battle replay with before/after comparison
+- User profile management page
+- Export threshold configurations
+- Email notifications for critical alerts
 
 ### P2 (Medium Priority)  
 - Slow-motion playback mode
 - Accessibility improvements (screen reader, keyboard nav)
 - High-contrast mode
-- Email notifications for approvals
+- Custom date range filters for metrics
 
 ### P3 (Nice to Have)
 - Custom report generation
 - Integration with external SIEM systems
 - Multi-tenant support
-- Custom threshold configuration UI
+- Threshold configuration sync across users
 
 ## Next Tasks
 1. Implement login/register UI screens
