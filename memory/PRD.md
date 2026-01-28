@@ -58,23 +58,27 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - Demo autoplay mode ✅
 - Real-time alerts ✅
 - WebSocket streaming ✅
+- Alert History Panel ✅
+- Configurable Thresholds ✅
+- Role-based Access Control ✅
+- Battle Replay & Comparison ✅
 
 ### P1 (High Priority)
-- Role-based route protection enforcement
-- Persistent alert history panel
-- Battle replay with before/after comparison
+- User profile management page
+- Export threshold configurations
+- Email notifications for critical alerts
 
 ### P2 (Medium Priority)  
 - Slow-motion playback mode
 - Accessibility improvements (screen reader, keyboard nav)
 - High-contrast mode
-- Email notifications for approvals
+- Custom date range filters for metrics
 
 ### P3 (Nice to Have)
 - Custom report generation
 - Integration with external SIEM systems
 - Multi-tenant support
-- Custom threshold configuration UI
+- Threshold configuration sync across users
 
 ## Next Tasks
 1. Implement login/register UI screens
