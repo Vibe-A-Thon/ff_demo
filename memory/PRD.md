@@ -40,6 +40,7 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - ✅ **Alert History Panel** - Persistent history with filter tabs, mark as read, clear all
 - ✅ **Configurable Thresholds** - Bank risk profiles (Conservative, Moderate, High-Volume, Fintech)
 - ✅ **Role-based Access Control** - Admin, Analyst, Engineer, Compliance roles with route protection
+- ✅ **Demo Role Switcher** - Demo users can switch between all roles for demonstrations
 - ✅ **Battle Replay & Comparison** - Before/after comparison with playback controls
 - ✅ Brain Surgery Station - Force-directed graph with drag-drop nodes
 - ✅ Metrics Dashboard - KPIs, charts, time-to-immunity trends
