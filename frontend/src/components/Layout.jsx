@@ -103,6 +103,49 @@ const Layout = () => {
           </Button>
         </div>
 
+        {/* User Info */}
+        {!collapsed && user && (
+          <div className="p-4 border-b border-border">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="w-full justify-start gap-3 h-auto py-2" data-testid="user-menu-btn">
+                  <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                    <User className="h-4 w-4 text-blue-400" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-medium">{user.name}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>
+                  <User className="h-4 w-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Bell className="h-4 w-4 mr-2" />
+                  Notifications
+                  {unreadAlerts > 0 && (
+                    <Badge className="ml-auto bg-red-500 text-white">{unreadAlerts}</Badge>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-red-400" data-testid="logout-btn">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
         {/* Navigation */}
         <ScrollArea className="flex-1 py-4">
           <nav className="space-y-1 px-2">
