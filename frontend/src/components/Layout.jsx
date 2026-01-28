@@ -28,7 +28,7 @@ import {
   Settings,
   PlayCircle,
   Lock,
-};
+} from "lucide-react";
 
 const navItems = [
   { path: "/war-room", label: "War Room", icon: Swords, team: "red" },
