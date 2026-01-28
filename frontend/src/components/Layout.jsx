@@ -250,34 +250,85 @@ const Layout = () => {
         {/* Navigation */}
         <ScrollArea className="flex-1 py-4">
           <nav className="space-y-1 px-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              const teamClass = teamColors[item.team];
-              const routeKey = item.path.slice(1);
-              const canAccess = user ? hasAccess(user.role, routeKey) : false;
+            <TooltipProvider delayDuration={300}>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                const teamClass = teamColors[item.team];
+                const routeKey = item.path.slice(1);
+                const canAccess = user ? hasAccess(user.role, routeKey) : false;
+                const rolesWithAccess = getRolesWithAccess(routeKey);
 
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  data-testid={`nav-${item.path.slice(1)}`}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all border-l-2 ${
-                    isActive
-                      ? `bg-zinc-800 ${teamClass.split(" ")[0]} ${teamClass.split(" ")[1]}`
-                      : `border-transparent ${canAccess ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50'} ${teamClass.split(" ").slice(2).join(" ")}`
-                  } ${!canAccess ? 'opacity-50' : ''}`}
-                >
-                  <Icon className="h-5 w-5 flex-shrink-0" />
-                  {!collapsed && (
-                    <>
-                      <span className="flex-1">{item.label}</span>
-                      {!canAccess && <Lock className="h-3 w-3 text-muted-foreground" />}
-                    </>
-                  )}
-                </NavLink>
-              );
-            })}
+                const navContent = (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    data-testid={`nav-${item.path.slice(1)}`}
+                    className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all border-l-2 ${
+                      isActive
+                        ? `bg-zinc-800 ${teamClass.split(" ")[0]} ${teamClass.split(" ")[1]}`
+                        : `border-transparent ${canAccess ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50'} ${teamClass.split(" ").slice(2).join(" ")}`
+                    } ${!canAccess ? 'opacity-50' : ''}`}
+                  >
+                    <Icon className="h-5 w-5 flex-shrink-0" />
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1">{item.label}</span>
+                        {!canAccess && <Lock className="h-3 w-3 text-muted-foreground" />}
+                      </>
+                    )}
+                  </NavLink>
+                );
+
+                // Show tooltip only for locked items
+                if (!canAccess && !collapsed) {
+                  return (
+                    <Tooltip key={item.path}>
+                      <TooltipTrigger asChild>
+                        {navContent}
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-[280px] p-3" data-testid={`tooltip-${routeKey}`}>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Lock className="h-4 w-4 text-yellow-400" />
+                            <span className="font-semibold text-yellow-400">Access Restricted</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Your current role ({ROLE_DEFINITIONS[user?.role]?.label || user?.role}) doesn't have access to {item.label}.
+                          </p>
+                          <div className="pt-2 border-t border-border">
+                            <p className="text-xs text-muted-foreground mb-1.5">Roles with access:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {rolesWithAccess.map(role => {
+                                const RoleIcon = ROLE_ICONS[role];
+                                return (
+                                  <Badge 
+                                    key={role} 
+                                    variant="outline" 
+                                    className={`text-xs ${ROLE_DEFINITIONS[role]?.color || ''}`}
+                                  >
+                                    <RoleIcon className="h-3 w-3 mr-1" />
+                                    {ROLE_DEFINITIONS[role]?.label || role}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {isDemoUser && (
+                            <p className="text-xs text-purple-400 pt-2 border-t border-border">
+                              <Sparkles className="h-3 w-3 inline mr-1" />
+                              Use the Demo Role Switcher to change roles
+                            </p>
+                          )}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
+                return navContent;
+              })}
+            </TooltipProvider>
           </nav>
         </ScrollArea>
 
