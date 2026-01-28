@@ -7,6 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { seedData } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 import { useAlerts } from "../contexts/AlertContext";
+import { AlertHistoryPanel, ThresholdConfigPanel } from "./AlertPanels";
 import { toast } from "sonner";
 import {
   Swords,
@@ -25,10 +26,13 @@ import {
   LogOut,
   Bell,
   Settings,
-} from "lucide-react";
+  PlayCircle,
+  Lock,
+};
 
 const navItems = [
   { path: "/war-room", label: "War Room", icon: Swords, team: "red" },
+  { path: "/battle-replay", label: "Battle Replay", icon: PlayCircle, team: "blue" },
   { path: "/brain-surgery", label: "Brain Surgery", icon: Brain, team: "purple" },
   { path: "/metrics", label: "Metrics", icon: BarChart3, team: "blue" },
   { path: "/rsb-manager", label: "RSB Manager", icon: Package, team: "green" },
@@ -47,13 +51,29 @@ const teamColors = {
   orange: "border-orange-500 text-orange-400 hover:bg-orange-500/10",
 };
 
+// Role-based access configuration
+const ROLE_PERMISSIONS = {
+  admin: ["*"],
+  analyst: ["war-room", "brain-surgery", "metrics", "evidence", "battle-replay"],
+  engineer: ["war-room", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay"],
+  compliance: ["metrics", "evidence", "approvals", "battle-replay"],
+};
+
+const hasAccess = (userRole, routePath) => {
+  const permissions = ROLE_PERMISSIONS[userRole] || [];
+  if (permissions.includes("*")) return true;
+  return permissions.includes(routePath);
+};
+
 const Layout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [alertPanelOpen, setAlertPanelOpen] = useState(false);
+  const [thresholdPanelOpen, setThresholdPanelOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { alerts } = useAlerts();
+  const { unreadCount, criticalCount, currentPreset } = useAlerts();
 
   const handleSeedData = async () => {
     setSeeding(true);
@@ -72,8 +92,6 @@ const Layout = () => {
     navigate("/login");
     toast.success("Logged out successfully");
   };
-
-  const unreadAlerts = alerts.filter(a => a.type === 'critical').length;
 
   return (
     <div className="flex h-screen bg-background" data-testid="layout-container">
@@ -125,15 +143,18 @@ const Layout = () => {
                   <User className="h-4 w-4 mr-2" />
                   Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setThresholdPanelOpen(true)}>
                   <Settings className="h-4 w-4 mr-2" />
-                  Settings
+                  Alert Settings
+                  <Badge variant="outline" className="ml-auto text-xs capitalize">{currentPreset}</Badge>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAlertPanelOpen(true)}>
                   <Bell className="h-4 w-4 mr-2" />
                   Notifications
-                  {unreadAlerts > 0 && (
-                    <Badge className="ml-auto bg-red-500 text-white">{unreadAlerts}</Badge>
+                  {unreadCount > 0 && (
+                    <Badge className={`ml-auto ${criticalCount > 0 ? 'bg-red-500' : 'bg-blue-500'} text-white`}>
+                      {unreadCount}
+                    </Badge>
                   )}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -153,6 +174,8 @@ const Layout = () => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
               const teamClass = teamColors[item.team];
+              const routeKey = item.path.slice(1);
+              const canAccess = user ? hasAccess(user.role, routeKey) : false;
 
               return (
                 <NavLink
@@ -162,19 +185,46 @@ const Layout = () => {
                   className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all border-l-2 ${
                     isActive
                       ? `bg-zinc-800 ${teamClass.split(" ")[0]} ${teamClass.split(" ")[1]}`
-                      : `border-transparent text-muted-foreground hover:text-foreground ${teamClass.split(" ").slice(2).join(" ")}`
-                  }`}
+                      : `border-transparent ${canAccess ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50'} ${teamClass.split(" ").slice(2).join(" ")}`
+                  } ${!canAccess ? 'opacity-50' : ''}`}
                 >
                   <Icon className="h-5 w-5 flex-shrink-0" />
-                  {!collapsed && <span>{item.label}</span>}
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1">{item.label}</span>
+                      {!canAccess && <Lock className="h-3 w-3 text-muted-foreground" />}
+                    </>
+                  )}
                 </NavLink>
               );
             })}
           </nav>
         </ScrollArea>
 
-        {/* Seed Data Button */}
-        <div className="border-t border-border p-4">
+        {/* Alert Status & Seed Button */}
+        <div className="border-t border-border p-4 space-y-3">
+          {/* Alert Status */}
+          {!collapsed && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-between"
+              onClick={() => setAlertPanelOpen(true)}
+              data-testid="open-alerts-btn"
+            >
+              <span className="flex items-center gap-2">
+                <Bell className={`h-4 w-4 ${criticalCount > 0 ? 'text-red-400' : ''}`} />
+                Alerts
+              </span>
+              {unreadCount > 0 && (
+                <Badge className={`${criticalCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-blue-500'} text-white`}>
+                  {unreadCount}
+                </Badge>
+              )}
+            </Button>
+          )}
+
+          {/* Seed Data Button */}
           <Button
             variant="outline"
             size={collapsed ? "icon" : "sm"}
@@ -193,6 +243,12 @@ const Layout = () => {
       <main className="flex-1 overflow-hidden" data-testid="main-content">
         <Outlet />
       </main>
+
+      {/* Alert History Panel */}
+      <AlertHistoryPanel open={alertPanelOpen} onOpenChange={setAlertPanelOpen} />
+
+      {/* Threshold Configuration Panel */}
+      <ThresholdConfigPanel open={thresholdPanelOpen} onOpenChange={setThresholdPanelOpen} />
     </div>
   );
 };
