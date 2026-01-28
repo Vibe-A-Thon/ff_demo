@@ -4,7 +4,10 @@
   "private": true,
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
+<<<<<<< HEAD
     "@monaco-editor/react": "^4.7.0",
+=======
+>>>>>>> 10ad573c7dd777d4a9d849c3dd5ad224c9602a6f
     "@radix-ui/react-accordion": "^1.2.8",
     "@radix-ui/react-alert-dialog": "^1.1.11",
     "@radix-ui/react-aspect-ratio": "^1.1.4",
@@ -39,15 +42,22 @@
     "cra-template": "1.2.0",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+<<<<<<< HEAD
     "framer-motion": "^12.29.2",
+=======
+>>>>>>> 10ad573c7dd777d4a9d849c3dd5ad224c9602a6f
     "input-otp": "^1.4.2",
     "lucide-react": "^0.507.0",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
     "react-day-picker": "8.10.1",
+<<<<<<< HEAD
     "react-diff-viewer-continued": "^3.4.0",
     "react-dom": "^19.0.0",
     "react-force-graph-2d": "^1.29.0",
+=======
+    "react-dom": "^19.0.0",
+>>>>>>> 10ad573c7dd777d4a9d849c3dd5ad224c9602a6f
     "react-hook-form": "^7.56.2",
     "react-resizable-panels": "^3.0.1",
     "react-router-dom": "^7.5.1",
@@ -56,7 +66,10 @@
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
     "tailwindcss-animate": "^1.0.7",
+<<<<<<< HEAD
     "uuid": "^13.0.0",
+=======
+>>>>>>> 10ad573c7dd777d4a9d849c3dd5ad224c9602a6f
     "vaul": "^1.1.2",
     "zod": "^3.24.4"
   },

@@ -77,6 +77,7 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
+<<<<<<< HEAD
 android-sdk/ frontend/node_modules/.cache/default-development/2.pack
 frontend/node_modules/.cache/default-development/3.pack
 frontend/node_modules/.cache/default-development/0.pack
@@ -84,6 +85,9 @@ frontend/node_modules/.cache/default-development/1.pack
 frontend/node_modules/.cache/default-development/2.pack
 frontend/node_modules/.cache/default-development/4.pack
 -e 
+=======
+android-sdk/ -e 
+>>>>>>> 10ad573c7dd777d4a9d849c3dd5ad224c9602a6f
 # Environment files
 *.env
 *.env.*
@@ -91,6 +95,7 @@ frontend/node_modules/.cache/default-development/4.pack
 # Environment files
 *.env
 *.env.*
+<<<<<<< HEAD
 -e 
 # Environment files
 *.env
@@ -134,3 +139,5 @@ frontend/node_modules/.cache/default-development/8.pack
 *.env
 *.env.*
 frontend/node_modules/.cache/default-development/2.pack_
+=======
+>>>>>>> 10ad573c7dd777d4a9d849c3dd5ad224c9602a6f
