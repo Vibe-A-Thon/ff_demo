@@ -50,23 +50,27 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 
 ### P0 (Critical)
 - All core features implemented ✅
+- Login/Register UI ✅
+- Demo autoplay mode ✅
+- Real-time alerts ✅
+- WebSocket streaming ✅
 
 ### P1 (High Priority)
-- User authentication UI (login/register screens)
-- Role-based access control enforcement
-- Real-time WebSocket battle streaming (infrastructure ready)
+- Role-based route protection enforcement
+- Persistent alert history panel
+- Battle replay with before/after comparison
 
 ### P2 (Medium Priority)  
-- Demo mode autoplay with slow-motion
-- Before/after comparison playback
+- Slow-motion playback mode
 - Accessibility improvements (screen reader, keyboard nav)
 - High-contrast mode
+- Email notifications for approvals
 
 ### P3 (Nice to Have)
 - Custom report generation
-- Email notifications for approvals
 - Integration with external SIEM systems
 - Multi-tenant support
+- Custom threshold configuration UI
 
 ## Next Tasks
 1. Implement login/register UI screens
