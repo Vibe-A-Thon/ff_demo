@@ -29,10 +29,14 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - ✅ Metrics dashboard aggregation
 - ✅ AI thinking endpoint with OpenAI integration
 - ✅ WebSocket support for real-time updates
-- ✅ JWT authentication
+- ✅ JWT authentication with bcrypt password hashing
 
 ### Frontend (React + Tailwind)
+- ✅ **Login/Register UI** - Sign In, Register tabs, Demo Mode quick access
 - ✅ War Room - Red vs Blue battle simulation with thinking visualizers
+- ✅ **Streaming AI Thinking** - Real-time text streaming with LIVE indicators
+- ✅ **Demo Autoplay Mode** - Automated battle progression with variable pacing
+- ✅ **Real-time Alerts** - Threshold-based alerts for TTI, Success Rate, Money at Risk
 - ✅ Brain Surgery Station - Force-directed graph with drag-drop nodes
 - ✅ Metrics Dashboard - KPIs, charts, time-to-immunity trends
 - ✅ RSB Manager - Package list, import, test, merge
@@ -40,7 +44,7 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - ✅ Evidence Pack Viewer - XAI narrative, export ZIP
 - ✅ Rule Editor - Form builder, code view, test results
 - ✅ Approvals - Queue, approve/reject, SoD checks
-- ✅ Sidebar navigation with color-coded team lanes
+- ✅ Sidebar navigation with user profile dropdown
 
 ## Prioritized Backlog
 
