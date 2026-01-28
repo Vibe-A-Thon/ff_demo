@@ -1,0 +1,212 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 240 6% 4%;
+  --foreground: 0 0% 98%;
+  --card: 240 5% 7%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 5% 7%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4% 16%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 240 4% 16%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 4% 16%;
+  --input: 240 4% 16%;
+  --ring: 217 91% 60%;
+  --chart-1: 217 91% 60%;
+  --chart-2: 0 84% 60%;
+  --chart-3: 142 71% 45%;
+  --chart-4: 271 81% 56%;
+  --chart-5: 48 96% 53%;
+  --radius: 0.5rem;
+  
+  /* Team Colors */
+  --team-red: 0 84% 60%;
+  --team-blue: 217 91% 60%;
+  --team-purple: 271 81% 56%;
+  --team-green: 142 71% 45%;
+  --team-gold: 48 96% 53%;
+  --team-orange: 25 95% 53%;
+  --team-black: 0 0% 10%;
+  --team-white: 0 0% 90%;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+code, .font-mono, [class*="mono"] {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* Team Lane Colors */
+.team-red { border-left: 3px solid hsl(var(--team-red)); }
+.team-blue { border-left: 3px solid hsl(var(--team-blue)); }
+.team-purple { border-left: 3px solid hsl(var(--team-purple)); }
+.team-green { border-left: 3px solid hsl(var(--team-green)); }
+.team-gold { border-left: 3px solid hsl(var(--team-gold)); }
+.team-orange { border-left: 3px solid hsl(var(--team-orange)); }
+
+/* Glow Effects */
+.glow-red {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+.glow-blue {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+.glow-gold {
+  box-shadow: 0 0 20px rgba(234, 179, 8, 0.3);
+}
+
+/* Glass Effect */
+.glass {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Typing Animation */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: '▋';
+  animation: blink 1s infinite;
+  color: hsl(var(--primary));
+}
+
+/* Live Indicator */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.live-indicator {
+  animation: pulse-live 2s infinite;
+}
+
+/* Gradient Backgrounds */
+.gradient-red {
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0) 100%);
+}
+
+.gradient-blue {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0) 100%);
+}
+
+/* Node Styles for Graph */
+.graph-node-root {
+  fill: hsl(var(--team-blue));
+}
+
+.graph-node-rule {
+  fill: hsl(var(--team-blue));
+}
+
+.graph-node-pattern {
+  fill: hsl(var(--team-purple));
+}
+
+.graph-node-compliance {
+  fill: hsl(var(--team-green));
+}
+
+.graph-node-evidence {
+  fill: hsl(var(--team-gold));
+}
+
+/* Base layer overrides */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer base {
+  [data-debug-wrapper="true"] {
+    display: contents !important;
+  }
+}
+
+/* Status Badges */
+.status-success {
+  @apply bg-green-500/15 text-green-400 border border-green-500/20;
+}
+
+.status-error {
+  @apply bg-red-500/15 text-red-400 border border-red-500/20;
+}
+
+.status-warning {
+  @apply bg-yellow-500/15 text-yellow-400 border border-yellow-500/20;
+}
+
+.status-info {
+  @apply bg-blue-500/15 text-blue-400 border border-blue-500/20;
+}
+
+/* Card Hover Effects */
+.card-hover {
+  @apply transition-all duration-200;
+}
+
+.card-hover:hover {
+  @apply border-zinc-600 bg-zinc-800/50;
+}
+
+/* Active Navigation */
+.nav-active {
+  @apply bg-zinc-800 border-l-2 border-l-blue-500;
+}
