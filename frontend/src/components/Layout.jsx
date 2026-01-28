@@ -81,6 +81,17 @@ const hasAccess = (userRole, routePath) => {
   return permissions.includes(routePath);
 };
 
+// Get roles that have access to a specific route
+const getRolesWithAccess = (routePath) => {
+  const rolesWithAccess = [];
+  Object.entries(ROLE_PERMISSIONS).forEach(([role, permissions]) => {
+    if (permissions.includes("*") || permissions.includes(routePath)) {
+      rolesWithAccess.push(role);
+    }
+  });
+  return rolesWithAccess;
+};
+
 const Layout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [seeding, setSeeding] = useState(false);
