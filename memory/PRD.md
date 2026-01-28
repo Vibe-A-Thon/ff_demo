@@ -37,6 +37,10 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - ✅ **Streaming AI Thinking** - Real-time text streaming with LIVE indicators
 - ✅ **Demo Autoplay Mode** - Automated battle progression with variable pacing
 - ✅ **Real-time Alerts** - Threshold-based alerts for TTI, Success Rate, Money at Risk
+- ✅ **Alert History Panel** - Persistent history with filter tabs, mark as read, clear all
+- ✅ **Configurable Thresholds** - Bank risk profiles (Conservative, Moderate, High-Volume, Fintech)
+- ✅ **Role-based Access Control** - Admin, Analyst, Engineer, Compliance roles with route protection
+- ✅ **Battle Replay & Comparison** - Before/after comparison with playback controls
 - ✅ Brain Surgery Station - Force-directed graph with drag-drop nodes
 - ✅ Metrics Dashboard - KPIs, charts, time-to-immunity trends
 - ✅ RSB Manager - Package list, import, test, merge
@@ -44,7 +48,7 @@ Enterprise-grade UI for fraud detection simulation that proves Failure → Learn
 - ✅ Evidence Pack Viewer - XAI narrative, export ZIP
 - ✅ Rule Editor - Form builder, code view, test results
 - ✅ Approvals - Queue, approve/reject, SoD checks
-- ✅ Sidebar navigation with user profile dropdown
+- ✅ Sidebar navigation with user profile dropdown and role indicators
 
 ## Prioritized Backlog
 
