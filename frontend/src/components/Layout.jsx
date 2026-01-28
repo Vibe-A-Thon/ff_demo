@@ -51,6 +51,9 @@ const Layout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const { alerts } = useAlerts();
 
   const handleSeedData = async () => {
     setSeeding(true);
@@ -63,6 +66,14 @@ const Layout = () => {
       setSeeding(false);
     }
   };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+    toast.success("Logged out successfully");
+  };
+
+  const unreadAlerts = alerts.filter(a => a.type === 'critical').length;
 
   return (
     <div className="flex h-screen bg-background" data-testid="layout-container">
