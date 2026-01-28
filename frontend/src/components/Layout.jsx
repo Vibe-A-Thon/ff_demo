@@ -5,6 +5,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { seedData } from "../lib/api";
 import { useAuth, ROLE_DEFINITIONS } from "../contexts/AuthContext";
 import { useAlerts } from "../contexts/AlertContext";
@@ -35,6 +36,7 @@ import {
   Scale,
   Sparkles,
   RefreshCw,
+  Info,
 } from "lucide-react";
 
 const navItems = [
