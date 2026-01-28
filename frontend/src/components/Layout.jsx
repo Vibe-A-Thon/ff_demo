@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from "react";
-import { Outlet, NavLink, useLocation } from "react-router-dom";
+import React, { useState } from "react";
+import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { seedData } from "../lib/api";
+import { useAuth } from "../contexts/AuthContext";
+import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
 import {
   Swords,
@@ -18,6 +21,10 @@ import {
   ChevronRight,
   Activity,
   Database,
+  User,
+  LogOut,
+  Bell,
+  Settings,
 } from "lucide-react";
 
 const navItems = [
