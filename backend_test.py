@@ -3,11 +3,12 @@
 import requests
 import sys
 import json
+import os
 from datetime import datetime
 
 class FraudForgeAPITester:
-    def __init__(self, base_url="https://fightfraud-app.preview.emergentagent.com"):
-        self.base_url = base_url
+    def __init__(self, base_url=None):
+        self.base_url = base_url or os.getenv("FF_API_BASE_URL", "http://localhost:8000")
         self.token = None
         self.tests_run = 0
         self.tests_passed = 0
