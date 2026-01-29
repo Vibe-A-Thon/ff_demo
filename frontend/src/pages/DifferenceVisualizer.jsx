@@ -118,6 +118,7 @@ const DifferenceVisualizer = () => {
   const [commitMessage, setCommitMessage] = useState("");
   const [sandboxResult, setSandboxResult] = useState(null);
   const [running, setRunning] = useState(false);
+  const mergedPreview = selectedDiff?.newCode || "";
 
   const diffStyles = {
     variables: {
@@ -184,6 +185,10 @@ const DifferenceVisualizer = () => {
     setDiffs(updated);
     setSelectedDiff({ ...selectedDiff, status: "rejected" });
     toast.error("Changes rejected");
+  };
+
+  const handleRequestChanges = () => {
+    toast("Changes requested. Assigning back to author.");
   };
 
   const runSandboxValidation = () => {
@@ -281,7 +286,16 @@ Reviewed and validated via sandbox testing.`;
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={copyDiff} data-testid="copy-diff-btn">
+                <Button
+                  variant="outline"
+                  onClick={copyDiff}
+                  data-testid="copy-diff-btn"
+                  data-explain="Copy diff"
+                  data-explain-title="Diff snapshot"
+                  data-explain-summary="Copies the before/after changes for peer review or audit notes."
+                  data-explain-rules="DIFF-002,COM-005"
+                  data-explain-evidence="Change summary,Patch context"
+                >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
                 </Button>
@@ -290,6 +304,11 @@ Reviewed and validated via sandbox testing.`;
                   onClick={runSandboxValidation}
                   disabled={running}
                   data-testid="sandbox-validate-btn"
+                  data-explain="Run sandbox validation"
+                  data-explain-title="Sandbox checks"
+                  data-explain-summary="Runs syntactic and logic validation against safe test data."
+                  data-explain-rules="DIFF-VAL-01,SAFE-003"
+                  data-explain-evidence="Sandbox results,Test suite"
                 >
                   <Play className={`h-4 w-4 mr-2 ${running ? 'animate-spin' : ''}`} />
                   Validate
@@ -299,14 +318,38 @@ Reviewed and validated via sandbox testing.`;
                   onClick={handleReject}
                   disabled={selectedDiff.status !== "pending"}
                   data-testid="reject-btn"
+                  data-explain="Reject diff"
+                  data-explain-title="Rejection reason"
+                  data-explain-summary="Rejects changes that violate policy, performance, or risk thresholds."
+                  data-explain-rules="DIFF-DEC-02,RISK-004"
+                  data-explain-evidence="Risk delta,Policy mismatch"
                 >
                   <X className="h-4 w-4 mr-2" />
                   Reject
                 </Button>
                 <Button
+                  variant="outline"
+                  onClick={handleRequestChanges}
+                  disabled={selectedDiff.status !== "pending"}
+                  data-testid="request-changes-btn"
+                  data-explain="Request changes"
+                  data-explain-title="Change request"
+                  data-explain-summary="Sends the diff back for revision with reviewer notes."
+                  data-explain-rules="DIFF-DEC-03"
+                  data-explain-evidence="Reviewer notes,Policy checklist"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Request Changes
+                </Button>
+                <Button
                   onClick={handleAccept}
                   disabled={selectedDiff.status !== "pending"}
                   data-testid="accept-btn"
+                  data-explain="Accept diff"
+                  data-explain-title="Acceptance rationale"
+                  data-explain-summary="Approves changes after validation, enabling deployment workflows."
+                  data-explain-rules="DIFF-DEC-01,COM-012"
+                  data-explain-evidence="Sandbox pass,Review notes,Audit trail"
                 >
                   <Check className="h-4 w-4 mr-2" />
                   Accept
@@ -345,6 +388,79 @@ Reviewed and validated via sandbox testing.`;
               </div>
             )}
 
+            {/* Three-Pane Preview */}
+            <div className="mx-4 mt-4 grid grid-cols-3 gap-4" data-testid="three-pane-preview">
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Existing Model</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="p-3 bg-black/30 rounded-lg font-mono text-xs overflow-auto max-h-64">
+                    {selectedDiff.oldCode}
+                  </pre>
+                </CardContent>
+              </Card>
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">APMC (Patched)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="p-3 bg-black/30 rounded-lg font-mono text-xs overflow-auto max-h-64">
+                    {selectedDiff.newCode}
+                  </pre>
+                </CardContent>
+              </Card>
+              <Card className="border-border border-green-500/30 bg-green-500/5">
+                <CardHeader>
+                  <CardTitle className="text-sm text-green-300">Merged Model</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="p-3 bg-black/30 rounded-lg font-mono text-xs overflow-auto max-h-64">
+                    {mergedPreview}
+                  </pre>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Inline Comments */}
+            <div className="mx-4 mt-4">
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Inline Comments</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {selectedDiff.comments?.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedDiff.comments.map((comment, idx) => (
+                        <div key={idx} className="p-3 bg-zinc-800/50 rounded-lg text-sm">
+                          {comment}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No inline comments yet.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Linked Artifacts */}
+            <div className="mx-4 mt-4">
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Linked Artifacts</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="text-xs">RuleSpec</Badge>
+                    <Badge variant="outline" className="text-xs">Tests</Badge>
+                    <Badge variant="outline" className="text-xs">Evidence Pack</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Artifacts are attached to this diff for audit and review.</p>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Diff View */}
             <ScrollArea className="flex-1">
               <div className="p-4">
@@ -365,7 +481,17 @@ Reviewed and validated via sandbox testing.`;
             <div className="p-4 border-t border-border">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium">Commit Message</label>
-                <Button variant="ghost" size="sm" onClick={generateCommitMessage} data-testid="generate-commit-btn">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={generateCommitMessage}
+                  data-testid="generate-commit-btn"
+                  data-explain="Auto-generate commit message"
+                  data-explain-title="Commit summary"
+                  data-explain-summary="Summarizes the diff and validation status into an audit-friendly message."
+                  data-explain-rules="DIFF-COMMIT-01,COM-004"
+                  data-explain-evidence="Diff stats,Validation outcome"
+                >
                   <MessageSquare className="h-4 w-4 mr-2" />
                   Auto-generate
                 </Button>

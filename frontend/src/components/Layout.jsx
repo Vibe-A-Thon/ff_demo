@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Button } from "../components/ui/button";
@@ -10,6 +10,12 @@ import { seedData } from "../lib/api";
 import { useAuth, ROLE_DEFINITIONS } from "../contexts/AuthContext";
 import { useAlerts } from "../contexts/AlertContext";
 import { AlertHistoryPanel, ThresholdConfigPanel } from "./AlertPanels";
+import CollaborationIndicator from "./CollaborationIndicator";
+import KeyboardShortcutsOverlay from "./KeyboardShortcutsOverlay";
+import HelpCenter from "./HelpCenter";
+import OnboardingWizard from "./OnboardingWizard";
+import FloatingHelp from "./FloatingHelp";
+import ExplainabilityPanel from "./ExplainabilityPanel";
 import { toast } from "sonner";
 import {
   Swords,
@@ -97,10 +103,52 @@ const Layout = () => {
   const [seeding, setSeeding] = useState(false);
   const [alertPanelOpen, setAlertPanelOpen] = useState(false);
   const [thresholdPanelOpen, setThresholdPanelOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [explainOpen, setExplainOpen] = useState(false);
+  const [explainPayload, setExplainPayload] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isDemoUser, switchRole, roleDefinitions } = useAuth();
   const { unreadCount, criticalCount, currentPreset } = useAlerts();
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === "?" || (event.shiftKey && event.key === "/")) {
+        event.preventDefault();
+        setShortcutsOpen(true);
+      }
+      if (event.key.toLowerCase() === "h") {
+        setHelpOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const handleContextExplain = (event) => {
+      const target = event.target?.closest?.("[data-explain]");
+      if (!target) return;
+
+      event.preventDefault();
+      const payload = {
+        title: target.getAttribute("data-explain-title") || target.getAttribute("data-explain") || "Explain This",
+        summary: target.getAttribute("data-explain-summary") || "Context-aware explanation generated for this action.",
+        confidence: Number(target.getAttribute("data-explain-confidence")) || 0.84,
+        triggeredRules: (target.getAttribute("data-explain-rules") || "R-ATO-001").split(","),
+        evidence: (target.getAttribute("data-explain-evidence") || "Risk score elevated,Device mismatch").split(","),
+        similarCases: (target.getAttribute("data-explain-similar") || "Case-1128,Case-1136").split(","),
+      };
+      setExplainPayload(payload);
+      setExplainOpen(true);
+    };
+
+    document.addEventListener("contextmenu", handleContextExplain);
+    return () => document.removeEventListener("contextmenu", handleContextExplain);
+  }, []);
 
   const handleSeedData = async () => {
     setSeeding(true);
@@ -393,8 +441,45 @@ const Layout = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden" data-testid="main-content">
-        <Outlet />
+      <main className="flex-1 overflow-hidden flex flex-col" data-testid="main-content">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-card/80 px-6 py-3 backdrop-blur">
+          <CollaborationIndicator />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShortcutsOpen(true)}
+              data-testid="open-shortcuts-btn"
+            >
+              <Info className="h-4 w-4 mr-2" />
+              Shortcuts
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setExplainPayload(null);
+                setExplainOpen(true);
+              }}
+              data-testid="open-explain-btn"
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              Explain
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setHelpOpen(true)}
+              data-testid="open-help-btn"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Help
+            </Button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <Outlet />
+        </div>
       </main>
 
       {/* Alert History Panel */}
@@ -402,6 +487,12 @@ const Layout = () => {
 
       {/* Threshold Configuration Panel */}
       <ThresholdConfigPanel open={thresholdPanelOpen} onOpenChange={setThresholdPanelOpen} />
+
+      <KeyboardShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <HelpCenter open={helpOpen} onOpenChange={setHelpOpen} />
+      <OnboardingWizard />
+      <FloatingHelp onOpen={() => setHelpOpen(true)} />
+      <ExplainabilityPanel open={explainOpen} onOpenChange={setExplainOpen} payload={explainPayload} />
     </div>
   );
 };

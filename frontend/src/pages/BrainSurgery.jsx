@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
+import { Skeleton } from "../components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../components/ui/sheet";
 import { knowledgeAPI } from "../lib/api";
@@ -34,6 +35,7 @@ const nodeColors = {
 
 const BrainSurgery = () => {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+  const [graphLoading, setGraphLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState(null);
   const [newNodeType, setNewNodeType] = useState("rule");
   const [newNodeName, setNewNodeName] = useState("");
@@ -61,6 +63,7 @@ const BrainSurgery = () => {
   }, []);
 
   const loadNodes = async () => {
+    setGraphLoading(true);
     try {
       const response = await knowledgeAPI.getNodes();
       const nodes = response.data;
@@ -89,6 +92,8 @@ const BrainSurgery = () => {
       setGraphData({ nodes: graphNodes, links: graphLinks });
     } catch (error) {
       console.error("Failed to load nodes:", error);
+    } finally {
+      setGraphLoading(false);
     }
   };
 
@@ -236,6 +241,15 @@ const BrainSurgery = () => {
 
       {/* Graph Canvas */}
       <div className="flex-1 relative">
+        {graphLoading && (
+          <div className="absolute inset-0 z-10 bg-background/60 backdrop-blur-sm flex items-center justify-center">
+            <div className="w-2/3 space-y-3">
+              <Skeleton className="h-6 w-1/2" />
+              <Skeleton className="h-64" />
+              <Skeleton className="h-6 w-1/3" />
+            </div>
+          </div>
+        )}
         <ForceGraph2D
           ref={graphRef}
           graphData={graphData}

@@ -3,9 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { Skeleton } from "../components/ui/skeleton";
+import { Switch } from "../components/ui/switch";
+import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { metricsAPI, battleAPI } from "../lib/api";
 import { toast } from "sonner";
+import JudgeModeBanner from "../components/JudgeModeBanner";
 import {
   LineChart,
   Line,
@@ -62,6 +66,7 @@ const MetricsDashboard = () => {
   const [viewMode, setViewMode] = useState("technical");
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState("7d");
+  const [judgeMode, setJudgeMode] = useState(false);
 
   useEffect(() => {
     loadMetrics();
@@ -109,6 +114,11 @@ const MetricsDashboard = () => {
     toast.success("Evidence pack copied to clipboard!");
   };
 
+  const shareHighlights = () => {
+    navigator.clipboard.writeText("https://fraudforge.local/highlight-reel");
+    toast.success("Demo highlight link copied");
+  };
+
   const pieData = [
     { name: "Blocked", value: metrics?.avg_success_rate || 0, color: "#10B981" },
     { name: "Bypassed", value: 100 - (metrics?.avg_success_rate || 0), color: "#EF4444" },
@@ -121,6 +131,9 @@ const MetricsDashboard = () => {
     patternsLearned: item.patterns_learned || idx * 5,
   })) || [];
 
+  const moneySaved = Math.round(((metrics?.avg_success_rate || 0) / 100) * 120000);
+  const moneyAtRisk = Math.round(160000);
+
   return (
     <ScrollArea className="h-full" data-testid="metrics-dashboard">
       <div className="p-6 space-y-6">
@@ -131,6 +144,15 @@ const MetricsDashboard = () => {
             <p className="text-muted-foreground">Learning KPIs and performance trends</p>
           </div>
           <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={judgeMode}
+                onCheckedChange={setJudgeMode}
+                id="judge-mode"
+                data-testid="judge-mode-toggle"
+              />
+              <Label htmlFor="judge-mode" className="text-sm">Judge Mode</Label>
+            </div>
             <Select value={viewMode} onValueChange={setViewMode}>
               <SelectTrigger className="w-40" data-testid="view-mode-select">
                 <SelectValue />
@@ -148,45 +170,62 @@ const MetricsDashboard = () => {
               <Copy className="h-4 w-4 mr-2" />
               Copy Evidence Pack
             </Button>
+            <Button variant="outline" onClick={shareHighlights} data-testid="share-highlight-btn">
+              <FileText className="h-4 w-4 mr-2" />
+              Share Highlights
+            </Button>
           </div>
         </div>
 
+        <JudgeModeBanner active={judgeMode} />
+
         {/* KPI Cards */}
-        <div className="grid grid-cols-4 gap-4">
-          <MetricCard
-            title="Success Rate"
-            value={`${Math.round(metrics?.avg_success_rate || 0)}%`}
-            change={12}
-            trend="up"
-            icon={Shield}
-            color="#10B981"
-          />
-          <MetricCard
-            title="Time to Immunity"
-            value={`${metrics?.avg_time_to_immunity?.toFixed(1) || 0}m`}
-            change={-23}
-            trend="up"
-            icon={Clock}
-            color="#3B82F6"
-          />
-          <MetricCard
-            title="Patterns Learned"
-            value={metrics?.patterns_learned || 0}
-            change={8}
-            trend="up"
-            icon={Brain}
-            color="#A855F7"
-          />
-          <MetricCard
-            title="Active Rules"
-            value={`${metrics?.active_rules || 0}/${metrics?.total_rules || 0}`}
-            icon={Zap}
-            color="#EAB308"
-          />
-        </div>
+        {loading ? (
+          <div className="grid grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <Skeleton key={idx} className="h-28" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-4">
+            <MetricCard
+              title="Success Rate"
+              value={`${Math.round(metrics?.avg_success_rate || 0)}%`}
+              change={12}
+              trend="up"
+              icon={Shield}
+              color="#10B981"
+            />
+            <MetricCard
+              title="Time to Immunity"
+              value={`${metrics?.avg_time_to_immunity?.toFixed(1) || 0}m`}
+              change={-23}
+              trend="up"
+              icon={Clock}
+              color="#3B82F6"
+            />
+            <MetricCard
+              title="Money Saved"
+              value={`$${moneySaved.toLocaleString()}`}
+              change={18}
+              trend="up"
+              icon={Shield}
+              color="#22C55E"
+            />
+            <MetricCard
+              title="Patterns Learned"
+              value={metrics?.patterns_learned || 0}
+              change={8}
+              trend="up"
+              icon={Brain}
+              color="#A855F7"
+            />
+          </div>
+        )}
 
         {/* Charts Grid */}
-        <div className="grid grid-cols-2 gap-6">
+        {!judgeMode && (
+          <div className="grid grid-cols-2 gap-6">
           {/* Success Rate Over Time */}
           <Card className="border-border">
             <CardHeader>
@@ -306,7 +345,64 @@ const MetricsDashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
-        </div>
+          </div>
+        )}
+
+        {judgeMode && (
+          <div className="grid grid-cols-2 gap-6">
+            <Card className="border-border">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-green-400" />
+                  Impact Split
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="rounded-md border border-border p-4">
+                    <p className="text-xs text-muted-foreground">Money at Risk</p>
+                    <p className="text-2xl font-mono text-red-400">${moneyAtRisk.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-md border border-border p-4">
+                    <p className="text-xs text-muted-foreground">Money Saved</p>
+                    <p className="text-2xl font-mono text-green-400">${moneySaved.toLocaleString()}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-blue-400" />
+                  Success Snapshot
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={90}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#18181B', border: '1px solid #27272A', borderRadius: '8px' }}
+                      labelStyle={{ color: '#FAFAFA' }}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Summary Stats */}
         <Card className="border-border">

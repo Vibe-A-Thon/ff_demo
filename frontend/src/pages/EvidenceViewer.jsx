@@ -127,6 +127,11 @@ const EvidenceViewer = () => {
               onClick={generateEvidencePack}
               disabled={!selectedBattle || generating}
               data-testid="generate-evidence-btn"
+              data-explain="Generate Evidence Pack"
+              data-explain-title="Evidence pack generated"
+              data-explain-summary="Creates a compliance-grade evidence bundle from a completed battle with rule triggers, scores, and artifacts."
+              data-explain-rules="EV-001,EV-014"
+              data-explain-evidence="Battle timeline,Rule hits,Score traces"
             >
               <FileSearch className={`h-4 w-4 mr-2 ${generating ? 'animate-spin' : ''}`} />
               Generate Pack
@@ -194,7 +199,15 @@ const EvidenceViewer = () => {
                     ID: {selectedPack.id}
                   </p>
                 </div>
-                <Button onClick={exportPack} data-testid="export-evidence-btn">
+                <Button
+                  onClick={exportPack}
+                  data-testid="export-evidence-btn"
+                  data-explain="Export Evidence Pack"
+                  data-explain-title="Evidence export"
+                  data-explain-summary="Packages evidence into a tamper-evident archive with checksum and audit trail."
+                  data-explain-rules="EV-021,EV-032"
+                  data-explain-evidence="Checksum,Artifacts,Audit log"
+                >
                   <Download className="h-4 w-4 mr-2" />
                   Export ZIP
                 </Button>

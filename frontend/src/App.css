@@ -1,40 +1,37 @@
-<<<<<<< HEAD
 /* App specific styles */
 .App {
-  min-height: 100vh;
-=======
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
     min-height: 100vh;
+}
+
+.splash-glow {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.35), 0 0 60px rgba(59, 130, 246, 0.15);
+}
+
+.particle-burst {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
 }
 
-.App-link {
-    color: #61dafb;
+.particle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.9);
+    animation: burst 900ms ease-out forwards;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
+@keyframes burst {
+    0% {
+        transform: translate(0, 0) scale(1);
+        opacity: 1;
     }
-    to {
-        transform: rotate(360deg);
+    100% {
+        transform: translate(var(--x), var(--y)) scale(0);
+        opacity: 0;
     }
->>>>>>> 10ad573c7dd777d4a9d849c3dd5ad224c9602a6f
 }

@@ -90,6 +90,10 @@ const Approvals = () => {
     }
   };
 
+  const handleEmergencyOverride = () => {
+    toast.warning("Emergency override requested. Justification required.");
+  };
+
   const getStatusBadge = (status) => {
     const config = {
       pending: { color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20", icon: Clock },
@@ -117,6 +121,16 @@ const Approvals = () => {
     return id;
   };
 
+  const getRiskAssessment = (approval) => {
+    if (!approval) return { score: 0, label: "Low", color: "text-green-400" };
+    const base = approval.action === "delete" ? 85 : approval.action === "merge" ? 70 : 55;
+    const typeBoost = approval.resource_type === "rsb_package" ? 10 : 0;
+    const score = Math.min(95, base + typeBoost);
+    const label = score >= 80 ? "High" : score >= 60 ? "Medium" : "Low";
+    const color = score >= 80 ? "text-red-400" : score >= 60 ? "text-yellow-400" : "text-green-400";
+    return { score, label, color };
+  };
+
   const pendingCount = approvals.filter(a => a.status === "pending").length;
 
   return (
@@ -133,7 +147,15 @@ const Approvals = () => {
             </div>
             <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
               <DialogTrigger asChild>
-                <Button size="sm" data-testid="create-approval-btn">
+                <Button
+                  size="sm"
+                  data-testid="create-approval-btn"
+                  data-explain="Create approval request"
+                  data-explain-title="Why approvals are required"
+                  data-explain-summary="Enforces separation of duties and governance for rule or package changes."
+                  data-explain-rules="RBAC-SoD-01,APP-004"
+                  data-explain-evidence="Requester role,Change scope,Risk rating"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   New Request
                 </Button>
@@ -192,7 +214,16 @@ const Approvals = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button onClick={handleCreateApproval} className="w-full" data-testid="submit-approval-btn">
+                  <Button
+                    onClick={handleCreateApproval}
+                    className="w-full"
+                    data-testid="submit-approval-btn"
+                    data-explain="Submit for approval"
+                    data-explain-title="Approval submission"
+                    data-explain-summary="Captures change intent, affected artifacts, and required approvers."
+                    data-explain-rules="APP-007,APP-013"
+                    data-explain-evidence="Requested action,Resource,SoD policy"
+                  >
                     <ShieldCheck className="h-4 w-4 mr-2" />
                     Submit for Approval
                   </Button>
@@ -288,9 +319,27 @@ const Approvals = () => {
                 {selectedApproval.status === "pending" && (
                   <div className="flex gap-2">
                     <Button
+                      variant="outline"
+                      onClick={handleEmergencyOverride}
+                      data-testid="emergency-override-btn"
+                      data-explain="Emergency override"
+                      data-explain-title="Emergency override"
+                      data-explain-summary="Escalates a high-risk change for immediate review with justification."
+                      data-explain-rules="APP-OVR-01,COM-030"
+                      data-explain-evidence="Override justification,Approver identity"
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Override
+                    </Button>
+                    <Button
                       variant="destructive"
                       onClick={() => handleReject(selectedApproval.id)}
                       data-testid="reject-approval-btn"
+                      data-explain="Reject approval"
+                      data-explain-title="Rejection rationale"
+                      data-explain-summary="Rejects the change due to policy or risk violations and records audit reasons."
+                      data-explain-rules="APP-021,RISK-002"
+                      data-explain-evidence="Policy mismatch,High risk delta"
                     >
                       <XCircle className="h-4 w-4 mr-2" />
                       Reject
@@ -298,6 +347,11 @@ const Approvals = () => {
                     <Button
                       onClick={() => handleApprove(selectedApproval.id)}
                       data-testid="approve-approval-btn"
+                      data-explain="Approve change"
+                      data-explain-title="Approval rationale"
+                      data-explain-summary="Approves deployment after checks on SoD, testing, and compliance evidence."
+                      data-explain-rules="APP-018,COM-010"
+                      data-explain-evidence="SoD satisfied,Tests passed,Audit trail"
                     >
                       <CheckCircle2 className="h-4 w-4 mr-2" />
                       Approve
@@ -330,6 +384,60 @@ const Approvals = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm text-muted-foreground">Resource Type</label>
+                    {/* Validator + Risk Assessment */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <Card className="border-border">
+                        <CardHeader>
+                          <CardTitle>Validator Status</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-green-400" />
+                            <span className="text-sm">SAFE_TO_PROCEED</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            All required validators reported green.
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-border">
+                        <CardHeader>
+                          <CardTitle>Risk Assessment</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {(() => {
+                            const risk = getRiskAssessment(selectedApproval);
+                            return (
+                              <div className="space-y-2">
+                                <div className={`text-2xl font-mono ${risk.color}`}>{risk.score}</div>
+                                <Badge variant="outline" className="text-xs">{risk.label} risk</Badge>
+                                <p className="text-xs text-muted-foreground">Based on action scope and artifact type.</p>
+                              </div>
+                            );
+                          })()}
+                        </CardContent>
+                      </Card>
+                      <Card className="border-border">
+                        <CardHeader>
+                          <CardTitle>Approval Timeline</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-xs text-muted-foreground">
+                          <div className="flex items-center justify-between">
+                            <span>Requested</span>
+                            <span>{new Date(selectedApproval.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Review</span>
+                            <span>{selectedApproval.status === "pending" ? "In progress" : "Completed"}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Decision</span>
+                            <span className="capitalize">{selectedApproval.status}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
                       <p className="font-medium capitalize">{selectedApproval.resource_type.replace("_", " ")}</p>
                     </div>
                     <div>

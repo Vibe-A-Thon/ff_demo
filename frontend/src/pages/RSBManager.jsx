@@ -116,6 +116,58 @@ const RSBManager = () => {
     }
   };
 
+  const defaultManifestTree = [
+    { name: "manifest.json" },
+    {
+      name: "rule/",
+      children: [
+        { name: "specification.json" },
+        { name: "description.md" },
+        { name: "rule.json" },
+        { name: "rule_Patch.py" },
+      ],
+    },
+    {
+      name: "code/",
+      children: [
+        { name: "ruleC_<RULE_ID>.py" },
+        { name: "ruleCP_<RULE_ID>.py" },
+      ],
+    },
+    {
+      name: "tests/",
+      children: [
+        { name: "ruleUT_<RULE_ID>.py" },
+        { name: "ruleIT_<RULE_ID>.py" },
+      ],
+    },
+    {
+      name: "compliance/",
+      children: [
+        { name: "*_xai.json" },
+        { name: "*_Compliance_explanation.json" },
+      ],
+    },
+  ];
+
+  const renderTree = (nodes, depth = 0) => (
+    <ul className="space-y-1">
+      {nodes.map((node) => (
+        <li key={`${node.name}-${depth}`} className="text-sm">
+          <div className="flex items-center gap-2" style={{ paddingLeft: depth * 12 }}>
+            <span className="text-muted-foreground">{node.children ? "▸" : "•"}</span>
+            <span className="font-mono text-xs">{node.name}</span>
+          </div>
+          {node.children && (
+            <div className="mt-1">
+              {renderTree(node.children, depth + 1)}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+
   const getStatusBadge = (status) => {
     const statusConfig = {
       pending: { color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20", icon: Clock },
@@ -180,7 +232,15 @@ const RSBManager = () => {
             <h2 className="text-lg font-semibold">RSB Packages</h2>
             <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
               <DialogTrigger asChild>
-                <Button size="sm" data-testid="import-rsb-btn">
+                <Button
+                  size="sm"
+                  data-testid="import-rsb-btn"
+                  data-explain="Import RSB package"
+                  data-explain-title="RSB package intake"
+                  data-explain-summary="Validates manifest metadata, compliance badges, and rule inventory before staging."
+                  data-explain-rules="RSB-ING-02,COM-006"
+                  data-explain-evidence="Manifest schema,Compliance badges,Rule count"
+                >
                   <Upload className="h-4 w-4 mr-2" />
                   Import
                 </Button>
@@ -229,7 +289,16 @@ const RSBManager = () => {
                       data-testid="import-compliance-input"
                     />
                   </div>
-                  <Button onClick={handleImport} className="w-full" data-testid="confirm-import-btn">
+                  <Button
+                    onClick={handleImport}
+                    className="w-full"
+                    data-testid="confirm-import-btn"
+                    data-explain="Confirm import"
+                    data-explain-title="Import validation"
+                    data-explain-summary="Creates a staged package and records compliance checks for audit."
+                    data-explain-rules="RSB-ING-05,COM-010"
+                    data-explain-evidence="Package metadata,Checksum,Policy badges"
+                  >
                     <Package className="h-4 w-4 mr-2" />
                     Import Package
                   </Button>
@@ -303,6 +372,11 @@ const RSBManager = () => {
                     onClick={() => handleRunTests(selectedPackage.id)}
                     disabled={testRunning === selectedPackage.id}
                     data-testid="run-tests-btn"
+                    data-explain="Run RSB tests"
+                    data-explain-title="Package test execution"
+                    data-explain-summary="Runs unit, integration, and compliance checks to validate package readiness."
+                    data-explain-rules="RSB-TEST-01,COM-014"
+                    data-explain-evidence="Test results,Compliance status,Coverage"
                   >
                     <Play className={`h-4 w-4 mr-2 ${testRunning === selectedPackage.id ? 'animate-spin' : ''}`} />
                     Run Tests
@@ -311,6 +385,11 @@ const RSBManager = () => {
                     onClick={() => handleMerge(selectedPackage.id)}
                     disabled={selectedPackage.status !== "tested"}
                     data-testid="merge-btn"
+                    data-explain="Merge package"
+                    data-explain-title="Merge authorization"
+                    data-explain-summary="Moves validated packages into the active ruleset after tests pass."
+                    data-explain-rules="RSB-MERGE-02,COM-020"
+                    data-explain-evidence="Passed tests,Change approvals,Audit log"
                   >
                     <Merge className="h-4 w-4 mr-2" />
                     Merge
@@ -319,6 +398,11 @@ const RSBManager = () => {
                     variant="destructive"
                     onClick={() => handleDelete(selectedPackage.id)}
                     data-testid="delete-package-btn"
+                    data-explain="Delete package"
+                    data-explain-title="Deletion controls"
+                    data-explain-summary="Removes a package and logs the action for compliance review."
+                    data-explain-rules="RSB-DEL-01,COM-009"
+                    data-explain-evidence="Requester role,Deletion intent,Audit record"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -356,6 +440,37 @@ const RSBManager = () => {
                     </CardContent>
                   </Card>
 
+                  <Card className="border-border mt-4">
+                    <CardHeader>
+                      <CardTitle>File Manifest (Tree View)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="p-3 bg-black/30 rounded-lg">
+                        {renderTree(selectedPackage.manifest?.files || defaultManifestTree)}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border mt-4">
+                    <CardHeader>
+                      <CardTitle>Rule Network (Preview)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {(selectedPackage.rules || ["R-ACCOUNT_TAKEOVER"]).map((ruleId) => (
+                          <Badge key={ruleId} variant="outline" className="font-mono text-xs">
+                            {ruleId}
+                          </Badge>
+                        ))}
+                        <Badge variant="outline" className="text-xs">Risk-Scorer</Badge>
+                        <Badge variant="outline" className="text-xs">Policy-Gate</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Nodes represent RSB rules; edges indicate dependency flow.
+                      </p>
+                    </CardContent>
+                  </Card>
+
                   {selectedPackage.rules?.length > 0 && (
                     <Card className="border-border mt-4">
                       <CardHeader>
@@ -375,12 +490,23 @@ const RSBManager = () => {
                   )}
                 </TabsContent>
 
+
+                  <Card className="border-border mt-4">
+                    <CardHeader>
+                      <CardTitle>Code Viewer</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="p-4 bg-black/30 rounded-lg font-mono text-xs overflow-auto max-h-64">
+{`def detect_rule(txs):
                 <TabsContent value="tests" className="p-6 m-0">
                   <Card className="border-border">
                     <CardHeader>
                       <CardTitle>Test Results</CardTitle>
                     </CardHeader>
                     <CardContent>
+                      </pre>
+                    </CardContent>
+                  </Card>
                       <TestResultsView results={selectedPackage.test_results} />
                     </CardContent>
                   </Card>
@@ -409,6 +535,17 @@ const RSBManager = () => {
                       ) : (
                         <p className="text-muted-foreground">No compliance badges</p>
                       )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border mt-4">
+                    <CardHeader>
+                      <CardTitle>Compliance Documentation</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="p-4 bg-black/30 rounded-lg text-sm text-muted-foreground">
+                        {selectedPackage.description || "Compliance narrative not provided. Please attach compliance docs to this package."}
+                      </div>
                     </CardContent>
                   </Card>
                 </TabsContent>

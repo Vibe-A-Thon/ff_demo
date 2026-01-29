@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
+import { Input } from "../components/ui/input";
 import { battleAPI, aiAPI, createBattleWebSocket } from "../lib/api";
 import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ import {
   BellOff,
   FastForward,
   Rewind,
+  Sparkles,
 } from "lucide-react";
 
 // Thinking Visualizer Component with Streaming
@@ -156,7 +158,7 @@ const BattleTimeline = ({ turns, currentTurn, onJumpTo }) => {
 };
 
 // Metrics Strip Component with Alert Indicators
-const MetricsStrip = ({ metrics, alerts }) => {
+const MetricsStrip = ({ metrics }) => {
   const items = [
     { 
       key: "success_rate",
@@ -173,6 +175,14 @@ const MetricsStrip = ({ metrics, alerts }) => {
       icon: DollarSign, 
       color: "text-red-400",
       alert: (metrics.money_at_risk || 0) > 40000 ? 'critical' : (metrics.money_at_risk || 0) > 25000 ? 'warning' : null
+    },
+    { 
+      key: "money_saved",
+      label: "Money Saved", 
+      value: `$${(metrics.money_saved || 0).toLocaleString()}`, 
+      icon: Shield, 
+      color: "text-green-400",
+      alert: null
     },
     { 
       key: "time_to_immunity",
@@ -193,7 +203,7 @@ const MetricsStrip = ({ metrics, alerts }) => {
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-4 p-4 border-b border-border bg-card">
+    <div className="grid grid-cols-5 gap-4 p-4 border-b border-border bg-card">
       {items.map((item) => {
         const Icon = item.icon;
         return (
@@ -236,6 +246,9 @@ const WarRoom = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentTurn, setCurrentTurn] = useState(0);
   const [wsConnected, setWsConnected] = useState(false);
+  const [blockedBursts, setBlockedBursts] = useState([]);
+  const [scenarioName, setScenarioName] = useState("Custom Scenario");
+  const [scenarioSteps, setScenarioSteps] = useState([]);
   const wsRef = useRef(null);
   const autoPlayRef = useRef(null);
   const demoRef = useRef(null);
@@ -270,11 +283,18 @@ const WarRoom = () => {
     }
   };
 
-  const createNewBattle = async () => {
+  const createNewBattle = async (scenarioOverride = null) => {
     try {
+      const scenarioPayload = scenarioOverride || {};
+      const scenarioTitle = scenarioPayload.name || `Battle ${battles.length + 1}`;
       const response = await battleAPI.create({
-        scenario_name: `Battle ${battles.length + 1}`,
-        parameters: { difficulty: "medium", max_turns: 20 }
+        scenario_name: scenarioTitle,
+        parameters: {
+          difficulty: "medium",
+          max_turns: 20,
+          scenario_steps: scenarioPayload.steps || [],
+          builder_name: scenarioPayload.name || null,
+        },
       });
       setBattles([...battles, response.data]);
       setSelectedBattle(response.data);
@@ -285,6 +305,53 @@ const WarRoom = () => {
     } catch (error) {
       toast.error("Failed to create battle");
     }
+  };
+
+  const scenarioBlocks = [
+    { id: "entry-ato", label: "ATO Entry", type: "entry", description: "Credential + device anomaly" },
+    { id: "velocity", label: "Velocity Spike", type: "attack", description: "Rapid burst transfers" },
+    { id: "new-payee", label: "New Payee", type: "attack", description: "First-time beneficiary" },
+    { id: "geo-shift", label: "Geo Shift", type: "signal", description: "Unusual location" },
+    { id: "device-mismatch", label: "Device Mismatch", type: "signal", description: "New fingerprint" },
+    { id: "step-up", label: "Step-Up Auth", type: "defense", description: "Trigger MFA" },
+    { id: "block", label: "Block Transfer", type: "defense", description: "Hard stop" },
+    { id: "review", label: "Escalate Review", type: "defense", description: "Manual review" },
+  ];
+
+  const onScenarioDragStart = (block) => (event) => {
+    event.dataTransfer.setData("application/json", JSON.stringify(block));
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const onScenarioDrop = (event) => {
+    event.preventDefault();
+    const raw = event.dataTransfer.getData("application/json");
+    if (!raw) return;
+    const block = JSON.parse(raw);
+    setScenarioSteps((prev) => [...prev, block]);
+  };
+
+  const onScenarioDragOver = (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const removeScenarioStep = (index) => {
+    setScenarioSteps((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const clearScenario = () => {
+    setScenarioSteps([]);
+    toast.info("Scenario cleared");
+  };
+
+  const createScenarioBattle = async () => {
+    if (scenarioSteps.length === 0) {
+      toast.error("Add at least one block to the scenario");
+      return;
+    }
+    await createNewBattle({ name: scenarioName, steps: scenarioSteps });
+    toast.success("Scenario battle created");
   };
 
   const connectWebSocket = useCallback(() => {
@@ -310,6 +377,10 @@ const WarRoom = () => {
             metrics: data.metrics
           }));
           setCurrentTurn(prev => prev + 1);
+          if (data.blue_team?.blocked) {
+            const fallbackTurn = (selectedBattle?.turns?.length || 0) + 1;
+            triggerBlockedEffect(data.turn_number || fallbackTurn);
+          }
         } else if (data.type === "thinking_chunk") {
           // Handle streaming thinking
           if (data.team === "red") {
@@ -341,6 +412,18 @@ const WarRoom = () => {
       setWsConnected(false);
     }
   }, [selectedBattle]);
+
+  const triggerBlockedEffect = (turnNumber) => {
+    const burstId = `${Date.now()}-${turnNumber}`;
+    setBlockedBursts((prev) => [...prev, burstId]);
+    toast.success(`Attack Blocked! Turn ${turnNumber}`, {
+      icon: <Sparkles className="h-4 w-4 text-green-400" />,
+      duration: 2000,
+    });
+    setTimeout(() => {
+      setBlockedBursts((prev) => prev.filter((id) => id !== burstId));
+    }, 900);
+  };
 
   const startBattle = async () => {
     if (!selectedBattle) return;
@@ -428,22 +511,29 @@ const WarRoom = () => {
       wsRef.current.send(JSON.stringify({ type: "run_turn", turn_number: turnNum }));
     } else {
       // Simulate locally
-      const turn = simulateTurn(turnNum);
+      const turn = simulateTurn(turnNum, selectedBattle?.metrics || {});
       setSelectedBattle(prev => ({
         ...prev,
         turns: [...(prev.turns || []), turn],
         metrics: turn.metrics
       }));
       setCurrentTurn(turnNum);
+      if (turn.blue_team?.blocked) {
+        triggerBlockedEffect(turnNum);
+      }
     }
 
     setIsStreaming(false);
   };
 
-  const simulateTurn = (turnNumber) => {
+  const simulateTurn = (turnNumber, prevMetrics) => {
     const redActions = ["Account Takeover", "Velocity Attack", "Device Spoofing", "Credential Stuffing", "Social Engineering"];
     const blueActions = ["Pattern Detection", "Velocity Check", "Device Fingerprinting", "ML Score", "Rule Match"];
     const redSuccess = Math.random() < 0.35;
+
+    const moneyAtRisk = Math.floor(5000 + Math.random() * 45000);
+    const savedThisTurn = redSuccess ? 0 : Math.floor(moneyAtRisk * (0.6 + Math.random() * 0.3));
+    const totalSaved = (prevMetrics.money_saved || 0) + savedThisTurn;
 
     // Time to immunity decreases over time (learning effect)
     const baseImmunity = Math.max(1, 10 - Math.floor(turnNumber / 3));
@@ -457,12 +547,41 @@ const WarRoom = () => {
       blue_team: { action: blueActions[Math.floor(Math.random() * blueActions.length)], blocked: !redSuccess },
       metrics: {
         success_rate: Math.floor(65 + Math.random() * 30),
-        money_at_risk: Math.floor(5000 + Math.random() * 45000),
+        money_at_risk: moneyAtRisk,
+        money_saved: totalSaved,
         time_to_immunity: timeToImmunity,
         patterns_learned: turnNumber
       }
     };
   };
+
+  useEffect(() => {
+    const handleKey = (event) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (!isRunning) {
+          startBattle();
+        } else {
+          setAutoPlay((prev) => !prev);
+          setDemoMode(false);
+        }
+      }
+      if (event.key === "ArrowRight") {
+        runTurn();
+      }
+      if (event.key === "ArrowLeft" && currentTurn > 0) {
+        jumpToTurn(currentTurn - 1);
+      }
+      if (event.key.toLowerCase() === "d") {
+        setDemoMode((prev) => !prev);
+        setAutoPlay(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isRunning, currentTurn, startBattle, runTurn, jumpToTurn]);
 
   // Demo Mode - Auto-runs battle with dramatic pacing
   const runDemoMode = useCallback(async () => {
@@ -519,9 +638,17 @@ const WarRoom = () => {
     setRedThinking("");
     setBlueThinking("");
     if (selectedBattle) {
-      setSelectedBattle({ ...selectedBattle, turns: [], metrics: { success_rate: 0, money_at_risk: 0, time_to_immunity: 10, patterns_learned: 0 } });
+      setSelectedBattle({ ...selectedBattle, turns: [], metrics: { success_rate: 0, money_at_risk: 0, money_saved: 0, time_to_immunity: 10, patterns_learned: 0 } });
     }
     toast.info("Battle reset");
+  };
+
+  const runWowFactor = () => {
+    if (!isRunning) {
+      startBattle();
+    }
+    setDemoMode(true);
+    setAutoPlay(false);
   };
 
   return (
@@ -554,7 +681,16 @@ const WarRoom = () => {
             </SelectContent>
           </Select>
 
-          <Button variant="outline" onClick={createNewBattle} data-testid="create-battle-btn">
+          <Button
+            variant="outline"
+            onClick={createNewBattle}
+            data-testid="create-battle-btn"
+            data-explain="Create new battle"
+            data-explain-title="Battle initialization"
+            data-explain-summary="Creates a simulated scenario with attacker/defender teams and baseline risk settings."
+            data-explain-rules="SIM-INIT-01"
+            data-explain-evidence="Scenario template,Seed data"
+          >
             <Zap className="h-4 w-4 mr-2" />
             New Battle
           </Button>
@@ -584,6 +720,7 @@ const WarRoom = () => {
               checked={alertsEnabled}
               onCheckedChange={setAlertsEnabled}
               id="alerts-toggle"
+              data-testid="alerts-toggle"
             />
             <Label htmlFor="alerts-toggle" className="text-sm flex items-center gap-1">
               {alertsEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
@@ -597,7 +734,7 @@ const WarRoom = () => {
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Rewind className="h-4 w-4" />
             <div className="w-24">
-              <Slider value={speed} onValueChange={setSpeed} min={0} max={100} step={10} />
+              <Slider value={speed} onValueChange={setSpeed} min={0} max={100} step={10} data-testid="speed-slider" />
             </div>
             <FastForward className="h-4 w-4" />
           </div>
@@ -612,16 +749,41 @@ const WarRoom = () => {
               }}
               id="demo-mode"
               disabled={!isRunning}
+              data-testid="demo-toggle"
             />
             <Label htmlFor="demo-mode" className="text-sm">Demo</Label>
           </div>
+
+          <Button
+            variant="outline"
+            onClick={runWowFactor}
+            disabled={!selectedBattle}
+            data-testid="wow-factor-btn"
+            data-explain="Show wow factor"
+            data-explain-title="Demo impact"
+            data-explain-summary="Highlights best-case blocking outcomes and savings for the current scenario."
+            data-explain-rules="SIM-DEMO-03"
+            data-explain-evidence="Blocked attempts,Savings estimate"
+          >
+            <Sparkles className="h-4 w-4 mr-2 text-purple-400" />
+            Wow Factor
+          </Button>
 
           <div className="h-6 w-px bg-border" />
 
           {/* Battle Controls */}
           <div className="flex items-center gap-2">
             {!isRunning ? (
-              <Button onClick={startBattle} disabled={!selectedBattle} data-testid="start-battle-btn">
+              <Button
+                onClick={startBattle}
+                disabled={!selectedBattle}
+                data-testid="start-battle-btn"
+                data-explain="Start battle"
+                data-explain-title="Simulation start"
+                data-explain-summary="Begins the attack/defense simulation and streaming telemetry."
+                data-explain-rules="SIM-RUN-01"
+                data-explain-evidence="Battle setup,Scenario params"
+              >
                 <Play className="h-4 w-4 mr-2" />
                 Start
               </Button>
@@ -634,19 +796,43 @@ const WarRoom = () => {
                     if (!autoPlay) setDemoMode(false);
                   }}
                   disabled={demoMode}
+                  data-explain="Auto play"
+                  data-explain-title="Automated turns"
+                  data-explain-summary="Runs simulation turns continuously with telemetry updates."
+                  data-explain-rules="SIM-AUTO-02"
+                  data-explain-evidence="Turn cadence,Streaming status"
                   data-testid="autoplay-btn"
                 >
                   {autoPlay ? <Pause className="h-4 w-4 mr-2" /> : <Play className="h-4 w-4 mr-2" />}
                   {autoPlay ? "Pause" : "Auto"}
                 </Button>
-                <Button variant="outline" onClick={runTurn} disabled={autoPlay || demoMode || isStreaming} data-testid="step-btn">
+                <Button
+                  variant="outline"
+                  onClick={runTurn}
+                  disabled={autoPlay || demoMode || isStreaming}
+                  data-testid="step-btn"
+                  data-explain="Run next turn"
+                  data-explain-title="Manual step"
+                  data-explain-summary="Advances the simulation by one turn for granular review."
+                  data-explain-rules="SIM-STEP-01"
+                  data-explain-evidence="Current turn state,Pending actions"
+                >
                   <SkipForward className="h-4 w-4 mr-2" />
                   Step
                 </Button>
                 <Button variant="ghost" onClick={resetBattle} data-testid="reset-btn">
                   <RotateCcw className="h-4 w-4" />
                 </Button>
-                <Button variant="destructive" onClick={stopBattle} data-testid="stop-battle-btn">
+                <Button
+                  variant="destructive"
+                  onClick={stopBattle}
+                  data-testid="stop-battle-btn"
+                  data-explain="Stop battle"
+                  data-explain-title="Simulation stop"
+                  data-explain-summary="Stops the run and freezes telemetry for review."
+                  data-explain-rules="SIM-STOP-01"
+                  data-explain-evidence="Run status,Turn summary"
+                >
                   Stop
                 </Button>
               </>
@@ -655,8 +841,111 @@ const WarRoom = () => {
         </div>
       </div>
 
+      {/* Scenario Builder */}
+      <div className="border-b border-border bg-card/40 px-6 py-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold">Scenario Builder</h3>
+            <p className="text-xs text-muted-foreground">Drag blocks into the lane to assemble an attack flow.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={clearScenario} data-testid="scenario-clear-btn">
+              Clear
+            </Button>
+            <Button size="sm" onClick={createScenarioBattle} data-testid="scenario-create-btn">
+              Create Scenario Battle
+            </Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Blocks</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {scenarioBlocks.map((block) => (
+                <div
+                  key={block.id}
+                  draggable
+                  onDragStart={onScenarioDragStart(block)}
+                  className="p-3 rounded-lg border border-border bg-zinc-900/60 cursor-move hover:border-zinc-600"
+                  data-testid={`scenario-block-${block.id}`}
+                >
+                  <div className="text-sm font-medium">{block.label}</div>
+                  <div className="text-xs text-muted-foreground">{block.description}</div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card
+            className="border-border col-span-2"
+            onDrop={onScenarioDrop}
+            onDragOver={onScenarioDragOver}
+            data-testid="scenario-dropzone"
+          >
+            <CardHeader>
+              <CardTitle className="text-sm">Scenario Lane</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 mb-3">
+                <Input
+                  value={scenarioName}
+                  onChange={(event) => setScenarioName(event.target.value)}
+                  placeholder="Scenario name"
+                  data-testid="scenario-name-input"
+                />
+              </div>
+              {scenarioSteps.length === 0 ? (
+                <div className="border border-dashed border-border rounded-lg p-6 text-center text-xs text-muted-foreground">
+                  Drop blocks here to build a scenario.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {scenarioSteps.map((step, idx) => (
+                    <div
+                      key={`${step.id}-${idx}`}
+                      className="flex items-center justify-between p-3 rounded-lg border border-border bg-black/30"
+                      data-testid={`scenario-step-${idx}`}
+                    >
+                      <div>
+                        <div className="text-sm font-medium">{idx + 1}. {step.label}</div>
+                        <div className="text-xs text-muted-foreground">{step.description}</div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeScenarioStep(idx)}
+                        data-testid={`scenario-remove-${idx}`}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {/* Main Battle Area */}
       <div className="flex-1 flex overflow-hidden">
+        {blockedBursts.map((burstId, idx) => (
+          <div key={burstId} className="particle-burst">
+            {Array.from({ length: 12 }).map((_, particleIndex) => (
+              <span
+                key={`${burstId}-${particleIndex}`}
+                className="particle"
+                style={{
+                  "--x": `${Math.cos((particleIndex / 12) * Math.PI * 2) * 160}px`,
+                  "--y": `${Math.sin((particleIndex / 12) * Math.PI * 2) * 120}px`,
+                  animationDelay: `${particleIndex * 10}ms`,
+                }}
+              />
+            ))}
+          </div>
+        ))}
         {/* Red Team Panel */}
         <div className="flex-1 p-4 border-r border-border overflow-hidden">
           <ThinkingVisualizer 
