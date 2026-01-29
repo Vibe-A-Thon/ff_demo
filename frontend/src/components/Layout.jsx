@@ -25,6 +25,7 @@ import {
   Package,
   GitCompare,
   FileSearch,
+  FileText,
   FileCode,
   ShieldCheck,
   ChevronLeft,
@@ -32,6 +33,7 @@ import {
   Activity,
   Database,
   User,
+  Users,
   LogOut,
   Bell,
   Settings,
@@ -46,18 +48,27 @@ import {
   Info,
   Search,
   Plus,
+  Crosshair,
 } from "lucide-react";
 
 const navItems = [
+  { path: "/dashboard", label: "Dashboard", icon: Activity, team: "blue" },
   { path: "/war-room", label: "War Room", icon: Swords, team: "red" },
+  { path: "/war-practice", label: "War Practice", icon: Crosshair, team: "red" },
+  { path: "/incidents", label: "Incident Timeline", icon: Bell, team: "red" },
   { path: "/battle-replay", label: "Battle Replay", icon: PlayCircle, team: "blue" },
   { path: "/brain-surgery", label: "Brain Surgery", icon: Brain, team: "purple" },
   { path: "/metrics", label: "Metrics", icon: BarChart3, team: "blue" },
+  { path: "/taxonomy", label: "Fraud Taxonomy", icon: Database, team: "gold" },
   { path: "/rsb-manager", label: "RSB Manager", icon: Package, team: "green" },
   { path: "/diff-viewer", label: "Diff Viewer", icon: GitCompare, team: "orange" },
-  { path: "/evidence", label: "Evidence Packs", icon: FileSearch, team: "gold" },
   { path: "/rules", label: "Rule Editor", icon: FileCode, team: "blue" },
   { path: "/approvals", label: "Approvals", icon: ShieldCheck, team: "green" },
+  { path: "/evidence", label: "Evidence Packs", icon: FileSearch, team: "gold" },
+  { path: "/agents", label: "Agent Management", icon: User, team: "purple" },
+  { path: "/audit-logs", label: "Audit Logs", icon: FileText, team: "white" },
+  { path: "/settings", label: "Settings", icon: Settings, team: "white" },
+  { path: "/users", label: "User Management", icon: Users, team: "white" },
 ];
 
 const teamColors = {
@@ -67,14 +78,15 @@ const teamColors = {
   green: "border-green-500 text-green-400 hover:bg-green-500/10",
   gold: "border-yellow-500 text-yellow-400 hover:bg-yellow-500/10",
   orange: "border-orange-500 text-orange-400 hover:bg-orange-500/10",
+  white: "border-slate-200 text-slate-200 hover:bg-slate-200/10",
 };
 
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
   admin: ["*"],
-  analyst: ["war-room", "brain-surgery", "metrics", "evidence", "battle-replay"],
-  engineer: ["war-room", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay"],
-  compliance: ["metrics", "evidence", "approvals", "battle-replay"],
+  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy"],
+  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy"],
+  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs"],
 };
 
 const ROLE_ICONS = {

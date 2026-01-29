@@ -23,13 +23,21 @@ import EvidenceViewer from "./pages/EvidenceViewer";
 import RuleEditor from "./pages/RuleEditor";
 import Approvals from "./pages/Approvals";
 import BattleReplay from "./pages/BattleReplay";
+import WarPractice from "./pages/WarPractice";
+import DashboardHome from "./pages/DashboardHome";
+import AgentManagement from "./pages/AgentManagement";
+import FraudTaxonomyBrowser from "./pages/FraudTaxonomyBrowser";
+import IncidentTimeline from "./pages/IncidentTimeline";
+import AuditLogViewer from "./pages/AuditLogViewer";
+import SettingsConfiguration from "./pages/SettingsConfiguration";
+import UserManagement from "./pages/UserManagement";
 
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
   admin: ["*"], // Access to everything
-  analyst: ["war-room", "brain-surgery", "metrics", "evidence", "battle-replay"],
-  engineer: ["war-room", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay"],
-  compliance: ["metrics", "evidence", "approvals", "battle-replay"],
+  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy"],
+  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy"],
+  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs"],
 };
 
 // Check if user has access to a route
@@ -96,7 +104,7 @@ const PublicRoute = ({ children }) => {
   }
   
   if (isAuthenticated) {
-    return <Navigate to="/war-room" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   
   return children;
@@ -153,8 +161,10 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/war-room" replace />} />
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<RoleGate route="dashboard"><DashboardHome /></RoleGate>} />
           <Route path="war-room" element={<RoleGate route="war-room"><WarRoom /></RoleGate>} />
+          <Route path="war-practice" element={<RoleGate route="war-practice"><WarPractice /></RoleGate>} />
           <Route path="brain-surgery" element={<RoleGate route="brain-surgery"><BrainSurgery /></RoleGate>} />
           <Route path="metrics" element={<RoleGate route="metrics"><MetricsDashboard /></RoleGate>} />
           <Route path="rsb-manager" element={<RoleGate route="rsb-manager"><RSBManager /></RoleGate>} />
@@ -163,6 +173,12 @@ function AppRoutes() {
           <Route path="rules" element={<RoleGate route="rules"><RuleEditor /></RoleGate>} />
           <Route path="approvals" element={<RoleGate route="approvals"><Approvals /></RoleGate>} />
           <Route path="battle-replay" element={<RoleGate route="battle-replay"><BattleReplay /></RoleGate>} />
+          <Route path="agents" element={<RoleGate route="agents"><AgentManagement /></RoleGate>} />
+          <Route path="taxonomy" element={<RoleGate route="taxonomy"><FraudTaxonomyBrowser /></RoleGate>} />
+          <Route path="incidents" element={<RoleGate route="incidents"><IncidentTimeline /></RoleGate>} />
+          <Route path="audit-logs" element={<RoleGate route="audit-logs"><AuditLogViewer /></RoleGate>} />
+          <Route path="settings" element={<RoleGate route="settings"><SettingsConfiguration /></RoleGate>} />
+          <Route path="users" element={<RoleGate route="users"><UserManagement /></RoleGate>} />
         </Route>
 
         {/* Catch all - redirect to login */}

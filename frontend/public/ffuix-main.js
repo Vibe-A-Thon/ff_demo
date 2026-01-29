@@ -367,5 +367,4 @@
   // Initial check
   setTimeout(detectBuildError, 100);
 })();
-</attachments>
 
