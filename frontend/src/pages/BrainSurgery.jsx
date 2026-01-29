@@ -7,6 +7,9 @@ import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../components/ui/sheet";
+import { Switch } from "../components/ui/switch";
+import { Progress } from "../components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { knowledgeAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
@@ -14,15 +17,15 @@ import {
   Trash2,
   Link2,
   Play,
-  Eye,
+  RefreshCw,
   ZoomIn,
   ZoomOut,
   Maximize2,
-  Info,
   Shield,
   FileText,
   Lock,
   Lightbulb,
+  AlertTriangle,
 } from "lucide-react";
 
 const nodeColors = {
@@ -41,9 +44,65 @@ const BrainSurgery = () => {
   const [newNodeName, setNewNodeName] = useState("");
   const [connectMode, setConnectMode] = useState(false);
   const [connectSource, setConnectSource] = useState(null);
+  const [patchAssignments, setPatchAssignments] = useState({});
+  const [sandboxStatus, setSandboxStatus] = useState("idle");
+  const [sandboxLogs, setSandboxLogs] = useState([]);
+  const [sandboxCases, setSandboxCases] = useState([
+    { id: "case-01", name: "Velocity Regression", status: "queued" },
+    { id: "case-02", name: "ATO Edge Cases", status: "queued" },
+    { id: "case-03", name: "Geo Fence Drift", status: "queued" },
+  ]);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [conflicts, setConflicts] = useState([
+    {
+      id: "conf-01",
+      title: "Rule action changed",
+      detail: "Existing: review → Patch: block",
+      resolution: "keep-existing",
+    },
+    {
+      id: "conf-02",
+      title: "Threshold drift",
+      detail: "Confidence 0.71 → 0.82",
+      resolution: "accept-patch",
+    },
+  ]);
+  const [hotSwapEnabled, setHotSwapEnabled] = useState(true);
+  const [perfImpact, setPerfImpact] = useState(18);
+  const [perfLatency, setPerfLatency] = useState(6);
+  const [perfCpu, setPerfCpu] = useState(4);
   const graphRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  const patches = [
+    { id: "patch-ato-01", name: "ATO Patch v1.2", risk: "low", coverage: "+12%" },
+    { id: "patch-vel-07", name: "Velocity Tune", risk: "medium", coverage: "+6%" },
+    { id: "patch-geo-03", name: "Geo Fence", risk: "high", coverage: "+3%" },
+  ];
+
+  const patchDrilldowns = [
+    {
+      id: "drill-01",
+      nodeId: "rule-velocity-01",
+      patch: "Velocity Tune",
+      status: "conflict",
+      detail: "Threshold divergence detected",
+    },
+    {
+      id: "drill-02",
+      nodeId: "rule-ato-02",
+      patch: "ATO Patch v1.2",
+      status: "ready",
+      detail: "Passes sandbox validation",
+    },
+  ];
+
+  const agents = [
+    { id: "agent-blue-01", name: "Blue Orchestrator" },
+    { id: "agent-purple-02", name: "Purple Strategist" },
+    { id: "agent-green-03", name: "Green Builder" },
+  ];
 
   useEffect(() => {
     loadNodes();
@@ -170,11 +229,91 @@ const BrainSurgery = () => {
   };
 
   const runSandboxTest = () => {
+    setSandboxStatus("running");
+    setSandboxLogs((prev) => [
+      ...prev,
+      `[${new Date().toLocaleTimeString()}] Sandbox booted. Running validation suite...`,
+    ]);
+    setSandboxCases((prev) => prev.map((item) => ({ ...item, status: "running" })));
     toast.success("Sandbox test initiated - Simulating patch application...");
+
     setTimeout(() => {
+      setSandboxCases((prev) =>
+        prev.map((item, index) => ({
+          ...item,
+          status: index === 2 ? "warning" : "passed",
+        }))
+      );
+      setSandboxStatus("passed");
+      setSandboxLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] All unit and integration tests completed.`,
+      ]);
       toast.success("Sandbox test passed! All rules validated.");
-    }, 2000);
+    }, 1800);
   };
+
+  const handlePatchDragStart = (patch) => (event) => {
+    event.dataTransfer.setData("application/json", JSON.stringify(patch));
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleAgentDrop = (agentId) => (event) => {
+    event.preventDefault();
+    const raw = event.dataTransfer.getData("application/json");
+    if (!raw) return;
+    const patch = JSON.parse(raw);
+    setPatchAssignments((prev) => ({ ...prev, [agentId]: patch }));
+    toast.success(`Assigned ${patch.name} to ${agents.find(a => a.id === agentId)?.name}`);
+  };
+
+  const handleAgentDragOver = (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleMergeDeploy = () => {
+    if (sandboxStatus !== "passed") {
+      toast.error("Run sandbox validation before deploy.");
+      return;
+    }
+    toast.success("Merge and Deploy started. Watching rollout...");
+  };
+
+  const handleResolveConflict = (conflictId, resolution) => {
+    setConflicts((prev) =>
+      prev.map((conflict) =>
+        conflict.id === conflictId ? { ...conflict, resolution } : conflict
+      )
+    );
+  };
+
+  const handlePerfImpactChange = (value) => {
+    const next = Number(value);
+    setPerfImpact(next);
+    setPerfLatency(Math.max(2, Math.round(next / 3)));
+    setPerfCpu(Math.max(1, Math.round(next / 4)));
+  };
+
+  const getSafetyBadge = (risk) => {
+    if (risk === "low") return { label: "SAFE TO MERGE", className: "status-success" };
+    if (risk === "medium") return { label: "REQUIRES REVIEW", className: "status-warning" };
+    return { label: "HIGH RISK PATCH", className: "status-error" };
+  };
+
+  const getSandboxBadge = (status) => {
+    if (status === "passed") return { label: "PASSED", className: "status-success" };
+    if (status === "warning") return { label: "WARN", className: "status-warning" };
+    if (status === "running") return { label: "RUNNING", className: "status-warning" };
+    return {
+      label: "QUEUED",
+      className: "bg-zinc-800 text-zinc-400 border border-zinc-700",
+    };
+  };
+
+  const conflictNodeIds = new Set(
+    graphData.nodes.filter((node) => node.type === "rule").slice(0, 2).map((node) => node.id)
+  );
 
   return (
     <div ref={containerRef} className="h-full flex flex-col bg-background" data-testid="brain-surgery">
@@ -287,6 +426,13 @@ const BrainSurgery = () => {
               ctx.font = `bold ${10 / globalScale}px Manrope`;
               ctx.fillText("ROOT", node.x, node.y - 4);
             }
+
+            if (conflictNodeIds.has(node.id)) {
+              ctx.fillStyle = "#EF4444";
+              ctx.beginPath();
+              ctx.arc(node.x + node.size - 4, node.y - node.size + 4, 5, 0, 2 * Math.PI);
+              ctx.fill();
+            }
           }}
           cooldownTicks={100}
           d3AlphaDecay={0.02}
@@ -303,6 +449,10 @@ const BrainSurgery = () => {
                 <span className="text-xs capitalize">{type}</span>
               </div>
             ))}
+            <div className="flex items-center gap-2 pt-2 text-xs text-muted-foreground">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              Conflict flagged
+            </div>
           </div>
         </div>
 
@@ -342,6 +492,42 @@ const BrainSurgery = () => {
               <p className="font-mono text-sm mt-1">{selectedNode?.id}</p>
             </div>
 
+            {selectedNode?.type === "rule" && (
+              <div>
+                <label className="text-sm text-muted-foreground">Patch Drilldowns</label>
+                <div className="mt-2 space-y-2">
+                  {patchDrilldowns.map((item) => (
+                    <div key={item.id} className="rounded-md border border-border bg-black/30 p-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium">{item.patch}</span>
+                        <Badge variant="outline" className={`text-[10px] ${item.status === "conflict" ? "border-red-500/40 text-red-300" : "border-green-500/40 text-green-300"}`}>
+                          {item.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">{item.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedNode?.type === "rule" && conflicts.length > 0 && (
+              <div>
+                <label className="text-sm text-muted-foreground">Live Conflict Preview</label>
+                <div className="mt-2 space-y-2">
+                  {conflicts.map((conflict) => (
+                    <div key={conflict.id} className="rounded-md border border-border bg-black/30 p-2">
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <AlertTriangle className="h-4 w-4 text-red-400" />
+                        {conflict.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">{conflict.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {selectedNode?.data && Object.keys(selectedNode.data).length > 0 && (
               <div>
                 <label className="text-sm text-muted-foreground">Data</label>
@@ -377,6 +563,212 @@ const BrainSurgery = () => {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Brain Surgery Control Deck */}
+      <div className="border-t border-border bg-zinc-900/70 px-6 py-4">
+        <div className="grid grid-cols-4 gap-4">
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Patch Library</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {patches.map((patch) => (
+                <div
+                  key={patch.id}
+                  draggable
+                  onDragStart={handlePatchDragStart(patch)}
+                  className="p-3 rounded-lg border border-border bg-black/30 cursor-move hover:border-zinc-600"
+                  data-testid={`patch-${patch.id}`}
+                >
+                  <div className="text-sm font-medium">{patch.name}</div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {patch.risk} risk
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      Coverage {patch.coverage}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Agent Mapping</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {agents.map((agent) => (
+                <div
+                  key={agent.id}
+                  onDrop={handleAgentDrop(agent.id)}
+                  onDragOver={handleAgentDragOver}
+                  className="p-3 rounded-lg border border-dashed border-border bg-black/20"
+                  data-testid={`agent-drop-${agent.id}`}
+                >
+                  <div className="text-xs text-muted-foreground">{agent.name}</div>
+                  <div className="text-sm font-medium mt-1">
+                    {patchAssignments[agent.id]?.name || "Drop patch here"}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Sandbox & Safety</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Sandbox Status</span>
+                <Badge variant="outline" className="text-xs capitalize">
+                  {sandboxStatus}
+                </Badge>
+              </div>
+              <Button variant="outline" onClick={runSandboxTest} data-testid="sandbox-run-btn">
+                <Play className="h-4 w-4 mr-2" />
+                Run Sandbox
+              </Button>
+              <div className="space-y-2">
+                {patches.map((patch) => {
+                  const badge = getSafetyBadge(patch.risk);
+                  return (
+                    <div key={patch.id} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{patch.name}</span>
+                      <Badge className={badge.className}>{badge.label}</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="space-y-2" data-testid="sandbox-cases">
+                {sandboxCases.map((testCase) => {
+                  const badge = getSandboxBadge(testCase.status);
+                  return (
+                    <div key={testCase.id} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{testCase.name}</span>
+                      <Badge className={badge.className}>{badge.label}</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="rounded-md border border-border bg-black/30 p-2 text-xs font-mono h-24 overflow-auto" data-testid="sandbox-log">
+                {sandboxLogs.length === 0 ? (
+                  <div className="text-muted-foreground">Sandbox logs will appear here.</div>
+                ) : (
+                  sandboxLogs.map((log, index) => (
+                    <div key={`${log}-${index}`} className="text-muted-foreground">
+                      {log}
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Deployment Controls</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Hot-Swap</span>
+                <Switch checked={hotSwapEnabled} onCheckedChange={setHotSwapEnabled} data-testid="hotswap-toggle" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Rollback Window</span>
+                <Badge variant="outline" className="text-xs">15 min</Badge>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Performance Impact</span>
+                  <span>{perfImpact}%</span>
+                </div>
+                <Progress value={perfImpact} className="h-2" />
+                <Input
+                  type="range"
+                  min="5"
+                  max="45"
+                  step="1"
+                  value={perfImpact}
+                  onChange={(e) => handlePerfImpactChange(e.target.value)}
+                  className="mt-2"
+                  data-testid="perf-impact-slider"
+                />
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>Latency Δ</span>
+                    <span>+{perfLatency}ms</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>CPU Δ</span>
+                    <span>+{perfCpu}%</span>
+                  </div>
+                </div>
+              </div>
+              <Button onClick={handleMergeDeploy} data-testid="merge-deploy-btn">
+                <Shield className="h-4 w-4 mr-2" />
+                Merge & Deploy
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setConflictOpen(true)} data-testid="conflict-resolve-btn">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Resolve Conflicts
+                </Button>
+                <Button variant="ghost" size="icon" data-testid="rollback-btn">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Dialog open={conflictOpen} onOpenChange={setConflictOpen}>
+        <DialogContent className="bg-card border-border" data-testid="conflict-dialog">
+          <DialogHeader>
+            <DialogTitle>Merge Conflict Resolution</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {conflicts.map((conflict) => (
+              <div key={conflict.id} className="rounded-lg border border-border bg-black/30 p-3">
+                <div className="text-sm font-medium">{conflict.title}</div>
+                <div className="text-xs text-muted-foreground mt-1">{conflict.detail}</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant={conflict.resolution === "keep-existing" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleResolveConflict(conflict.id, "keep-existing")}
+                    data-testid={`conflict-keep-${conflict.id}`}
+                  >
+                    Keep Existing
+                  </Button>
+                  <Button
+                    variant={conflict.resolution === "accept-patch" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleResolveConflict(conflict.id, "accept-patch")}
+                    data-testid={`conflict-accept-${conflict.id}`}
+                  >
+                    Accept Patch
+                  </Button>
+                  <Button
+                    variant={conflict.resolution === "custom" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleResolveConflict(conflict.id, "custom")}
+                    data-testid={`conflict-custom-${conflict.id}`}
+                  >
+                    Custom Merge
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <Button onClick={() => setConflictOpen(false)} data-testid="conflict-save-btn">
+              Apply Resolutions
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

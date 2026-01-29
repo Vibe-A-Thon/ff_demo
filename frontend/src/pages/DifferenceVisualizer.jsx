@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import ReactDiffViewer, { DiffMethod } from "react-diff-viewer-continued";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -118,7 +120,33 @@ const DifferenceVisualizer = () => {
   const [commitMessage, setCommitMessage] = useState("");
   const [sandboxResult, setSandboxResult] = useState(null);
   const [running, setRunning] = useState(false);
+  const [conflictDecisions, setConflictDecisions] = useState({});
   const mergedPreview = selectedDiff?.newCode || "";
+  const conflictBlocks = [
+    { id: "conflict-1", label: "Threshold change conflict", recommendation: "Use patch" },
+    { id: "conflict-2", label: "Action severity mismatch", recommendation: "Manual merge" },
+  ];
+  const overlaySegments = [
+    { id: "segment-1", label: "Rules", intensity: 0.8, kind: "added" },
+    { id: "segment-2", label: "Conditions", intensity: 0.6, kind: "modified" },
+    { id: "segment-3", label: "Actions", intensity: 0.9, kind: "hot" },
+    { id: "segment-4", label: "Metadata", intensity: 0.4, kind: "removed" },
+  ];
+  const impactAreas = [
+    { id: "impact-1", name: "Velocity threshold", delta: "+28%", risk: "high" },
+    { id: "impact-2", name: "Alert routing", delta: "+12%", risk: "medium" },
+    { id: "impact-3", name: "Time window", delta: "+6%", risk: "low" },
+  ];
+  const gutterMarkers = {
+    left: {
+      4: "legacy",
+      9: "policy",
+    },
+    right: {
+      6: "patch",
+      12: "hot",
+    },
+  };
 
   const diffStyles = {
     variables: {
@@ -231,6 +259,37 @@ Reviewed and validated via sandbox testing.`;
     const diffText = `--- OLD ---\n${selectedDiff.oldCode}\n\n--- NEW ---\n${selectedDiff.newCode}`;
     navigator.clipboard.writeText(diffText);
     toast.success("Diff copied to clipboard!");
+  };
+
+  const handleConflictDecision = (conflictId, decision) => {
+    setConflictDecisions((prev) => ({ ...prev, [conflictId]: decision }));
+  };
+
+  const getOverlayClass = (kind) => {
+    if (kind === "added") return "bg-green-500/40";
+    if (kind === "removed") return "bg-red-500/40";
+    if (kind === "hot") return "bg-yellow-400/50";
+    return "bg-blue-500/30";
+  };
+
+  const getImpactBadge = (risk) => {
+    if (risk === "high") return "bg-red-500/20 text-red-200 border border-red-500/40";
+    if (risk === "medium") return "bg-yellow-500/20 text-yellow-200 border border-yellow-500/40";
+    return "bg-green-500/20 text-green-200 border border-green-500/40";
+  };
+
+  const renderGutter = (lineNumber, side) => {
+    const marker = gutterMarkers[side]?.[lineNumber];
+    return (
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-xs text-muted-foreground">{lineNumber}</span>
+        {marker && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            {marker}
+          </Badge>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -395,9 +454,11 @@ Reviewed and validated via sandbox testing.`;
                   <CardTitle className="text-sm">Existing Model</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="p-3 bg-black/30 rounded-lg font-mono text-xs overflow-auto max-h-64">
-                    {selectedDiff.oldCode}
-                  </pre>
+                  <div className="rounded-lg overflow-hidden">
+                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                      {selectedDiff.oldCode}
+                    </SyntaxHighlighter>
+                  </div>
                 </CardContent>
               </Card>
               <Card className="border-border">
@@ -405,9 +466,11 @@ Reviewed and validated via sandbox testing.`;
                   <CardTitle className="text-sm">APMC (Patched)</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="p-3 bg-black/30 rounded-lg font-mono text-xs overflow-auto max-h-64">
-                    {selectedDiff.newCode}
-                  </pre>
+                  <div className="rounded-lg overflow-hidden">
+                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                      {selectedDiff.newCode}
+                    </SyntaxHighlighter>
+                  </div>
                 </CardContent>
               </Card>
               <Card className="border-border border-green-500/30 bg-green-500/5">
@@ -415,9 +478,80 @@ Reviewed and validated via sandbox testing.`;
                   <CardTitle className="text-sm text-green-300">Merged Model</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="p-3 bg-black/30 rounded-lg font-mono text-xs overflow-auto max-h-64">
-                    {mergedPreview}
-                  </pre>
+                  <div className="rounded-lg overflow-hidden">
+                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                      {mergedPreview}
+                    </SyntaxHighlighter>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Patch Overlay */}
+            <div className="mx-4 mt-4">
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Patch Overlay</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                      <div className="text-green-300 font-semibold">Additions</div>
+                      <div className="font-mono text-lg">+12</div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                      <div className="text-red-300 font-semibold">Removals</div>
+                      <div className="font-mono text-lg">-4</div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                      <div className="text-yellow-300 font-semibold">Hotspots</div>
+                      <div className="font-mono text-lg">2</div>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <div className="text-xs text-muted-foreground mb-2">Impact Map</div>
+                    <div className="flex items-center gap-2" data-testid="overlay-map">
+                      {overlaySegments.map((segment) => (
+                        <div
+                          key={segment.id}
+                          className={`h-3 rounded-full ${getOverlayClass(segment.kind)}`}
+                          style={{ flex: segment.intensity * 10 }}
+                          title={`${segment.label} • ${(segment.intensity * 100).toFixed(0)}%`}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-green-500/60" />
+                        Additions
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-red-500/60" />
+                        Removals
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-yellow-400/60" />
+                        Hotspots
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2" data-testid="impact-annotations">
+                    {impactAreas.map((impact) => (
+                      <div key={impact.id} className="flex items-center justify-between rounded-lg border border-border bg-black/30 px-3 py-2">
+                        <div>
+                          <div className="text-xs font-medium">{impact.name}</div>
+                          <div className="text-[10px] text-muted-foreground">Delta {impact.delta}</div>
+                        </div>
+                        <span className={`text-[10px] px-2 py-1 rounded ${getImpactBadge(impact.risk)}`}
+                        >
+                          {impact.risk.toUpperCase()} IMPACT
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    Color overlays highlight high‑impact change regions beyond standard diff lines.
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -440,6 +574,53 @@ Reviewed and validated via sandbox testing.`;
                   ) : (
                     <p className="text-sm text-muted-foreground">No inline comments yet.</p>
                   )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Conflict Resolution */}
+            <div className="mx-4 mt-4">
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Conflict Resolution</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {conflictBlocks.map((conflict) => (
+                    <div key={conflict.id} className="p-3 rounded-lg border border-border bg-black/30">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-medium">{conflict.label}</div>
+                          <div className="text-xs text-muted-foreground">Recommendation: {conflict.recommendation}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant={conflictDecisions[conflict.id] === "keep" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleConflictDecision(conflict.id, "keep")}
+                            data-testid={`${conflict.id}-keep-existing`}
+                          >
+                            Keep Existing
+                          </Button>
+                          <Button
+                            variant={conflictDecisions[conflict.id] === "patch" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleConflictDecision(conflict.id, "patch")}
+                            data-testid={`${conflict.id}-use-patch`}
+                          >
+                            Use Patch
+                          </Button>
+                          <Button
+                            variant={conflictDecisions[conflict.id] === "manual" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleConflictDecision(conflict.id, "manual")}
+                            data-testid={`${conflict.id}-manual-merge`}
+                          >
+                            Manual Merge
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             </div>
@@ -473,6 +654,7 @@ Reviewed and validated via sandbox testing.`;
                   rightTitle="After"
                   styles={diffStyles}
                   compareMethod={DiffMethod.WORDS}
+                  renderGutter={renderGutter}
                 />
               </div>
             </ScrollArea>

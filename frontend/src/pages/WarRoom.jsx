@@ -94,7 +94,7 @@ const ThinkingVisualizer = ({ team, thinking, isStreaming, streamingText }) => {
 };
 
 // Battle Timeline Component
-const BattleTimeline = ({ turns, currentTurn, onJumpTo }) => {
+const BattleTimeline = ({ turns, currentTurn, onJumpTo, onHoverTurn }) => {
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -114,6 +114,8 @@ const BattleTimeline = ({ turns, currentTurn, onJumpTo }) => {
             key={idx}
             data-turn={idx}
             onClick={() => onJumpTo(idx)}
+            onMouseEnter={() => onHoverTurn?.(idx)}
+            onMouseLeave={() => onHoverTurn?.(null)}
             className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
               idx === currentTurn 
                 ? 'border-blue-500 bg-blue-500/20 shadow-lg shadow-blue-500/10' 
@@ -158,7 +160,7 @@ const BattleTimeline = ({ turns, currentTurn, onJumpTo }) => {
 };
 
 // Metrics Strip Component with Alert Indicators
-const MetricsStrip = ({ metrics }) => {
+const MetricsStrip = ({ metrics, onMetricClick }) => {
   const items = [
     { 
       key: "success_rate",
@@ -203,16 +205,18 @@ const MetricsStrip = ({ metrics }) => {
   ];
 
   return (
-    <div className="grid grid-cols-5 gap-4 p-4 border-b border-border bg-card">
+    <div className="grid grid-cols-5 gap-4 p-4 border-b border-border bg-card glass-panel">
       {items.map((item) => {
         const Icon = item.icon;
         return (
-          <div 
-            key={item.key} 
-            className={`flex items-center gap-3 p-2 rounded-lg transition-all ${
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onMetricClick?.(item)}
+            className={`flex items-center gap-3 p-2 rounded-lg transition-all text-left ${
               item.alert === 'critical' ? 'bg-red-500/10 border border-red-500/30 animate-pulse' :
-              item.alert === 'warning' ? 'bg-yellow-500/10 border border-yellow-500/30' : ''
-            }`}
+              item.alert === 'warning' ? 'bg-yellow-500/10 border border-yellow-500/30' : 'border border-transparent'
+            } hover:border-zinc-600 hover:bg-zinc-800/60`}
             data-testid={`metric-${item.label.toLowerCase().replace(/\s/g, '-')}`}
           >
             <div className={`p-2 rounded-lg bg-zinc-800 ${item.color}`}>
@@ -225,11 +229,37 @@ const MetricsStrip = ({ metrics }) => {
               </p>
               <p className="text-lg font-semibold font-mono">{item.value}</p>
             </div>
-          </div>
+          </button>
         );
       })}
     </div>
   );
+};
+
+const useAnimatedNumber = (value, duration = 800) => {
+  const [displayValue, setDisplayValue] = useState(value || 0);
+  const previousValueRef = useRef(value || 0);
+
+  useEffect(() => {
+    const from = previousValueRef.current || 0;
+    const to = value || 0;
+    const startTime = performance.now();
+
+    const tick = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const nextValue = Math.round(from + (to - from) * progress);
+      setDisplayValue(nextValue);
+      if (progress < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        previousValueRef.current = to;
+      }
+    };
+
+    requestAnimationFrame(tick);
+  }, [value, duration]);
+
+  return displayValue;
 };
 
 const WarRoom = () => {
@@ -249,6 +279,11 @@ const WarRoom = () => {
   const [blockedBursts, setBlockedBursts] = useState([]);
   const [scenarioName, setScenarioName] = useState("Custom Scenario");
   const [scenarioSteps, setScenarioSteps] = useState([]);
+  const [hoverTurnIndex, setHoverTurnIndex] = useState(null);
+  const [activeMetric, setActiveMetric] = useState(null);
+  const [traceFilter, setTraceFilter] = useState("all");
+  const [traceSearch, setTraceSearch] = useState("");
+  const [runSummary, setRunSummary] = useState(null);
   const wsRef = useRef(null);
   const autoPlayRef = useRef(null);
   const demoRef = useRef(null);
@@ -449,7 +484,16 @@ const WarRoom = () => {
       setAutoPlay(false);
       setDemoMode(false);
       if (wsRef.current) wsRef.current.close();
-      setSelectedBattle({ ...selectedBattle, status: "completed" });
+      const completed = { ...selectedBattle, status: "completed" };
+      setSelectedBattle(completed);
+      setRunSummary({
+        battle: completed.scenario_name,
+        turns: completed.turns?.length || 0,
+        successRate: completed.metrics?.success_rate || 0,
+        moneySaved: completed.metrics?.money_saved || 0,
+        timeToImmunity: completed.metrics?.time_to_immunity || 0,
+        patterns: completed.metrics?.patterns_learned || 0,
+      });
       toast.success("Battle stopped!");
     } catch (error) {
       toast.error("Failed to stop battle");
@@ -651,10 +695,17 @@ const WarRoom = () => {
     setAutoPlay(false);
   };
 
+  const metrics = selectedBattle?.metrics || {};
+  const animatedMoneySaved = useAnimatedNumber(metrics.money_saved || 0);
+  const displayMetrics = { ...metrics, money_saved: animatedMoneySaved };
+
   return (
     <div className="h-full flex flex-col" data-testid="war-room">
       {/* Metrics Strip */}
-      <MetricsStrip metrics={selectedBattle?.metrics || {}} />
+      <MetricsStrip
+        metrics={displayMetrics}
+        onMetricClick={(item) => setActiveMetric(item)}
+      />
 
       {/* Controls */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-zinc-900/50">
@@ -841,6 +892,51 @@ const WarRoom = () => {
         </div>
       </div>
 
+      {/* Metric Drilldown */}
+      {activeMetric && (
+        <div className="border-b border-border bg-zinc-900/70 px-6 py-4" data-testid="metric-drilldown">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">{activeMetric.label} Drilldown</h3>
+              <p className="text-xs text-muted-foreground">Detailed context for the selected metric.</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setActiveMetric(null)} data-testid="metric-drilldown-close">
+              Close
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <Card className="border-border">
+              <CardHeader>
+                <CardTitle className="text-sm">Current Value</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-mono">{activeMetric.value}</div>
+                <p className="text-xs text-muted-foreground">Latest reading from live telemetry.</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader>
+                <CardTitle className="text-sm">Signal Drivers</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs text-muted-foreground">
+                <div>• Device mismatch spikes</div>
+                <div>• Velocity anomalies</div>
+                <div>• New payee creation</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader>
+                <CardTitle className="text-sm">Recommended Action</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Badge variant="outline">Increase scrutiny</Badge>
+                <p className="text-xs text-muted-foreground">Raise threshold or escalate to review.</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
       {/* Scenario Builder */}
       <div className="border-b border-border bg-card/40 px-6 py-4">
         <div className="flex items-center justify-between mb-4">
@@ -971,8 +1067,20 @@ const WarRoom = () => {
             <BattleTimeline 
               turns={selectedBattle?.turns || []} 
               currentTurn={currentTurn}
-              onJumpTo={jumpToTurn} 
+              onJumpTo={jumpToTurn}
+              onHoverTurn={setHoverTurnIndex}
             />
+          </div>
+          <div className="border-t border-border p-3 text-xs text-muted-foreground" data-testid="turn-hover-preview">
+            {hoverTurnIndex !== null ? (
+              <div>
+                <div className="font-semibold">Turn {hoverTurnIndex + 1} Preview</div>
+                <div className="mt-1">Red: {selectedBattle?.turns?.[hoverTurnIndex]?.red_team?.action || "N/A"}</div>
+                <div>Blue: {selectedBattle?.turns?.[hoverTurnIndex]?.blue_team?.action || "N/A"}</div>
+              </div>
+            ) : (
+              <div>Hover a turn to preview details.</div>
+            )}
           </div>
         </div>
 
@@ -986,6 +1094,102 @@ const WarRoom = () => {
           />
         </div>
       </div>
+
+      {/* Session Trace Viewer */}
+      <div className="border-t border-border bg-zinc-900/60 px-6 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold">Session Trace Viewer</h3>
+            <p className="text-xs text-muted-foreground">Filter raw telemetry and decisions.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={traceFilter} onValueChange={setTraceFilter}>
+              <SelectTrigger className="w-[160px]" data-testid="trace-filter-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="red">Red Team</SelectItem>
+                <SelectItem value="blue">Blue Team</SelectItem>
+                <SelectItem value="blocked">Blocked</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              value={traceSearch}
+              onChange={(event) => setTraceSearch(event.target.value)}
+              placeholder="Search trace"
+              data-testid="trace-search-input"
+            />
+          </div>
+        </div>
+        <ScrollArea className="h-32" data-testid="trace-viewer">
+          <div className="space-y-2 text-xs font-mono">
+            {(selectedBattle?.turns || [])
+              .filter((turn) => {
+                if (traceFilter === "red") return turn.red_team;
+                if (traceFilter === "blue") return turn.blue_team;
+                if (traceFilter === "blocked") return turn.blue_team?.blocked;
+                return true;
+              })
+              .filter((turn) => {
+                if (!traceSearch) return true;
+                const blob = `${turn.red_team?.action || ""} ${turn.blue_team?.action || ""}`.toLowerCase();
+                return blob.includes(traceSearch.toLowerCase());
+              })
+              .map((turn, idx) => (
+                <div key={idx} className="p-2 rounded border border-border bg-black/30">
+                  <div>Turn {idx + 1} • Red: {turn.red_team?.action || "N/A"} • Blue: {turn.blue_team?.action || "N/A"}</div>
+                  <div className="text-muted-foreground">Outcome: {turn.blue_team?.blocked ? "Blocked" : "Missed"}</div>
+                </div>
+              ))}
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Run Summary */}
+      {runSummary && (
+        <div className="border-t border-border bg-card/60 px-6 py-4" data-testid="run-summary">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">Run Summary</h3>
+              <p className="text-xs text-muted-foreground">Executive summary of the completed battle.</p>
+            </div>
+            <Badge variant="outline">Completed</Badge>
+          </div>
+          <div className="grid grid-cols-5 gap-4 mt-4 text-sm">
+            <Card className="border-border">
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Scenario</div>
+                <div className="font-semibold">{runSummary.battle}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Turns</div>
+                <div className="font-mono text-lg">{runSummary.turns}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Success Rate</div>
+                <div className="font-mono text-lg">{runSummary.successRate}%</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Money Saved</div>
+                <div className="font-mono text-lg">${runSummary.moneySaved.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Time-to-Immunity</div>
+                <div className="font-mono text-lg">{runSummary.timeToImmunity}m</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {/* Status Bar */}
       <div className="h-10 flex items-center justify-between px-6 border-t border-border bg-card text-sm">

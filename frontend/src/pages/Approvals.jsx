@@ -6,6 +6,7 @@ import { ScrollArea } from "../components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import { approvalAPI, ruleAPI, rsbAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
@@ -25,6 +26,10 @@ const Approvals = () => {
   const [approvals, setApprovals] = useState([]);
   const [selectedApproval, setSelectedApproval] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideImpact, setOverrideImpact] = useState("high");
+  const [overrideAck, setOverrideAck] = useState(false);
   const [rules, setRules] = useState([]);
   const [packages, setPackages] = useState([]);
   
@@ -91,7 +96,19 @@ const Approvals = () => {
   };
 
   const handleEmergencyOverride = () => {
-    toast.warning("Emergency override requested. Justification required.");
+    setOverrideOpen(true);
+  };
+
+  const submitEmergencyOverride = () => {
+    if (overrideReason.trim().length < 20 || !overrideAck) {
+      toast.error("Provide a detailed justification and confirm accountability.");
+      return;
+    }
+    toast.warning("Emergency override submitted for immediate review.");
+    setOverrideOpen(false);
+    setOverrideReason("");
+    setOverrideImpact("high");
+    setOverrideAck(false);
   };
 
   const getStatusBadge = (status) => {
@@ -132,6 +149,34 @@ const Approvals = () => {
   };
 
   const pendingCount = approvals.filter(a => a.status === "pending").length;
+  const auditTrail = selectedApproval
+    ? [
+        {
+          id: "audit-1",
+          action: "Request created",
+          actor: selectedApproval.requestor_id,
+          timestamp: selectedApproval.created_at,
+        },
+        ...(selectedApproval.approvers || []).map((approver, idx) => ({
+          id: `audit-${idx + 2}`,
+          action: `Approval ${approver.action}`,
+          actor: approver.approver_id,
+          timestamp: approver.timestamp,
+        })),
+      ]
+    : [];
+
+  const approverIds = (selectedApproval?.approvers || []).map((approver) => approver.approver_id);
+  const sodWarnings = [];
+  if (selectedApproval?.requestor_id && approverIds.includes(selectedApproval.requestor_id)) {
+    sodWarnings.push("Requestor is also listed as an approver (SoD violation)");
+  }
+  if (["deploy", "merge"].includes(selectedApproval?.action) && approverIds.length < 2) {
+    sodWarnings.push("High-risk action requires at least two approvers");
+  }
+  if (selectedApproval?.resource_type === "rsb_package" && selectedApproval?.action === "merge") {
+    sodWarnings.push("RSB merges require compliance sign-off before release");
+  }
 
   return (
     <div className="h-full flex" data-testid="approvals">
@@ -359,6 +404,52 @@ const Approvals = () => {
                   </div>
                 )}
               </div>
+              <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
+                <DialogContent className="bg-card border-border" data-testid="override-modal">
+                  <DialogHeader>
+                    <DialogTitle>Emergency Override Justification</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Impact Level</label>
+                      <Select value={overrideImpact} onValueChange={setOverrideImpact}>
+                        <SelectTrigger data-testid="override-impact-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="critical">Critical</SelectItem>
+                          <SelectItem value="containment">Containment</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Justification (min 20 chars)</label>
+                      <Textarea
+                        value={overrideReason}
+                        onChange={(event) => setOverrideReason(event.target.value)}
+                        placeholder="Explain the risk, scope, and mitigation plan..."
+                        data-testid="override-reason-input"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={overrideAck}
+                        onChange={(event) => setOverrideAck(event.target.checked)}
+                        id="override-ack"
+                      />
+                      <label htmlFor="override-ack" className="text-muted-foreground">
+                        I acknowledge this action will be audited and may require post-incident review.
+                      </label>
+                    </div>
+                    <Button onClick={submitEmergencyOverride} data-testid="override-submit-btn">
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Submit Override
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Status */}
               <Card className="border-border">
@@ -384,60 +475,6 @@ const Approvals = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm text-muted-foreground">Resource Type</label>
-                    {/* Validator + Risk Assessment */}
-                    <div className="grid grid-cols-3 gap-4">
-                      <Card className="border-border">
-                        <CardHeader>
-                          <CardTitle>Validator Status</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-green-400" />
-                            <span className="text-sm">SAFE_TO_PROCEED</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            All required validators reported green.
-                          </p>
-                        </CardContent>
-                      </Card>
-                      <Card className="border-border">
-                        <CardHeader>
-                          <CardTitle>Risk Assessment</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          {(() => {
-                            const risk = getRiskAssessment(selectedApproval);
-                            return (
-                              <div className="space-y-2">
-                                <div className={`text-2xl font-mono ${risk.color}`}>{risk.score}</div>
-                                <Badge variant="outline" className="text-xs">{risk.label} risk</Badge>
-                                <p className="text-xs text-muted-foreground">Based on action scope and artifact type.</p>
-                              </div>
-                            );
-                          })()}
-                        </CardContent>
-                      </Card>
-                      <Card className="border-border">
-                        <CardHeader>
-                          <CardTitle>Approval Timeline</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-xs text-muted-foreground">
-                          <div className="flex items-center justify-between">
-                            <span>Requested</span>
-                            <span>{new Date(selectedApproval.created_at).toLocaleDateString()}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>Review</span>
-                            <span>{selectedApproval.status === "pending" ? "In progress" : "Completed"}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>Decision</span>
-                            <span className="capitalize">{selectedApproval.status}</span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
                       <p className="font-medium capitalize">{selectedApproval.resource_type.replace("_", " ")}</p>
                     </div>
                     <div>
@@ -461,6 +498,108 @@ const Approvals = () => {
                       </div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Validator + Risk Assessment */}
+              <div className="grid grid-cols-3 gap-4">
+                <Card className="border-border">
+                  <CardHeader>
+                    <CardTitle>Validator Status</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                      <span className="text-sm">SAFE_TO_PROCEED</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      All required validators reported green.
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="border-border">
+                  <CardHeader>
+                    <CardTitle>Risk Assessment</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const risk = getRiskAssessment(selectedApproval);
+                      return (
+                        <div className="space-y-2">
+                          <div className={`text-2xl font-mono ${risk.color}`}>{risk.score}</div>
+                          <Badge variant="outline" className="text-xs">{risk.label} risk</Badge>
+                          <p className="text-xs text-muted-foreground">Based on action scope and artifact type.</p>
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+                <Card className="border-border">
+                  <CardHeader>
+                    <CardTitle>Approval Timeline</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between">
+                      <span>Requested</span>
+                      <span>{new Date(selectedApproval.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Review</span>
+                      <span>{selectedApproval.status === "pending" ? "In progress" : "Completed"}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Decision</span>
+                      <span className="capitalize">{selectedApproval.status}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Multi-Approver Flow */}
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle>Multi-Approver Flow</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap items-center gap-4">
+                    {[
+                      { role: "Requester", name: selectedApproval.requestor_id, gate: "RBAC: Requestor • Rules & Strategy" },
+                      { role: "Tech Lead", name: selectedApproval.approvers?.[0]?.approver_id || "Pending", gate: "RBAC: TechLead • Review & Approve" },
+                      { role: "Tech Manager", name: selectedApproval.approvers?.[1]?.approver_id || "Pending", gate: "RBAC: TechManager • Release Approval" },
+                      { role: "Auditor", name: "Read-only", gate: "RBAC: Auditor • Audit & Compliance" },
+                    ].map((step, idx) => (
+                      <div key={`${step.role}-${idx}`} className="flex items-center gap-3">
+                        <div className="p-3 rounded-lg border border-border bg-black/30">
+                          <div className="text-xs text-muted-foreground">{step.role}</div>
+                          <div className="text-sm font-medium">{step.name}</div>
+                          <Badge variant="outline" className="mt-2 text-[10px]">
+                            {step.gate}
+                          </Badge>
+                        </div>
+                        {idx < 3 && <div className="text-muted-foreground">→</div>}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Compliance Checklist */}
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle>Compliance Checklist</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {[
+                    "SoD policy validated",
+                    "Test evidence attached",
+                    "Risk assessment logged",
+                    "Audit trail immutable",
+                  ].map((item) => (
+                    <div key={item} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
 
@@ -500,6 +639,26 @@ const Approvals = () => {
                 </CardContent>
               </Card>
 
+              {/* Audit Trail */}
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle>Audit Trail (Immutable)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {auditTrail.map((entry) => (
+                      <div key={entry.id} className="p-3 rounded-lg border border-border bg-black/30 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{entry.action}</span>
+                          <span className="text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div className="text-muted-foreground">Actor: {entry.actor}</div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* SoD Check */}
               <Card className="border-border border-blue-500/30 bg-blue-500/5">
                 <CardHeader>
@@ -509,6 +668,19 @@ const Approvals = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {sodWarnings.length > 0 && (
+                    <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-200" data-testid="sod-warnings">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <AlertTriangle className="h-4 w-4" />
+                        SoD warnings detected
+                      </div>
+                      <ul className="mt-2 list-disc pl-4 space-y-1">
+                        {sodWarnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-400" />

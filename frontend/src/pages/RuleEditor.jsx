@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Progress } from "../components/ui/progress";
+import Editor from "@monaco-editor/react";
 import { ruleAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
@@ -25,6 +26,14 @@ import {
   Settings,
   Zap,
   Shield,
+  Wand2,
+  MessageSquare,
+  GitBranch,
+  History,
+  ListChecks,
+  Gauge,
+  Search,
+  FileText,
 } from "lucide-react";
 
 const RuleEditor = () => {
@@ -33,6 +42,33 @@ const RuleEditor = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [testRunning, setTestRunning] = useState(false);
+  const [codeValue, setCodeValue] = useState("");
+  const [jsonValue, setJsonValue] = useState("{}");
+  const [jsonError, setJsonError] = useState("");
+  const [testStatusFilter, setTestStatusFilter] = useState("all");
+  const [testQuery, setTestQuery] = useState("");
+  const [edgeCases, setEdgeCases] = useState([]);
+  const [comments, setComments] = useState([
+    {
+      id: "thread-1",
+      author: "techlead@fraudforge",
+      role: "TechLead",
+      message: "Confirm threshold aligns with policy for high-risk accounts.",
+      timestamp: new Date().toISOString(),
+      replies: [
+        {
+          id: "reply-1",
+          author: "devtest@fraudforge",
+          role: "Dev/Test",
+          message: "Updated threshold to match compliance guidance.",
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    },
+  ]);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [replyDrafts, setReplyDrafts] = useState({});
+  const [historyEntries, setHistoryEntries] = useState([]);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -49,6 +85,25 @@ const RuleEditor = () => {
   useEffect(() => {
     loadRules();
   }, []);
+
+  useEffect(() => {
+    if (!selectedRule) return;
+    const defaultCode = `def evaluate_${selectedRule.name?.toLowerCase()?.replace(/\W+/g, "_") || "rule"}(transaction):\n    # TODO: Implement rule logic\n    return {"decision": "allow", "reason": "default"}`;
+    setCodeValue(selectedRule.code || defaultCode);
+    setJsonValue(JSON.stringify(selectedRule, null, 2));
+    setJsonError("");
+    setHistoryEntries(
+      selectedRule.version_history || [
+        {
+          id: "v1",
+          version: selectedRule.version || 1,
+          author: "purple-team",
+          summary: "Initial draft",
+          timestamp: selectedRule.created_at || new Date().toISOString(),
+        },
+      ]
+    );
+  }, [selectedRule]);
 
   const loadRules = async () => {
     try {
@@ -74,39 +129,56 @@ const RuleEditor = () => {
       toast.error("Please enter a rule name");
       return;
     }
+    const tempId = `temp-${Date.now()}`;
+    const optimisticRule = {
+      ...formData,
+      id: tempId,
+      status: "draft",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setRules((prev) => [optimisticRule, ...prev]);
+    setSelectedRule(optimisticRule);
     try {
       const response = await ruleAPI.create(formData);
-      setRules([...rules, response.data]);
+      setRules((prev) => prev.map((rule) => (rule.id === tempId ? response.data : rule)));
       setSelectedRule(response.data);
       setShowCreateModal(false);
       resetForm();
       toast.success("Rule created!");
     } catch (error) {
+      setRules((prev) => prev.filter((rule) => rule.id !== tempId));
       toast.error("Failed to create rule");
     }
   };
 
   const handleUpdateRule = async () => {
     if (!selectedRule) return;
+    const previousRules = rules;
+    setRules((prev) => prev.map((rule) => (rule.id === selectedRule.id ? { ...rule, ...formData } : rule)));
+    setSelectedRule((prev) => ({ ...prev, ...formData }));
     try {
       await ruleAPI.update(selectedRule.id, formData);
       loadRules();
       setIsEditing(false);
       toast.success("Rule updated!");
     } catch (error) {
+      setRules(previousRules);
       toast.error("Failed to update rule");
     }
   };
 
   const handleDeleteRule = async (ruleId) => {
+    const previousRules = rules;
     try {
-      await ruleAPI.delete(ruleId);
-      setRules(rules.filter(r => r.id !== ruleId));
+      setRules((prev) => prev.filter((rule) => rule.id !== ruleId));
       if (selectedRule?.id === ruleId) {
-        setSelectedRule(rules[0] || null);
+        setSelectedRule(null);
       }
+      await ruleAPI.delete(ruleId);
       toast.success("Rule deleted");
     } catch (error) {
+      setRules(previousRules);
       toast.error("Failed to delete rule");
     }
   };
@@ -186,6 +258,153 @@ const RuleEditor = () => {
       </Badge>
     );
   };
+
+  const buildRulePreview = () => {
+    const conditions = (formData.conditions || [])
+      .map((cond) => `${cond.field} ${cond.operator} ${cond.value}`)
+      .join(" AND ");
+    const actions = (formData.actions || [])
+      .map((action) => `${action.type.toUpperCase()} (${action.severity})`)
+      .join(", ");
+    if (!conditions && !actions) {
+      return "Rule preview will appear here once conditions/actions are defined.";
+    }
+    return `IF ${conditions || "<no conditions>"} THEN ${actions || "<no actions>"}`;
+  };
+
+  const handleApplyJson = () => {
+    try {
+      const parsed = JSON.parse(jsonValue);
+      setFormData(parsed);
+      setJsonError("");
+      toast.success("JSON applied to form");
+    } catch (error) {
+      setJsonError("Invalid JSON. Fix errors before applying.");
+    }
+  };
+
+  const generateEdgeCases = () => {
+    const generated = (formData.conditions || []).slice(0, 3).map((cond, idx) => ({
+      id: `edge-${idx + 1}`,
+      title: `${cond.field || "signal"} boundary case`,
+      description: `Exercise ${cond.field || "signal"} with ${cond.operator} ${cond.value} at boundary limits.`,
+      severity: idx === 0 ? "high" : "medium",
+    }));
+    setEdgeCases(generated.length > 0 ? generated : [
+      {
+        id: "edge-default",
+        title: "Missing baseline history",
+        description: "Validate rule behavior when baseline data is absent.",
+        severity: "medium",
+      },
+    ]);
+    toast.success("Edge cases generated");
+  };
+
+  const runProfiler = () => {
+    toast.success("Profiler run complete. Performance estimates updated.");
+  };
+
+  const exportComplianceReport = () => {
+    const report = {
+      rule: formData.name,
+      score: complianceScore,
+      checks: complianceChecks,
+      generated_at: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `compliance-report-${formData.name || "rule"}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Compliance report exported");
+  };
+
+  const handleAddComment = () => {
+    if (!commentDraft.trim()) return;
+    setComments([
+      {
+        id: `thread-${Date.now()}`,
+        author: "auditor@fraudforge",
+        role: "Auditor",
+        message: commentDraft,
+        timestamp: new Date().toISOString(),
+        replies: [],
+      },
+      ...comments,
+    ]);
+    setCommentDraft("");
+  };
+
+  const handleAddReply = (threadId) => {
+    const reply = replyDrafts[threadId];
+    if (!reply?.trim()) return;
+    setComments(
+      comments.map((thread) =>
+        thread.id === threadId
+          ? {
+              ...thread,
+              replies: [
+                ...thread.replies,
+                {
+                  id: `reply-${Date.now()}`,
+                  author: "techlead@fraudforge",
+                  role: "TechLead",
+                  message: reply,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            }
+          : thread
+      )
+    );
+    setReplyDrafts({ ...replyDrafts, [threadId]: "" });
+  };
+
+  const testResults =
+    selectedRule?.test_results?.results ||
+    selectedRule?.test_results?.cases ||
+    selectedRule?.test_results?.details ||
+    [];
+  const filteredTests = testResults.filter((result) => {
+    const status = (result.status || result.result || (result.passed ? "passed" : "failed") || "unknown").toLowerCase();
+    if (testStatusFilter !== "all" && status !== testStatusFilter) return false;
+    if (!testQuery) return true;
+    const target = `${result.name || ""} ${result.id || ""} ${result.message || ""}`.toLowerCase();
+    return target.includes(testQuery.toLowerCase());
+  });
+
+  const complianceChecks = [
+    {
+      id: "comp-desc",
+      title: "Description provided",
+      passed: Boolean(formData.description?.trim()),
+    },
+    {
+      id: "comp-conditions",
+      title: "At least one condition",
+      passed: (formData.conditions || []).length > 0,
+    },
+    {
+      id: "comp-actions",
+      title: "At least one action",
+      passed: (formData.actions || []).length > 0,
+    },
+    {
+      id: "comp-priority",
+      title: "Priority within policy range",
+      passed: formData.priority >= 0 && formData.priority <= 10,
+    },
+  ];
+  const complianceScore = Math.round(
+    (complianceChecks.filter((check) => check.passed).length / complianceChecks.length) * 100
+  );
+  const estimatedLatency = 12 + (formData.conditions?.length || 0) * 3;
+  const estimatedCost = 22 + (formData.actions?.length || 0) * 6;
 
   return (
     <div className="h-full flex" data-testid="rule-editor">
@@ -352,11 +571,23 @@ const RuleEditor = () => {
                 </TabsTrigger>
                 <TabsTrigger value="code">
                   <Code className="h-4 w-4 mr-2" />
-                  JSON View
+                  Code Studio
                 </TabsTrigger>
                 <TabsTrigger value="tests">
                   <Zap className="h-4 w-4 mr-2" />
                   Test Results
+                </TabsTrigger>
+                <TabsTrigger value="quality">
+                  <ListChecks className="h-4 w-4 mr-2" />
+                  Quality
+                </TabsTrigger>
+                <TabsTrigger value="collab">
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Comments
+                </TabsTrigger>
+                <TabsTrigger value="history">
+                  <History className="h-4 w-4 mr-2" />
+                  Version History
                 </TabsTrigger>
               </TabsList>
 
@@ -544,23 +775,71 @@ const RuleEditor = () => {
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="code" className="p-4 m-0">
+                <TabsContent value="code" className="p-4 m-0 space-y-6">
                   <Card className="border-border">
                     <CardHeader>
-                      <CardTitle>JSON Definition</CardTitle>
+                      <CardTitle>Monaco Editor (Python/JSON)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <Tabs defaultValue="python" className="w-full">
+                        <TabsList className="w-fit">
+                          <TabsTrigger value="python" data-testid="code-tab-python">Python</TabsTrigger>
+                          <TabsTrigger value="json" data-testid="code-tab-json">JSON</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="python" className="mt-4">
+                          <Editor
+                            height="360px"
+                            theme="vs-dark"
+                            language="python"
+                            value={codeValue}
+                            onChange={(value) => setCodeValue(value || "")}
+                            options={{ minimap: { enabled: false } }}
+                          />
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Python rule logic used in execution sandbox.
+                          </p>
+                        </TabsContent>
+                        <TabsContent value="json" className="mt-4">
+                          <Editor
+                            height="360px"
+                            theme="vs-dark"
+                            language="json"
+                            value={jsonValue}
+                            onChange={(value) => setJsonValue(value || "")}
+                            options={{ minimap: { enabled: false } }}
+                          />
+                          {jsonError && (
+                            <p className="text-xs text-red-400 mt-2" data-testid="json-error">
+                              {jsonError}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-3">
+                            <Button variant="outline" onClick={handleApplyJson} data-testid="apply-json-btn">
+                              <Save className="h-4 w-4 mr-2" />
+                              Apply JSON to Form
+                            </Button>
+                          </div>
+                        </TabsContent>
+                      </Tabs>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border">
+                    <CardHeader>
+                      <CardTitle>Live Rule Preview</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <pre className="p-4 bg-black/30 rounded-lg font-mono text-sm overflow-auto max-h-[60vh]">
-                        {JSON.stringify(formData, null, 2)}
-                      </pre>
+                      <div className="p-4 bg-black/30 rounded-lg font-mono text-sm">
+                        {buildRulePreview()}
+                      </div>
                     </CardContent>
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="tests" className="p-4 m-0">
+                <TabsContent value="tests" className="p-4 m-0 space-y-6">
                   <Card className="border-border">
                     <CardHeader>
-                      <CardTitle>Test Results</CardTitle>
+                      <CardTitle>Test Runner & Results</CardTitle>
                     </CardHeader>
                     <CardContent>
                       {selectedRule.test_results ? (
@@ -585,27 +864,292 @@ const RuleEditor = () => {
                               <p className="text-sm text-muted-foreground">Coverage</p>
                             </div>
                           </div>
-                          <div>
-                            <label className="text-sm text-muted-foreground">Execution Time</label>
-                            <p className="font-mono">{selectedRule.test_results.execution_time}s</p>
-                          </div>
-                          <div>
-                            <label className="text-sm text-muted-foreground">Last Run</label>
-                            <p className="font-mono text-sm">
-                              {new Date(selectedRule.test_results.timestamp).toLocaleString()}
-                            </p>
+                          <div className="flex flex-wrap gap-3">
+                            <div>
+                              <label className="text-sm text-muted-foreground">Execution Time</label>
+                              <p className="font-mono">{selectedRule.test_results.execution_time}s</p>
+                            </div>
+                            <div>
+                              <label className="text-sm text-muted-foreground">Last Run</label>
+                              <p className="font-mono text-sm">
+                                {new Date(selectedRule.test_results.timestamp).toLocaleString()}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       ) : (
                         <div className="text-center text-muted-foreground py-8">
                           <Zap className="h-8 w-8 mx-auto mb-2 opacity-50" />
                           <p>No test results yet</p>
-                          <Button variant="outline" className="mt-4" onClick={handleRunTest}>
-                            <Play className="h-4 w-4 mr-2" />
-                            Run Tests
-                          </Button>
                         </div>
                       )}
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={handleRunTest} data-testid="run-tests-panel-btn">
+                          <Play className="h-4 w-4 mr-2" />
+                          Run Tests
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border">
+                    <CardHeader>
+                      <CardTitle>Results Detail</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-3 mb-4">
+                        <Select value={testStatusFilter} onValueChange={setTestStatusFilter}>
+                          <SelectTrigger className="w-40" data-testid="test-status-filter">
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All</SelectItem>
+                            <SelectItem value="passed">Passed</SelectItem>
+                            <SelectItem value="failed">Failed</SelectItem>
+                            <SelectItem value="skipped">Skipped</SelectItem>
+                            <SelectItem value="warning">Warning</SelectItem>
+                            <SelectItem value="unknown">Unknown</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <div className="relative flex-1 min-w-[220px]">
+                          <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                          <Input
+                            value={testQuery}
+                            onChange={(event) => setTestQuery(event.target.value)}
+                            placeholder="Search tests"
+                            className="pl-9"
+                            data-testid="test-search-input"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {filteredTests.length > 0 ? (
+                          filteredTests.map((result, idx) => (
+                            <div key={idx} className="p-3 bg-zinc-800/50 rounded-lg border border-border">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-sm">
+                                  {result.name || result.id || `Test ${idx + 1}`}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${
+                                    (result.status || result.result || (result.passed ? "passed" : "failed")) === "passed"
+                                      ? "border-green-500/30 text-green-400"
+                                      : "border-red-500/30 text-red-400"
+                                  }`}
+                                >
+                                  {result.status || result.result || (result.passed ? "passed" : "failed")}
+                                </Badge>
+                              </div>
+                              {result.message && (
+                                <p className="text-xs text-muted-foreground mt-2">{result.message}</p>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="col-span-2 text-center text-muted-foreground py-6">
+                            No test results match the current filters.
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="quality" className="p-4 m-0 space-y-6">
+                  <Card className="border-border">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Wand2 className="h-5 w-5 text-purple-400" />
+                        Edge-Case Generator
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Button variant="outline" onClick={generateEdgeCases} data-testid="generate-edge-cases-btn">
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Generate Edge Cases
+                      </Button>
+                      <div className="mt-4 space-y-3">
+                        {edgeCases.map((edge) => (
+                          <div key={edge.id} className="p-3 bg-zinc-800/50 rounded-lg border border-border">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-sm">{edge.title}</span>
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {edge.severity}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-2">{edge.description}</p>
+                          </div>
+                        ))}
+                        {edgeCases.length === 0 && (
+                          <p className="text-sm text-muted-foreground">Generate edge cases to see suggested tests.</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Gauge className="h-5 w-5 text-blue-400" />
+                        Performance Profiler
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <Button variant="outline" onClick={runProfiler} data-testid="run-profiler-btn">
+                        <Gauge className="h-4 w-4 mr-2" />
+                        Run Profiler
+                      </Button>
+                      <div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Estimated Latency</span>
+                          <span className="font-mono">{estimatedLatency}ms</span>
+                        </div>
+                        <Progress value={Math.min(100, estimatedLatency)} className="mt-2" />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Compute Cost</span>
+                          <span className="font-mono">{estimatedCost} RU</span>
+                        </div>
+                        <Progress value={Math.min(100, estimatedCost)} className="mt-2" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <ListChecks className="h-5 w-5 text-green-400" />
+                        Compliance Checker
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-sm text-muted-foreground">Compliance Score</span>
+                        <span className="font-mono text-lg">{complianceScore}%</span>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={exportComplianceReport} data-testid="export-compliance-btn">
+                        <FileText className="h-4 w-4 mr-2" />
+                        Export Report
+                      </Button>
+                      <div className="space-y-3 mt-4">
+                        {complianceChecks.map((check) => (
+                          <div key={check.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded">
+                            <span className="text-sm">{check.title}</span>
+                            <Badge
+                              variant="outline"
+                              className={check.passed ? "border-green-500/30 text-green-400" : "border-red-500/30 text-red-400"}
+                            >
+                              {check.passed ? "Pass" : "Fail"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="collab" className="p-4 m-0 space-y-6">
+                  <Card className="border-border">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <MessageSquare className="h-5 w-5 text-yellow-400" />
+                        Collaboration Comments
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Textarea
+                          value={commentDraft}
+                          onChange={(event) => setCommentDraft(event.target.value)}
+                          placeholder="Add a comment for reviewers..."
+                          data-testid="comment-input"
+                        />
+                        <Button onClick={handleAddComment} data-testid="add-comment-btn">
+                          <MessageSquare className="h-4 w-4 mr-2" />
+                          Add Comment
+                        </Button>
+                      </div>
+                      <div className="space-y-4">
+                        {comments.map((thread) => (
+                          <div key={thread.id} className="p-3 bg-zinc-900/50 border border-border rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium">{thread.author}</p>
+                                <p className="text-xs text-muted-foreground">{thread.role}</p>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(thread.timestamp).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-sm mt-2">{thread.message}</p>
+                            <div className="mt-3 space-y-2">
+                              {thread.replies.map((reply) => (
+                                <div key={reply.id} className="ml-4 p-2 bg-black/30 rounded">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="text-xs font-medium">{reply.author}</p>
+                                      <p className="text-[11px] text-muted-foreground">{reply.role}</p>
+                                    </div>
+                                    <span className="text-[11px] text-muted-foreground">
+                                      {new Date(reply.timestamp).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs mt-1">{reply.message}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                              <Input
+                                value={replyDrafts[thread.id] || ""}
+                                onChange={(event) =>
+                                  setReplyDrafts({ ...replyDrafts, [thread.id]: event.target.value })
+                                }
+                                placeholder="Reply..."
+                                data-testid={`reply-input-${thread.id}`}
+                              />
+                              <Button variant="outline" onClick={() => handleAddReply(thread.id)} data-testid={`reply-btn-${thread.id}`}>
+                                Reply
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="history" className="p-4 m-0 space-y-6">
+                  <Card className="border-border">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <GitBranch className="h-5 w-5 text-blue-400" />
+                        Version History
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {historyEntries.map((entry) => (
+                          <div key={entry.id} className="p-3 bg-zinc-800/50 border border-border rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium">v{entry.version}</p>
+                                <p className="text-xs text-muted-foreground">{entry.summary}</p>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(entry.timestamp).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between mt-2">
+                              <span className="text-xs font-mono">{entry.author}</span>
+                              <Button variant="outline" size="sm" data-testid={`history-view-${entry.id}`}>
+                                View Diff
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </CardContent>
                   </Card>
                 </TabsContent>

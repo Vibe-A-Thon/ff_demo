@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import ForceGraph2D from "react-force-graph-2d";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { Skeleton } from "../components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Progress } from "../components/ui/progress";
@@ -24,12 +26,21 @@ import {
   Clock,
   FileText,
   GitMerge,
+  GripVertical,
 } from "lucide-react";
 
 const RSBManager = () => {
   const [packages, setPackages] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [viewMode, setViewMode] = useState("grid");
+  const [stagedQueue, setStagedQueue] = useState([]);
+  const [validationStatus, setValidationStatus] = useState("idle");
+  const [validationProgress, setValidationProgress] = useState(0);
+  const [conflictDecisions, setConflictDecisions] = useState({});
+  const [graphLoading, setGraphLoading] = useState(true);
+  const [comparison, setComparison] = useState(null);
+  const [deploying, setDeploying] = useState(false);
   const [importData, setImportData] = useState({
     name: "",
     version: "",
@@ -39,10 +50,34 @@ const RSBManager = () => {
     compliance_badges: [],
   });
   const [testRunning, setTestRunning] = useState(null);
+  const ruleGraphRef = useRef(null);
+  const ruleGraphWrapperRef = useRef(null);
+  const [ruleGraphSize, setRuleGraphSize] = useState({ width: 640, height: 220 });
 
   useEffect(() => {
     loadPackages();
   }, []);
+
+  useEffect(() => {
+    const updateGraphSize = () => {
+      if (!ruleGraphWrapperRef.current) return;
+      setRuleGraphSize({
+        width: ruleGraphWrapperRef.current.offsetWidth,
+        height: 220,
+      });
+    };
+
+    updateGraphSize();
+    window.addEventListener("resize", updateGraphSize);
+    return () => window.removeEventListener("resize", updateGraphSize);
+  }, [selectedPackage]);
+
+  useEffect(() => {
+    if (!selectedPackage) return;
+    setGraphLoading(true);
+    const timer = setTimeout(() => setGraphLoading(false), 420);
+    return () => clearTimeout(timer);
+  }, [selectedPackage]);
 
   const loadPackages = async () => {
     try {
@@ -58,18 +93,28 @@ const RSBManager = () => {
       toast.error("Please fill in required fields");
       return;
     }
+    const tempId = `temp-${Date.now()}`;
+    const optimisticPackage = {
+      ...importData,
+      id: tempId,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    };
+    setPackages((prev) => [optimisticPackage, ...prev]);
     try {
       const manifest = {
         rules: importData.rules?.length || 0,
         patterns: 5,
         compliance: importData.compliance_badges || [],
       };
-      await rsbAPI.create({ ...importData, manifest });
+      const response = await rsbAPI.create({ ...importData, manifest });
+      setPackages((prev) => prev.map((pkg) => (pkg.id === tempId ? response.data : pkg)));
       toast.success("RSB Package imported successfully!");
       setShowImportModal(false);
       setImportData({ name: "", version: "", description: "", manifest: {}, rules: [], compliance_badges: [] });
       loadPackages();
     } catch (error) {
+      setPackages((prev) => prev.filter((pkg) => pkg.id !== tempId));
       toast.error("Failed to import package");
     }
   };
@@ -94,27 +139,137 @@ const RSBManager = () => {
   };
 
   const handleMerge = async (packageId) => {
+    const previousPackages = packages;
+    setPackages((prev) => prev.map((pkg) => (pkg.id === packageId ? { ...pkg, status: "merging" } : pkg)));
     try {
       await rsbAPI.merge(packageId);
       loadPackages();
       toast.success("Package merged successfully!");
     } catch (error) {
+      setPackages(previousPackages);
       toast.error("Merge failed");
     }
   };
 
   const handleDelete = async (packageId) => {
+    const previousPackages = packages;
+    setPackages((prev) => prev.filter((pkg) => pkg.id !== packageId));
     try {
       await rsbAPI.delete(packageId);
-      loadPackages();
       if (selectedPackage?.id === packageId) {
         setSelectedPackage(null);
       }
       toast.success("Package deleted");
     } catch (error) {
+      setPackages(previousPackages);
       toast.error("Delete failed");
     }
   };
+
+  const handlePackageDragStart = (pkg) => (event) => {
+    event.dataTransfer.setData("application/json", JSON.stringify(pkg));
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleStageDrop = (event) => {
+    event.preventDefault();
+    const raw = event.dataTransfer.getData("application/json");
+    if (!raw) return;
+    const pkg = JSON.parse(raw);
+    setStagedQueue((prev) => {
+      if (prev.find((item) => item.id === pkg.id)) return prev;
+      return [...prev, pkg];
+    });
+    toast.success(`Staged ${pkg.name}`);
+  };
+
+  const handleStageDragOver = (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const removeStaged = (pkgId) => {
+    setStagedQueue((prev) => prev.filter((item) => item.id !== pkgId));
+  };
+
+  const handleConflictDecision = (conflictId, decision) => {
+    setConflictDecisions((prev) => ({ ...prev, [conflictId]: decision }));
+  };
+
+  const triggerValidation = () => {
+    setValidationStatus("running");
+    setValidationProgress(10);
+    let progress = 10;
+    const timer = setInterval(() => {
+      progress += 18;
+      setValidationProgress(Math.min(progress, 100));
+      if (progress >= 100) {
+        clearInterval(timer);
+        setValidationStatus("passed");
+        toast.success("Validation passed: package ready for merge");
+      }
+    }, 350);
+  };
+
+  const deployStagedQueue = () => {
+    if (stagedQueue.length === 0) {
+      toast.error("No packages staged for deployment");
+      return;
+    }
+    setDeploying(true);
+    setTimeout(() => {
+      toast.success(`Deployment queued for ${stagedQueue.length} packages`);
+      setStagedQueue([]);
+      setDeploying(false);
+    }, 600);
+  };
+
+  const handleCompareVersion = (version) => {
+    if (!selectedPackage) return;
+    setComparison({
+      base: selectedPackage.version,
+      target: version,
+      changes: {
+        rules: Math.max(1, (selectedPackage.manifest?.rules || 3) - 1),
+        tests: Math.max(1, (selectedPackage.manifest?.tests || 4) + 1),
+        compliance: selectedPackage.compliance_badges?.length || 0,
+      },
+    });
+  };
+
+  const conflictItems = [
+    { id: "conf-1", label: "Rule action mismatch", suggestion: "Require approval" },
+    { id: "conf-2", label: "Version jump detected", suggestion: "Manual review" },
+  ];
+
+  const versionTimeline = selectedPackage
+    ? [
+        { version: "1.8.0", status: "merged" },
+        { version: "2.0.0", status: "tested" },
+        { version: selectedPackage.version, status: selectedPackage.status || "pending" },
+      ]
+    : [];
+
+  const buildRuleNetwork = () => {
+    const rules = selectedPackage?.rules?.length
+      ? selectedPackage.rules
+      : selectedPackage
+      ? ["R-ACCOUNT_TAKEOVER"]
+      : [];
+    const nodes = rules.map((ruleId, idx) => ({
+      id: ruleId,
+      name: ruleId,
+      group: idx === 0 ? "root" : "rule",
+      val: idx === 0 ? 10 : 6,
+    }));
+    const links = rules.slice(1).map((ruleId, idx) => ({
+      source: rules[idx],
+      target: ruleId,
+    }));
+    return { nodes, links };
+  };
+
+  const ruleNetwork = useMemo(() => buildRuleNetwork(), [selectedPackage]);
 
   const defaultManifestTree = [
     { name: "manifest.json" },
@@ -223,6 +378,16 @@ const RSBManager = () => {
     );
   };
 
+  const codePreview = selectedPackage?.code
+    ? selectedPackage.code
+    : `def detect_rule(txs):
+    """Auto-generated rule stub."""
+    signals = []
+    for tx in txs:
+        if tx.get("tx_count", 0) > 5:
+            signals.append({"id": tx.get("transaction_id"), "reason": "velocity"})
+    return signals`;
+
   return (
     <div className="h-full flex" data-testid="rsb-manager">
       {/* Package List */}
@@ -230,90 +395,110 @@ const RSBManager = () => {
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">RSB Packages</h2>
-            <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
-              <DialogTrigger asChild>
-                <Button
-                  size="sm"
-                  data-testid="import-rsb-btn"
-                  data-explain="Import RSB package"
-                  data-explain-title="RSB package intake"
-                  data-explain-summary="Validates manifest metadata, compliance badges, and rule inventory before staging."
-                  data-explain-rules="RSB-ING-02,COM-006"
-                  data-explain-evidence="Manifest schema,Compliance badges,Rule count"
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Import
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="bg-card border-border" data-testid="import-modal">
-                <DialogHeader>
-                  <DialogTitle>Import RSB Package</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-muted-foreground">Package Name *</label>
-                    <Input
-                      value={importData.name}
-                      onChange={(e) => setImportData({ ...importData, name: e.target.value })}
-                      placeholder="e.g., Fraud Detection Core"
-                      data-testid="import-name-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground">Version *</label>
-                    <Input
-                      value={importData.version}
-                      onChange={(e) => setImportData({ ...importData, version: e.target.value })}
-                      placeholder="e.g., 2.1.0"
-                      data-testid="import-version-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground">Description</label>
-                    <Input
-                      value={importData.description}
-                      onChange={(e) => setImportData({ ...importData, description: e.target.value })}
-                      placeholder="Package description..."
-                      data-testid="import-description-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground">Compliance Badges (comma-separated)</label>
-                    <Input
-                      value={importData.compliance_badges?.join(", ") || ""}
-                      onChange={(e) => setImportData({ 
-                        ...importData, 
-                        compliance_badges: e.target.value.split(",").map(s => s.trim()).filter(Boolean) 
-                      })}
-                      placeholder="PCI-DSS, SOX, GDPR"
-                      data-testid="import-compliance-input"
-                    />
-                  </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={viewMode === "grid" ? "default" : "outline"}
+                onClick={() => setViewMode("grid")}
+                data-testid="rsb-view-grid"
+              >
+                Grid
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === "list" ? "default" : "outline"}
+                onClick={() => setViewMode("list")}
+                data-testid="rsb-view-list"
+              >
+                List
+              </Button>
+              <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+                <DialogTrigger asChild>
                   <Button
-                    onClick={handleImport}
-                    className="w-full"
-                    data-testid="confirm-import-btn"
-                    data-explain="Confirm import"
-                    data-explain-title="Import validation"
-                    data-explain-summary="Creates a staged package and records compliance checks for audit."
-                    data-explain-rules="RSB-ING-05,COM-010"
-                    data-explain-evidence="Package metadata,Checksum,Policy badges"
+                    size="sm"
+                    data-testid="import-rsb-btn"
+                    data-explain="Import RSB package"
+                    data-explain-title="RSB package intake"
+                    data-explain-summary="Validates manifest metadata, compliance badges, and rule inventory before staging."
+                    data-explain-rules="RSB-ING-02,COM-006"
+                    data-explain-evidence="Manifest schema,Compliance badges,Rule count"
                   >
-                    <Package className="h-4 w-4 mr-2" />
-                    Import Package
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent className="bg-card border-border" data-testid="import-modal">
+                  <DialogHeader>
+                    <DialogTitle>Import RSB Package</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Package Name *</label>
+                      <Input
+                        value={importData.name}
+                        onChange={(e) => setImportData({ ...importData, name: e.target.value })}
+                        placeholder="e.g., Fraud Detection Core"
+                        data-testid="import-name-input"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Version *</label>
+                      <Input
+                        value={importData.version}
+                        onChange={(e) => setImportData({ ...importData, version: e.target.value })}
+                        placeholder="e.g., 2.1.0"
+                        data-testid="import-version-input"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Description</label>
+                      <Input
+                        value={importData.description}
+                        onChange={(e) => setImportData({ ...importData, description: e.target.value })}
+                        placeholder="Package description..."
+                        data-testid="import-description-input"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Compliance Badges (comma-separated)</label>
+                      <Input
+                        value={importData.compliance_badges?.join(", ") || ""}
+                        onChange={(e) => setImportData({
+                          ...importData,
+                          compliance_badges: e.target.value.split(",").map(s => s.trim()).filter(Boolean)
+                        })}
+                        placeholder="PCI-DSS, SOX, GDPR"
+                        data-testid="import-compliance-input"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleImport}
+                      className="w-full"
+                      data-testid="confirm-import-btn"
+                      data-explain="Confirm import"
+                      data-explain-title="Import validation"
+                      data-explain-summary="Creates a staged package and records compliance checks for audit."
+                      data-explain-rules="RSB-ING-05,COM-010"
+                      data-explain-evidence="Package metadata,Checksum,Policy badges"
+                    >
+                      <Package className="h-4 w-4 mr-2" />
+                      Import Package
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </div>
 
         <ScrollArea className="flex-1">
-          <div className="p-2 space-y-2">
+          <div className={viewMode === "grid" ? "p-2 grid grid-cols-2 gap-2" : "p-2 space-y-2"}>
             {packages.map((pkg) => (
               <div
                 key={pkg.id}
                 onClick={() => setSelectedPackage(pkg)}
+                draggable
+                onDragStart={handlePackageDragStart(pkg)}
                 className={`p-4 rounded-lg border cursor-pointer transition-colors ${
                   selectedPackage?.id === pkg.id
                     ? "border-blue-500 bg-blue-500/10"
@@ -326,7 +511,16 @@ const RSBManager = () => {
                     <h3 className="font-medium">{pkg.name}</h3>
                     <p className="text-sm text-muted-foreground font-mono">v{pkg.version}</p>
                   </div>
-                  {getStatusBadge(pkg.status)}
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(pkg.status)}
+                    <div
+                      className="rounded-md border border-border bg-black/30 p-1"
+                      data-testid={`package-drag-handle-${pkg.id}`}
+                      title="Drag to stage"
+                    >
+                      <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </div>
                 </div>
                 {pkg.compliance_badges?.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
@@ -357,7 +551,7 @@ const RSBManager = () => {
           <div className="h-full flex flex-col">
             {/* Header */}
             <div className="p-6 border-b border-border">
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-6">
                 <div>
                   <h1 className="text-2xl font-bold">{selectedPackage.name}</h1>
                   <p className="text-muted-foreground mt-1">{selectedPackage.description || "No description"}</p>
@@ -366,48 +560,202 @@ const RSBManager = () => {
                     {getStatusBadge(selectedPackage.status)}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     onClick={() => handleRunTests(selectedPackage.id)}
                     disabled={testRunning === selectedPackage.id}
-                    data-testid="run-tests-btn"
-                    data-explain="Run RSB tests"
-                    data-explain-title="Package test execution"
-                    data-explain-summary="Runs unit, integration, and compliance checks to validate package readiness."
-                    data-explain-rules="RSB-TEST-01,COM-014"
-                    data-explain-evidence="Test results,Compliance status,Coverage"
+                    data-testid="rsb-run-tests"
                   >
-                    <Play className={`h-4 w-4 mr-2 ${testRunning === selectedPackage.id ? 'animate-spin' : ''}`} />
-                    Run Tests
+                    <Play className="h-4 w-4 mr-2" />
+                    {testRunning === selectedPackage.id ? "Running" : "Run Tests"}
                   </Button>
                   <Button
                     onClick={() => handleMerge(selectedPackage.id)}
-                    disabled={selectedPackage.status !== "tested"}
-                    data-testid="merge-btn"
-                    data-explain="Merge package"
-                    data-explain-title="Merge authorization"
-                    data-explain-summary="Moves validated packages into the active ruleset after tests pass."
-                    data-explain-rules="RSB-MERGE-02,COM-020"
-                    data-explain-evidence="Passed tests,Change approvals,Audit log"
+                    data-testid="rsb-merge"
                   >
                     <Merge className="h-4 w-4 mr-2" />
                     Merge
                   </Button>
                   <Button
-                    variant="destructive"
+                    variant="outline"
                     onClick={() => handleDelete(selectedPackage.id)}
-                    data-testid="delete-package-btn"
-                    data-explain="Delete package"
-                    data-explain-title="Deletion controls"
-                    data-explain-summary="Removes a package and logs the action for compliance review."
-                    data-explain-rules="RSB-DEL-01,COM-009"
-                    data-explain-evidence="Requester role,Deletion intent,Audit record"
+                    data-testid="rsb-delete"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
+
+              <div className="grid grid-cols-4 gap-4 mt-6">
+                <Card className="border-border">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Validation Status</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {validationStatus}
+                    </Badge>
+                    <Progress value={validationProgress} className="h-2" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={triggerValidation}
+                      data-testid="validation-run-btn"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Run Validation
+                    </Button>
+                  </CardContent>
+                </Card>
+                <Card className="border-border">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Deployment Staging</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      onDrop={handleStageDrop}
+                      onDragOver={handleStageDragOver}
+                      className="border border-dashed border-border rounded-lg p-3 text-xs text-muted-foreground"
+                      data-testid="staging-dropzone"
+                    >
+                      Drop packages here to stage
+                    </div>
+                    <div className="space-y-2 mt-3">
+                      {stagedQueue.map((pkg) => (
+                        <div key={pkg.id} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <GripVertical className="h-3 w-3 text-muted-foreground" />
+                            <span>{pkg.name}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeStaged(pkg.id)}
+                            data-testid={`remove-staged-${pkg.id}`}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                      {stagedQueue.length === 0 && (
+                        <div className="text-xs text-muted-foreground">No packages staged</div>
+                      )}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={deployStagedQueue}
+                        disabled={deploying}
+                        data-testid="deploy-staged-btn"
+                      >
+                        {deploying ? "Deploying..." : "Deploy Staged"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStagedQueue([])}
+                        disabled={stagedQueue.length === 0}
+                        data-testid="clear-staged-btn"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-border">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Merge Conflicts</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {conflictItems.map((item) => (
+                      <div key={item.id} className="p-2 rounded border border-border bg-black/30 text-xs">
+                        <div className="font-medium">{item.label}</div>
+                        <div className="text-muted-foreground">{item.suggestion}</div>
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            variant={conflictDecisions[item.id] === "keep" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleConflictDecision(item.id, "keep")}
+                            data-testid={`conflict-keep-${item.id}`}
+                          >
+                            Keep
+                          </Button>
+                          <Button
+                            variant={conflictDecisions[item.id] === "merge" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleConflictDecision(item.id, "merge")}
+                            data-testid={`conflict-merge-${item.id}`}
+                          >
+                            Merge
+                          </Button>
+                          <Button
+                            variant={conflictDecisions[item.id] === "manual" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleConflictDecision(item.id, "manual")}
+                            data-testid={`conflict-manual-${item.id}`}
+                          >
+                            Manual
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+                <Card className="border-border">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Version Timeline</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {versionTimeline.map((item, idx) => (
+                      <div key={`${item.version}-${idx}`} className="flex items-center gap-3 text-xs">
+                        <div className="h-6 w-6 rounded-full border border-border flex items-center justify-center text-[10px] font-mono">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-mono">v{item.version}</div>
+                          <div className="text-muted-foreground capitalize">{item.status}</div>
+                        </div>
+                        <Badge variant="outline" className="capitalize">
+                          {item.status}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCompareVersion(item.version)}
+                          data-testid={`compare-version-${item.version}`}
+                        >
+                          Compare
+                        </Button>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {comparison && (
+                <Card className="border-border mt-4" data-testid="version-compare-panel">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Version Comparison</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Base</div>
+                      <div className="font-mono">v{comparison.base}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Target</div>
+                      <div className="font-mono">v{comparison.target}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Delta</div>
+                      <div className="font-mono">Rules +{comparison.changes.rules}</div>
+                      <div className="font-mono">Tests +{comparison.changes.tests}</div>
+                      <div className="font-mono">Badges {comparison.changes.compliance}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Tabs */}
@@ -428,7 +776,7 @@ const RSBManager = () => {
               </TabsList>
 
               <ScrollArea className="flex-1">
-                <TabsContent value="manifest" className="p-6 m-0">
+                <TabsContent value="manifest" className="p-6 m-0 space-y-4">
                   <Card className="border-border">
                     <CardHeader>
                       <CardTitle>Package Manifest</CardTitle>
@@ -440,7 +788,7 @@ const RSBManager = () => {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border mt-4">
+                  <Card className="border-border">
                     <CardHeader>
                       <CardTitle>File Manifest (Tree View)</CardTitle>
                     </CardHeader>
@@ -451,19 +799,29 @@ const RSBManager = () => {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border mt-4">
+                  <Card className="border-border">
                     <CardHeader>
-                      <CardTitle>Rule Network (Preview)</CardTitle>
+                      <CardTitle>Rule Network (Interactive)</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="flex flex-wrap gap-2">
-                        {(selectedPackage.rules || ["R-ACCOUNT_TAKEOVER"]).map((ruleId) => (
-                          <Badge key={ruleId} variant="outline" className="font-mono text-xs">
-                            {ruleId}
-                          </Badge>
-                        ))}
-                        <Badge variant="outline" className="text-xs">Risk-Scorer</Badge>
-                        <Badge variant="outline" className="text-xs">Policy-Gate</Badge>
+                      <div ref={ruleGraphWrapperRef} className="bg-black/30 rounded-lg">
+                        {graphLoading ? (
+                          <Skeleton className="h-[220px] w-full" />
+                        ) : (
+                          <ForceGraph2D
+                            ref={ruleGraphRef}
+                            graphData={ruleNetwork}
+                            width={ruleGraphSize.width}
+                            height={ruleGraphSize.height}
+                            backgroundColor="#09090B"
+                            nodeLabel="name"
+                            nodeColor={(node) => (node.group === "root" ? "#3B82F6" : "#60A5FA")}
+                            nodeVal={(node) => node.val}
+                            linkColor={() => "#334155"}
+                            linkDirectionalArrowLength={4}
+                            linkDirectionalArrowRelPos={1}
+                          />
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-3">
                         Nodes represent RSB rules; edges indicate dependency flow.
@@ -472,13 +830,13 @@ const RSBManager = () => {
                   </Card>
 
                   {selectedPackage.rules?.length > 0 && (
-                    <Card className="border-border mt-4">
+                    <Card className="border-border">
                       <CardHeader>
                         <CardTitle>Included Rules ({selectedPackage.rules.length})</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
-                          {selectedPackage.rules.map((ruleId, idx) => (
+                          {selectedPackage.rules.map((ruleId) => (
                             <div key={ruleId} className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded">
                               <FileText className="h-4 w-4 text-blue-400" />
                               <span className="font-mono text-sm">{ruleId}</span>
@@ -488,31 +846,31 @@ const RSBManager = () => {
                       </CardContent>
                     </Card>
                   )}
-                </TabsContent>
 
-
-                  <Card className="border-border mt-4">
+                  <Card className="border-border">
                     <CardHeader>
                       <CardTitle>Code Viewer</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <pre className="p-4 bg-black/30 rounded-lg font-mono text-xs overflow-auto max-h-64">
-{`def detect_rule(txs):
-                <TabsContent value="tests" className="p-6 m-0">
+                        {codePreview}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="tests" className="p-6 m-0 space-y-4">
                   <Card className="border-border">
                     <CardHeader>
                       <CardTitle>Test Results</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      </pre>
-                    </CardContent>
-                  </Card>
                       <TestResultsView results={selectedPackage.test_results} />
                     </CardContent>
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="compliance" className="p-6 m-0">
+                <TabsContent value="compliance" className="p-6 m-0 space-y-4">
                   <Card className="border-border">
                     <CardHeader>
                       <CardTitle>Compliance Badges</CardTitle>
@@ -538,7 +896,7 @@ const RSBManager = () => {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border mt-4">
+                  <Card className="border-border">
                     <CardHeader>
                       <CardTitle>Compliance Documentation</CardTitle>
                     </CardHeader>

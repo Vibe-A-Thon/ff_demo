@@ -7,6 +7,7 @@ import { Slider } from "../components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { battleAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
@@ -29,6 +30,9 @@ import {
   AlertTriangle,
   TrendingUp,
   TrendingDown,
+  Share2,
+  Link2,
+  FileDown,
 } from "lucide-react";
 
 // Comparison Card Component
@@ -48,7 +52,7 @@ const ComparisonCard = ({ label, beforeValue, afterValue, format = "number", ico
   const improved = diff > 0;
 
   return (
-    <Card className="border-border">
+    <Card className="border-border glass-panel">
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <Icon className={`h-4 w-4 ${color}`} />
@@ -238,6 +242,42 @@ const BattleReplay = () => {
     setIsPlaying(false);
   };
 
+  const handleCopyShareLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    toast.success("Share link copied");
+  };
+
+  const handleDownloadSummary = () => {
+    const summary = {
+      generated_at: new Date().toISOString(),
+      before: {
+        id: beforeBattle?.id,
+        scenario: beforeBattle?.scenario_name,
+        metrics: beforeFinalMetrics,
+      },
+      after: {
+        id: afterBattle?.id,
+        scenario: afterBattle?.scenario_name,
+        metrics: afterFinalMetrics,
+      },
+    };
+    const blob = new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "battle-replay-summary.json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Summary downloaded");
+  };
+
+  const handleExportGif = () => {
+    toast.info("Generating highlight GIF...");
+    setTimeout(() => toast.success("Demo GIF ready (mock export)"), 1200);
+  };
+
   const beforeTurn = beforeBattle?.turns?.[currentTurn];
   const afterTurn = afterBattle?.turns?.[currentTurn];
 
@@ -257,6 +297,30 @@ const BattleReplay = () => {
             </h1>
             <p className="text-sm text-muted-foreground">Compare battle performance before and after rule changes</p>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="share-replay-btn">
+                <Share2 className="h-4 w-4 mr-2" />
+                Share
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Share Options</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleCopyShareLink}>
+                <Link2 className="h-4 w-4 mr-2" />
+                Copy replay link
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportGif}>
+                <Share2 className="h-4 w-4 mr-2" />
+                Export highlight GIF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleDownloadSummary}>
+                <FileDown className="h-4 w-4 mr-2" />
+                Download summary JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
