@@ -9,6 +9,8 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import { battleAPI } from "../lib/api";
 import {
   Crosshair,
   Swords,
@@ -36,6 +38,7 @@ const RAILS = ["Cards", "ACH", "Wire", "Instant Payments", "Checks", "Lending"];
 const DECISION_MODES = ["Auto (Blue) Decision", "Manual Review Queue", "Hold / Step-Up", "Simulate Miss"];
 
 const WarPractice = () => {
+  const navigate = useNavigate();
   const [scenarioName, setScenarioName] = useState("Manual Simulation");
   const [preset, setPreset] = useState("ATO Burst");
   const [attackComplexity, setAttackComplexity] = useState([6]);
@@ -61,9 +64,42 @@ const WarPractice = () => {
     return Math.min(98, Math.round(base / 3 + stealthFactor / 4));
   }, [attackComplexity, velocity, muleDensity, stealth]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     setIsRunning(true);
-    toast.success("Manual simulation started. Blue team pipeline engaged.");
+    try {
+      const response = await battleAPI.create({
+        scenario_name: scenarioName,
+        parameters: {
+          preset,
+          rail,
+          decision_mode: decisionMode,
+          attack_complexity: attackComplexity[0],
+          velocity: velocity[0],
+          stealth: stealth[0],
+          turns: turns[0],
+          geo_spread: geoSpread[0],
+          mule_density: muleDensity[0],
+          loss_target: Number(lossTarget || 0),
+          device_risk: deviceRisk,
+          identity_spoof: identitySpoof,
+          cooldown_bypass: cooldownBypass,
+          sandbox_only: sandboxOnly,
+          stream_thinking: streamThinking,
+          playbook_file: uploadFileName,
+        },
+      });
+      const battleId = response?.data?.id;
+      if (battleId) {
+        await battleAPI.start(battleId);
+        toast.success("Manual simulation started. Redirecting to War Room.");
+        navigate("/war-room", { state: { battleId } });
+      } else {
+        toast.success("Manual simulation started. Blue team pipeline engaged.");
+      }
+    } catch (error) {
+      toast.error("Failed to start manual simulation.");
+      setIsRunning(false);
+    }
   };
 
   const handlePause = () => {
@@ -76,8 +112,37 @@ const WarPractice = () => {
     toast("Scenario reset to draft state.");
   };
 
-  const handleQueueBattle = () => {
-    toast.success("Queued in War Room as manual red-team practice.");
+  const handleQueueBattle = async () => {
+    try {
+      const response = await battleAPI.create({
+        scenario_name: scenarioName,
+        parameters: {
+          preset,
+          rail,
+          decision_mode: decisionMode,
+          attack_complexity: attackComplexity[0],
+          velocity: velocity[0],
+          stealth: stealth[0],
+          turns: turns[0],
+          geo_spread: geoSpread[0],
+          mule_density: muleDensity[0],
+          loss_target: Number(lossTarget || 0),
+          device_risk: deviceRisk,
+          identity_spoof: identitySpoof,
+          cooldown_bypass: cooldownBypass,
+          sandbox_only: sandboxOnly,
+          stream_thinking: streamThinking,
+          playbook_file: uploadFileName,
+        },
+      });
+      const battleId = response?.data?.id;
+      toast.success("Queued in War Room as manual red-team practice.");
+      if (battleId) {
+        navigate("/war-room", { state: { battleId } });
+      }
+    } catch (error) {
+      toast.error("Failed to queue practice battle.");
+    }
   };
 
   return (

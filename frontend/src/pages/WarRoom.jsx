@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -263,6 +264,11 @@ const useAnimatedNumber = (value, duration = 800) => {
 };
 
 const WarRoom = () => {
+  const location = useLocation();
+  const initialBattleId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return location.state?.battleId || params.get("battleId");
+  }, [location]);
   const [battles, setBattles] = useState([]);
   const [selectedBattle, setSelectedBattle] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -311,7 +317,10 @@ const WarRoom = () => {
       const response = await battleAPI.getAll();
       setBattles(response.data);
       if (response.data.length > 0) {
-        setSelectedBattle(response.data[0]);
+        const match = initialBattleId
+          ? response.data.find((battle) => battle.id === initialBattleId)
+          : null;
+        setSelectedBattle(match || response.data[0]);
       }
     } catch (error) {
       console.error("Failed to load battles:", error);

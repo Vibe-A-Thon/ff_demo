@@ -41,9 +41,13 @@ export const ruleAPI = {
   getAll: () => api.get('/rules'),
   get: (id) => api.get(`/rules/${id}`),
   create: (data) => api.post('/rules', data),
+  propose: (data) => api.post('/rules/propose', data),
   update: (id, data) => api.put(`/rules/${id}`, data),
   delete: (id) => api.delete(`/rules/${id}`),
   test: (id) => api.post(`/rules/${id}/test`),
+  approve: (id, data) => api.post(`/rules/${id}/approve`, data),
+  stage: (id, data) => api.post(`/rules/${id}/stage`, data),
+  deploy: (id, data) => api.post(`/rules/${id}/deploy`, data),
 };
 
 // RSB Package APIs
@@ -61,7 +65,9 @@ export const evidenceAPI = {
   getAll: () => api.get('/evidence-packs'),
   get: (id) => api.get(`/evidence-packs/${id}`),
   generate: (battleId) => api.post(`/evidence-packs/generate/${battleId}`),
-  export: (id) => api.get(`/evidence-packs/${id}/export`),
+  export: (id, params) => api.get(`/evidence-packs/${id}/export`, { params }),
+  requestExportApproval: (id, data) =>
+    api.post(`/evidence-packs/${id}/request-export-approval`, data),
 };
 
 // Knowledge Graph APIs
@@ -80,9 +86,39 @@ export const approvalAPI = {
   reject: (id, approverId) => api.post(`/approvals/${id}/reject?approver_id=${approverId}`),
 };
 
+// Teams & Agents APIs
+export const teamAPI = {
+  getAll: () => api.get('/teams'),
+  get: (id) => api.get(`/teams/${id}`),
+  seed: () => api.post('/teams/seed'),
+};
+
+export const agentAPI = {
+  getAll: (params) => api.get('/agents', { params }),
+  get: (id) => api.get(`/agents/${id}`),
+  register: (data) => api.post('/agents/register', data),
+  seed: () => api.post('/agents/seed'),
+  listTasks: (params) => api.get('/agents/tasks', { params }),
+  createTask: (data) => api.post('/agents/tasks', data),
+  completeTask: (taskId, data) => api.post(`/agents/tasks/${taskId}/complete`, data),
+  listRequests: (params) => api.get('/agents/requests', { params }),
+  createRequest: (data) => api.post('/agents/requests', data),
+  respondRequest: (requestId, data) => api.post(`/agents/requests/${requestId}/respond`, data),
+};
+
 // Metrics APIs
 export const metricsAPI = {
   getDashboard: () => api.get('/metrics/dashboard'),
+};
+
+// RAG APIs
+export const ragAPI = {
+  listCollections: () => api.get('/rag/collections'),
+  listDocuments: (params) => api.get('/rag/documents', { params }),
+  createDocument: (data) => api.post('/rag/documents', data),
+  seed: (params) => api.post('/rag/seed', null, { params }),
+  retrieve: (data) => api.post('/rag/retrieve', data),
+  query: (data) => api.post('/rag/query', data),
 };
 
 // AI APIs

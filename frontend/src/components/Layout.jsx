@@ -7,7 +7,7 @@ import { Input } from "../components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { battleAPI, evidenceAPI, ruleAPI, seedData } from "../lib/api";
+import { battleAPI, evidenceAPI, ruleAPI, seedData, teamAPI, agentAPI } from "../lib/api";
 import { useAuth, ROLE_DEFINITIONS } from "../contexts/AuthContext";
 import { useAlerts } from "../contexts/AlertContext";
 import { AlertHistoryPanel, ThresholdConfigPanel } from "./AlertPanels";
@@ -34,6 +34,7 @@ import {
   Database,
   User,
   Users,
+  ClipboardList,
   LogOut,
   Bell,
   Settings,
@@ -65,8 +66,11 @@ const navItems = [
   { path: "/rules", label: "Rule Editor", icon: FileCode, team: "blue" },
   { path: "/approvals", label: "Approvals", icon: ShieldCheck, team: "green" },
   { path: "/evidence", label: "Evidence Packs", icon: FileSearch, team: "gold" },
+  { path: "/teams", label: "Team Directory", icon: Users, team: "purple" },
   { path: "/agents", label: "Agent Management", icon: User, team: "purple" },
+  { path: "/agent-queue", label: "Agent Task Queue", icon: ClipboardList, team: "purple" },
   { path: "/audit-logs", label: "Audit Logs", icon: FileText, team: "white" },
+  { path: "/rag-console", label: "RAG Console", icon: Brain, team: "gold" },
   { path: "/settings", label: "Settings", icon: Settings, team: "white" },
   { path: "/users", label: "User Management", icon: Users, team: "white" },
 ];
@@ -84,9 +88,9 @@ const teamColors = {
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
   admin: ["*"],
-  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy"],
-  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy"],
-  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs"],
+  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy", "teams"],
+  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy", "teams"],
+  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs", "teams"],
 };
 
 const ROLE_ICONS = {
@@ -174,10 +178,12 @@ const Layout = () => {
     const loadSearchIndex = async () => {
       setSearchLoading(true);
       try {
-        const [battleRes, ruleRes, evidenceRes] = await Promise.all([
+        const [battleRes, ruleRes, evidenceRes, teamRes, agentRes] = await Promise.all([
           battleAPI.getAll(),
           ruleAPI.getAll(),
           evidenceAPI.getAll(),
+          teamAPI.getAll(),
+          agentAPI.getAll(),
         ]);
         const battles = (battleRes?.data || []).map((battle) => ({
           id: `battle-${battle.id}`,
@@ -185,6 +191,20 @@ const Layout = () => {
           subtitle: `Battle • ${battle.status || "unknown"}`,
           path: "/war-room",
           type: "battle",
+        }));
+        const teams = (teamRes?.data || []).map((team) => ({
+          id: `team-${team.team_id}`,
+          label: team.bank_facing_name || team.internal_name || "Team",
+          subtitle: `Team • ${team.team_id}`,
+          path: "/teams",
+          type: "team",
+        }));
+        const agents = (agentRes?.data || []).map((agent) => ({
+          id: `agent-${agent.agent_id}`,
+          label: agent.agent_name || "Agent",
+          subtitle: `Agent • ${agent.team_id || "team"}`,
+          path: "/agents",
+          type: "agent",
         }));
         const rules = (ruleRes?.data || []).map((rule) => ({
           id: `rule-${rule.id}`,
@@ -200,7 +220,7 @@ const Layout = () => {
           path: "/evidence",
           type: "evidence",
         }));
-        setSearchIndex([...battles, ...rules, ...evidence]);
+        setSearchIndex([...battles, ...rules, ...evidence, ...teams, ...agents]);
       } catch (error) {
         setSearchIndex([]);
       } finally {

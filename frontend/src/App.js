@@ -26,18 +26,21 @@ import BattleReplay from "./pages/BattleReplay";
 import WarPractice from "./pages/WarPractice";
 import DashboardHome from "./pages/DashboardHome";
 import AgentManagement from "./pages/AgentManagement";
+import AgentTaskQueue from "./pages/AgentTaskQueue";
+import TeamDirectory from "./pages/TeamDirectory";
 import FraudTaxonomyBrowser from "./pages/FraudTaxonomyBrowser";
 import IncidentTimeline from "./pages/IncidentTimeline";
 import AuditLogViewer from "./pages/AuditLogViewer";
 import SettingsConfiguration from "./pages/SettingsConfiguration";
 import UserManagement from "./pages/UserManagement";
+import RAGConsole from "./pages/RAGConsole";
 
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
   admin: ["*"], // Access to everything
-  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy"],
-  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy"],
-  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs"],
+  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy", "teams", "rag-console", "agent-queue"],
+  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy", "teams", "rag-console", "agent-queue"],
+  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs", "teams", "rag-console", "agent-queue"],
 };
 
 // Check if user has access to a route
@@ -173,10 +176,13 @@ function AppRoutes() {
           <Route path="rules" element={<RoleGate route="rules"><RuleEditor /></RoleGate>} />
           <Route path="approvals" element={<RoleGate route="approvals"><Approvals /></RoleGate>} />
           <Route path="battle-replay" element={<RoleGate route="battle-replay"><BattleReplay /></RoleGate>} />
+          <Route path="teams" element={<RoleGate route="teams"><TeamDirectory /></RoleGate>} />
           <Route path="agents" element={<RoleGate route="agents"><AgentManagement /></RoleGate>} />
+          <Route path="agent-queue" element={<RoleGate route="agent-queue"><AgentTaskQueue /></RoleGate>} />
           <Route path="taxonomy" element={<RoleGate route="taxonomy"><FraudTaxonomyBrowser /></RoleGate>} />
           <Route path="incidents" element={<RoleGate route="incidents"><IncidentTimeline /></RoleGate>} />
           <Route path="audit-logs" element={<RoleGate route="audit-logs"><AuditLogViewer /></RoleGate>} />
+          <Route path="rag-console" element={<RoleGate route="rag-console"><RAGConsole /></RoleGate>} />
           <Route path="settings" element={<RoleGate route="settings"><SettingsConfiguration /></RoleGate>} />
           <Route path="users" element={<RoleGate route="users"><UserManagement /></RoleGate>} />
         </Route>
