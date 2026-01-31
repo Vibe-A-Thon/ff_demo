@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Button } from "../components/ui/button";
@@ -6,7 +6,6 @@ import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { battleAPI, evidenceAPI, ruleAPI, seedData, teamAPI, agentAPI } from "../lib/api";
 import { useAuth, ROLE_DEFINITIONS } from "../contexts/AuthContext";
 import { useAlerts } from "../contexts/AlertContext";
@@ -39,7 +38,6 @@ import {
   Bell,
   Settings,
   PlayCircle,
-  Lock,
   Crown,
   Shield,
   Wrench,
@@ -106,16 +104,6 @@ const hasAccess = (userRole, routePath) => {
   return permissions.includes(routePath);
 };
 
-// Get roles that have access to a specific route
-const getRolesWithAccess = (routePath) => {
-  const rolesWithAccess = [];
-  Object.entries(ROLE_PERMISSIONS).forEach(([role, permissions]) => {
-    if (permissions.includes("*") || permissions.includes(routePath)) {
-      rolesWithAccess.push(role);
-    }
-  });
-  return rolesWithAccess;
-};
 
 const Layout = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -250,7 +238,16 @@ const Layout = () => {
     };
   });
 
-  const searchPool = [...navItems, ...searchIndex];
+  const isPathAccessible = (path) => {
+    if (!user || !path) return false;
+    const routeKey = path.startsWith("/") ? path.slice(1) : path;
+    return hasAccess(user.role, routeKey);
+  };
+
+  const visibleNavItems = user ? navItems.filter((item) => isPathAccessible(item.path)) : [];
+  const searchPool = user
+    ? [...visibleNavItems, ...searchIndex.filter((item) => !item.path || isPathAccessible(item.path))]
+    : [];
   const searchResults = searchQuery
     ? searchPool.filter((item) => {
         const target = `${item.label} ${item.subtitle || ""}`.toLowerCase();
@@ -374,6 +371,20 @@ const Layout = () => {
     },
   };
 
+  const commentorContext = useMemo(() => {
+    const base = explainPayload || explainContext;
+    const highlights = [
+      ...(base.triggeredRules || []),
+      ...(base.evidence || []),
+    ].filter(Boolean);
+    return {
+      screen: base.title || "Global Explainability",
+      role: user?.role || "analyst",
+      summary: base.summary,
+      highlights,
+    };
+  }, [explainPayload, explainContext, user?.role]);
+
   return (
     <div className="flex h-screen bg-background" data-testid="layout-container">
       {/* Sidebar */}
@@ -492,91 +503,18 @@ const Layout = () => {
         {/* Navigation */}
         <ScrollArea className="flex-1 py-4">
           <nav className="space-y-1 px-2">
-            <TooltipProvider delayDuration={200}>
-              {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
                 const teamClass = teamColors[item.team];
                 const routeKey = item.path.slice(1);
-                const canAccess = user ? hasAccess(user.role, routeKey) : false;
-                const rolesWithAccess = getRolesWithAccess(routeKey);
-
                 const navLinkContent = (
                   <>
                     <Icon className="h-5 w-5 flex-shrink-0" />
-                    {!collapsed && (
-                      <>
-                        <span className="flex-1">{item.label}</span>
-                        {!canAccess && <Lock className="h-3 w-3 text-muted-foreground" />}
-                      </>
-                    )}
+                    {!collapsed && <span className="flex-1">{item.label}</span>}
                   </>
                 );
 
-                // Show tooltip only for locked items when sidebar is expanded
-                if (!canAccess && !collapsed) {
-                  return (
-                    <Tooltip key={item.path}>
-                      <TooltipTrigger asChild>
-                        <NavLink
-                          to={item.path}
-                          data-testid={`nav-${routeKey}`}
-                          className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all border-l-2 ${
-                            isActive
-                              ? `bg-zinc-800 ${teamClass.split(" ")[0]} ${teamClass.split(" ")[1]}`
-                              : `border-transparent text-muted-foreground/50 ${teamClass.split(" ").slice(2).join(" ")}`
-                          } opacity-50 cursor-pointer`}
-                        >
-                          {navLinkContent}
-                        </NavLink>
-                      </TooltipTrigger>
-                      <TooltipContent 
-                        side="right" 
-                        sideOffset={8}
-                        className="max-w-[280px] p-3 z-50" 
-                        data-testid={`tooltip-${routeKey}`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Lock className="h-4 w-4 text-yellow-400" />
-                            <span className="font-semibold text-yellow-400">Access Restricted</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Your current role (<span className="font-medium">{ROLE_DEFINITIONS[user?.role]?.label || user?.role}</span>) doesn't have access to <span className="font-medium">{item.label}</span>.
-                          </p>
-                          <div className="pt-2 border-t border-border">
-                            <p className="text-xs text-muted-foreground mb-2">Roles with access:</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {rolesWithAccess.map(role => {
-                                const RoleIcon = ROLE_ICONS[role];
-                                const roleDef = ROLE_DEFINITIONS[role];
-                                return (
-                                  <div 
-                                    key={role} 
-                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border ${roleDef?.bgColor || 'bg-zinc-800'} border-current/20`}
-                                  >
-                                    <RoleIcon className={`h-3 w-3 ${roleDef?.color || 'text-muted-foreground'}`} />
-                                    <span className={roleDef?.color || 'text-muted-foreground'}>{roleDef?.label || role}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          {isDemoUser && (
-                            <div className="pt-2 border-t border-border">
-                              <p className="text-xs text-purple-400 flex items-center gap-1">
-                                <Sparkles className="h-3 w-3" />
-                                Use the Demo Role Switcher to change roles
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                }
-
-                // Regular nav link for accessible items
                 return (
                   <NavLink
                     key={item.path}
@@ -592,7 +530,6 @@ const Layout = () => {
                   </NavLink>
                 );
               })}
-            </TooltipProvider>
           </nav>
         </ScrollArea>
 
@@ -768,6 +705,7 @@ const Layout = () => {
           open={explainOpen}
           onOpenChange={setExplainOpen}
           payload={explainPayload || explainContext}
+          commentorContext={commentorContext}
         />
       </aside>
 

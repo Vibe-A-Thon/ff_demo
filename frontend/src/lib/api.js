@@ -133,6 +133,11 @@ export const aiAPI = {
   think: (data) => api.post('/ai/think', data),
 };
 
+// XAI APIs
+export const xaiAPI = {
+  commentor: (data) => api.post('/xai/commentary', data),
+};
+
 // Seed data
 export const seedData = () => api.post('/seed-data');
 

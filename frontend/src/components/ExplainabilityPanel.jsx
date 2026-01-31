@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { toast } from "sonner";
 import { Shield, FileText, Users, Download, Eye, AlertTriangle, Sparkles } from "lucide-react";
+import { xaiAPI } from "../lib/api";
 
 const defaultPayload = {
   title: "Explainability Panel",
@@ -32,8 +33,47 @@ const defaultPayload = {
   },
 };
 
-const ExplainabilityPanel = ({ open, onOpenChange, payload }) => {
+const ExplainabilityPanel = ({ open, onOpenChange, payload, commentorContext }) => {
   const data = payload || defaultPayload;
+  const [commentary, setCommentary] = useState(null);
+  const [commentaryLoading, setCommentaryLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !commentorContext?.screen) return;
+    let cancelled = false;
+
+    const fetchCommentary = async () => {
+      setCommentaryLoading(true);
+      try {
+        const response = await xaiAPI.commentor({
+          screen: commentorContext.screen,
+          role: commentorContext.role,
+          summary: commentorContext.summary,
+          highlights: commentorContext.highlights || [],
+          timestamp: new Date().toISOString(),
+        });
+        if (!cancelled) {
+          setCommentary(response.data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCommentary({
+            text: "The Commentor is observing this screen and summarizing current activity.",
+            generated_by: "synthetic",
+          });
+        }
+      } finally {
+        if (!cancelled) setCommentaryLoading(false);
+      }
+    };
+
+    fetchCommentary();
+    const interval = window.setInterval(fetchCommentary, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [open, commentorContext]);
 
   const handleExport = () => {
     toast.success("Explanation exported as ZIP");
@@ -63,6 +103,24 @@ const ExplainabilityPanel = ({ open, onOpenChange, payload }) => {
             </Badge>
           </div>
           <p className="mt-2 text-muted-foreground">{data.summary}</p>
+        </div>
+
+        <div className="rounded-md border border-border p-3">
+          <div className="flex items-center gap-2 text-foreground">
+            <Sparkles className="h-4 w-4 text-purple-400" />
+            <span className="font-semibold">Commentor (Live)</span>
+            {commentaryLoading && (
+              <Badge variant="outline" className="ml-auto text-xs">Updating</Badge>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {commentary?.text || "The Commentor is preparing a live summary of this screen."}
+          </p>
+          {commentary?.generated_by && (
+            <p className="mt-2 text-[10px] uppercase text-muted-foreground">
+              Source: {commentary.generated_by}
+            </p>
+          )}
         </div>
 
         <div className="rounded-md border border-border p-3">
