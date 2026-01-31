@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { approvalAPI, ruleAPI, rsbAPI } from "../lib/api";
+import { approvalAPI, ruleAPI, rsbAPI, agentAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   ShieldCheck,
@@ -32,6 +32,7 @@ const Approvals = () => {
   const [overrideAck, setOverrideAck] = useState(false);
   const [rules, setRules] = useState([]);
   const [packages, setPackages] = useState([]);
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
   
   const [formData, setFormData] = useState({
     resource_type: "rule",
@@ -42,6 +43,15 @@ const Approvals = () => {
 
   useEffect(() => {
     loadData();
+    const loadRegistry = async () => {
+      try {
+        const response = await agentAPI.getRegistry();
+        setRegistrySnapshot(response?.data || null);
+      } catch (error) {
+        setRegistrySnapshot(null);
+      }
+    };
+    loadRegistry();
   }, []);
 
   const loadData = async () => {
@@ -404,6 +414,33 @@ const Approvals = () => {
                   </div>
                 )}
               </div>
+
+              <Card className="border-border" data-testid="approvals-registry">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Registry Snapshot</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="border-border">
+                      {registrySnapshot?.teams?.length || 0} teams
+                    </Badge>
+                    <Badge variant="outline" className="border-border">
+                      {registrySnapshot?.agents?.length || 0} agents
+                    </Badge>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+                      <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-2">
+                        <div className="text-white text-xs font-medium">{item.agent_name}</div>
+                        <div className="text-[11px] text-muted-foreground">{item.role}</div>
+                      </div>
+                    ))}
+                    {!registrySnapshot?.delegation_preview?.length && (
+                      <div className="text-xs text-muted-foreground">Registry data not available.</div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
               <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
                 <DialogContent className="bg-card border-border" data-testid="override-modal">
                   <DialogHeader>

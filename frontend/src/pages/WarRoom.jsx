@@ -10,7 +10,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
-import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI } from "../lib/api";
+import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI, agentAPI } from "../lib/api";
 import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
 import {
@@ -289,6 +289,7 @@ const WarRoom = () => {
   const [workflowHistory, setWorkflowHistory] = useState([]);
   const [workflowApprovalRequired, setWorkflowApprovalRequired] = useState(false);
   const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [runEvents, setRunEvents] = useState([]);
   const [blockedBursts, setBlockedBursts] = useState([]);
   const [scenarioName, setScenarioName] = useState("Custom Scenario");
   const [scenarioSteps, setScenarioSteps] = useState([]);
@@ -297,6 +298,7 @@ const WarRoom = () => {
   const [traceFilter, setTraceFilter] = useState("all");
   const [traceSearch, setTraceSearch] = useState("");
   const [runSummary, setRunSummary] = useState(null);
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
   const wsRef = useRef(null);
   const autoPlayRef = useRef(null);
   const demoRef = useRef(null);
@@ -305,6 +307,15 @@ const WarRoom = () => {
 
   useEffect(() => {
     loadBattles();
+    const loadRegistry = async () => {
+      try {
+        const response = await agentAPI.getRegistry();
+        setRegistrySnapshot(response?.data || null);
+      } catch (error) {
+        setRegistrySnapshot(null);
+      }
+    };
+    loadRegistry();
     return () => {
       if (wsRef.current) wsRef.current.close();
       if (autoPlayRef.current) clearInterval(autoPlayRef.current);
@@ -711,6 +722,16 @@ const WarRoom = () => {
     setAutoPlay(false);
   };
 
+  const refreshRunEvents = useCallback(async (runId) => {
+    if (!runId) return;
+    try {
+      const response = await runAPI.get(runId);
+      setRunEvents(response?.data?.events || []);
+    } catch (error) {
+      console.error("Failed to load run events:", error);
+    }
+  }, []);
+
   const syncWorkflow = useCallback(async (runId) => {
     if (!runId) return;
     const response = await workflowAPI.get(runId);
@@ -720,7 +741,8 @@ const WarRoom = () => {
     setWorkflowStatus(data.workflow_status || "running");
     setWorkflowApprovalRequired(Boolean(data.approval_required));
     setWorkflowHistory(data.workflow_history || []);
-  }, []);
+    await refreshRunEvents(runId);
+  }, [refreshRunEvents]);
 
   const handleLifecycleAutoRun = useCallback(async () => {
     setWorkflowBusy(true);
@@ -746,6 +768,7 @@ const WarRoom = () => {
       if (data?.transitions?.length) {
         setWorkflowHistory((prev) => [...prev, ...data.transitions]);
       }
+      await refreshRunEvents(runId);
       toast.success("Lifecycle workflow auto-run complete");
     } catch (error) {
       toast.error("Failed to auto-run lifecycle workflow");
@@ -771,6 +794,7 @@ const WarRoom = () => {
         setWorkflowHistory((prev) => [...prev, ...data.transitions]);
       }
       await syncWorkflow(workflowRunId);
+      await refreshRunEvents(workflowRunId);
       toast.success("Workflow advanced");
     } catch (error) {
       toast.error("Failed to advance workflow");
@@ -782,10 +806,33 @@ const WarRoom = () => {
   const handleWorkflowRefresh = useCallback(async () => {
     try {
       await syncWorkflow(workflowRunId);
+      await refreshRunEvents(workflowRunId);
     } catch (error) {
       toast.error("Failed to refresh workflow state");
     }
-  }, [workflowRunId, syncWorkflow]);
+  }, [workflowRunId, syncWorkflow, refreshRunEvents]);
+
+  const handleExportBrc = useCallback(async () => {
+    if (!workflowRunId) {
+      toast.error("Start a lifecycle run first");
+      return;
+    }
+    try {
+      const response = await runAPI.exportBrc(workflowRunId);
+      const blob = new Blob([response.data], { type: "application/octet-stream" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `battle_${workflowRunId}.brc`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("BRC exported");
+    } catch (error) {
+      toast.error("Failed to export BRC");
+    }
+  }, [workflowRunId]);
 
   useEffect(() => {
     if (lifecycleAutoRef.current) return;
@@ -796,9 +843,58 @@ const WarRoom = () => {
     }
   }, [location.search, handleLifecycleAutoRun]);
 
+  useEffect(() => {
+    if (workflowRunId) {
+      refreshRunEvents(workflowRunId);
+    }
+  }, [workflowRunId, refreshRunEvents]);
+
   const metrics = selectedBattle?.metrics || {};
   const animatedMoneySaved = useAnimatedNumber(metrics.money_saved || 0);
   const displayMetrics = { ...metrics, money_saved: animatedMoneySaved };
+
+  const orchestratorEvents = useMemo(
+    () => (runEvents || []).filter((event) => event.event_type === "orchestrator.output"),
+    [runEvents]
+  );
+
+  const latestOrchestratorByTeam = useMemo(() => {
+    return orchestratorEvents.reduce((acc, event) => {
+      const team = (event.payload?.team || "unknown").toLowerCase();
+      if (!acc[team] || new Date(event.created_at) > new Date(acc[team].created_at)) {
+        acc[team] = event;
+      }
+      return acc;
+    }, {});
+  }, [orchestratorEvents]);
+
+  const stageDefinitions = useMemo(() => ([
+    { team: "red", stage: "red_simulate_attack", label: "Red / Simulate Attack", color: "text-red-400", border: "border-red-500/30 bg-red-500/5", icon: Sword },
+    { team: "blue", stage: "blue_detect_respond", label: "Blue / Detect & Respond", color: "text-blue-400", border: "border-blue-500/30 bg-blue-500/5", icon: Shield },
+    { team: "purple", stage: "purple_tune_models", label: "Purple / Tune Models", color: "text-purple-400", border: "border-purple-500/30 bg-purple-500/5", icon: Brain },
+    { team: "green", stage: "green_deploy_hotfix", label: "Green / Deploy Hotfix", color: "text-green-400", border: "border-green-500/30 bg-green-500/5", icon: Activity },
+    { team: "black", stage: "black_failure_analysis", label: "Black / Failure Analysis", color: "text-slate-200", border: "border-slate-500/30 bg-slate-500/10", icon: AlertTriangle },
+    { team: "orange", stage: "orange_review_approve", label: "Orange / Review & Approve", color: "text-orange-400", border: "border-orange-500/30 bg-orange-500/5", icon: Sparkles },
+    { team: "gold", stage: "gold_monitor_metrics", label: "Gold / Monitor Metrics", color: "text-yellow-300", border: "border-yellow-500/30 bg-yellow-500/5", icon: DollarSign },
+    { team: "white", stage: "white_compliance_audit", label: "White / Compliance Audit", color: "text-slate-100", border: "border-slate-400/30 bg-slate-400/10", icon: Clock },
+  ]), []);
+
+  const formatOutput = (outputs) => {
+    if (!outputs) return "No output yet.";
+    if (typeof outputs === "string") return outputs;
+    try {
+      return JSON.stringify(outputs, null, 2);
+    } catch (error) {
+      return String(outputs);
+    }
+  };
+
+  const formatEventTime = (value) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleTimeString();
+  };
 
   return (
     <div className="h-full flex flex-col" data-testid="war-room">
@@ -1056,6 +1152,15 @@ const WarRoom = () => {
               </Button>
               <Button
                 variant="secondary"
+                className="gap-2"
+                onClick={handleExportBrc}
+                disabled={!workflowRunId}
+                data-testid="war-room-workflow-export"
+              >
+                Export BRC
+              </Button>
+              <Button
+                variant="secondary"
                 className="gap-2 col-span-2"
                 onClick={handleWorkflowRefresh}
                 disabled={!workflowRunId}
@@ -1063,6 +1168,86 @@ const WarRoom = () => {
               >
                 Refresh State
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-orchestrators">
+        <Card className="border-border">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">Orchestrator Outputs (by Stage)</CardTitle>
+            <Badge className="bg-slate-500/15 text-slate-200 border border-slate-500/30">
+              {workflowRunId ? `Run ${workflowRunId.slice(0, 8)}` : "No active run"}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            {!workflowRunId ? (
+              <div className="text-xs text-muted-foreground">
+                Start a lifecycle run to capture orchestrator outputs per stage.
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {stageDefinitions.map((stage) => {
+                  const event = latestOrchestratorByTeam[stage.team];
+                  const outputs = event?.payload?.outputs;
+                  const agent = event?.payload?.agent;
+                  const Icon = stage.icon;
+                  return (
+                    <Card key={stage.stage} className={`border ${stage.border}`}>
+                      <CardHeader className="pb-2">
+                        <CardTitle className={`text-xs flex items-center gap-2 ${stage.color}`}>
+                          <Icon className="h-3 w-3" />
+                          {stage.label}
+                        </CardTitle>
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-between">
+                          <span>Agent: {agent || "—"}</span>
+                          <span>{formatEventTime(event?.created_at)}</span>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-32 pr-2">
+                          <pre className="text-xs whitespace-pre-wrap font-mono">
+                            {formatOutput(outputs)}
+                          </pre>
+                        </ScrollArea>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-registry">
+        <Card className="border-border">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">Registry Snapshot</CardTitle>
+            <Badge className="bg-slate-500/15 text-slate-200 border border-slate-500/30">
+              {(registrySnapshot?.agents || []).length} agents
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mb-3">
+              <Badge variant="outline" className="border-border">
+                {(registrySnapshot?.teams || []).length} teams
+              </Badge>
+              <Badge variant="outline" className="border-border">
+                {(registrySnapshot?.delegation_preview || []).length} on deck
+              </Badge>
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+              {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+                <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-3">
+                  <div className="text-sm font-medium text-white">{item.agent_name}</div>
+                  <div className="text-xs text-muted-foreground">{item.role}</div>
+                </div>
+              ))}
+              {!registrySnapshot?.delegation_preview?.length && (
+                <div className="text-xs text-muted-foreground">Registry data not available.</div>
+              )}
             </div>
           </CardContent>
         </Card>

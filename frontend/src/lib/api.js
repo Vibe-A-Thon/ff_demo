@@ -33,14 +33,17 @@ export const battleAPI = {
   create: (data) => api.post('/battles', data),
   start: (id) => api.post(`/battles/${id}/start`),
   stop: (id) => api.post(`/battles/${id}/stop`),
+  importBrc: (formData) => api.post('/battles/import-brc', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   delete: (id) => api.delete(`/battles/${id}`),
 };
 
 // Run (War Loop) APIs
 export const runAPI = {
+  getAll: () => api.get('/runs'),
   start: (data) => api.post('/runs/start', data),
   get: (id) => api.get(`/runs/${id}`),
   step: (id) => api.post(`/runs/${id}/step`),
+  exportBrc: (id) => api.get(`/runs/${id}/export-brc`, { responseType: 'blob' }),
 };
 
 // Workflow APIs
@@ -87,6 +90,7 @@ export const evidenceAPI = {
   getAll: () => api.get('/evidence-packs'),
   get: (id) => api.get(`/evidence-packs/${id}`),
   generate: (battleId) => api.post(`/evidence-packs/generate/${battleId}`),
+  generateRun: (runId) => api.post(`/evidence-packs/generate/run/${runId}`),
   export: (id, params) => api.get(`/evidence-packs/${id}/export`, { params }),
   requestExportApproval: (id, data) =>
     api.post(`/evidence-packs/${id}/request-export-approval`, data),
@@ -118,6 +122,7 @@ export const teamAPI = {
 export const agentAPI = {
   getAll: (params) => api.get('/agents', { params }),
   get: (id) => api.get(`/agents/${id}`),
+  getRegistry: (params) => api.get('/agents/registry', { params }),
   register: (data) => api.post('/agents/register', data),
   seed: () => api.post('/agents/seed'),
   listTasks: (params) => api.get('/agents/tasks', { params }),
@@ -151,6 +156,9 @@ export const aiAPI = {
 // XAI APIs
 export const xaiAPI = {
   commentor: (data) => api.post('/xai/commentary', data),
+  explainRun: (runId) => api.get(`/xai/explain/${runId}`),
+  explainRunFull: (runId) => api.get(`/xai/explain/${runId}/full`),
+  explainPackage: (packageId) => api.get(`/xai/package/${packageId}`),
 };
 
 // Seed data

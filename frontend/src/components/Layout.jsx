@@ -16,6 +16,7 @@ import HelpCenter from "./HelpCenter";
 import OnboardingWizard from "./OnboardingWizard";
 import FloatingHelp from "./FloatingHelp";
 import ExplainabilityPanel from "./ExplainabilityPanel";
+import XAICommentator from "./XAICommentator";
 import { toast } from "sonner";
 import {
   Swords,
@@ -719,6 +720,12 @@ const Layout = () => {
       <HelpCenter open={helpOpen} onOpenChange={setHelpOpen} />
       <OnboardingWizard />
       <FloatingHelp onOpen={() => setHelpOpen(true)} />
+      <XAICommentator
+        screen={commentorContext.screen}
+        role={commentorContext.role}
+        summary={commentorContext.summary}
+        highlights={commentorContext.highlights}
+      />
       {/* Explainability panel rendered in right sidenav */}
     </div>
   );

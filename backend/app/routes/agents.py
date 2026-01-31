@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from app.db import db
+from app.agent_registry import AgentRegistry
 from app.models import AgentProfile, AgentProfileCreate, AgentRequest, AgentRequestCreate, AgentRequestDecision, AgentResult, AgentTask
 from app.rag_utils import contains_sensitive_identifiers
 from app.teams_data import default_agent_payloads
 
 router = APIRouter()
+DEFAULT_REGISTRY = AgentRegistry.from_defaults()
 
 @router.get("/agents")
 async def list_agents(team_id: str | None = None):
@@ -13,14 +15,29 @@ async def list_agents(team_id: str | None = None):
     if team_id:
         query["team_id"] = team_id
     agents = await db.agents.find(query, {"_id": 0}).to_list(200)
-    return agents
+    if agents:
+        return agents
+    return [agent.model_dump() for agent in DEFAULT_REGISTRY.list_agents(team_id)]
 
 @router.get("/agents/{agent_id}")
 async def get_agent(agent_id: str):
     agent = await db.agents.find_one({"agent_id": agent_id}, {"_id": 0})
     if not agent:
+        fallback = DEFAULT_REGISTRY.get_agent(agent_id)
+        if fallback:
+            return fallback.model_dump()
         raise HTTPException(status_code=404, detail="Agent not found")
     return agent
+
+@router.get("/agents/registry")
+async def get_registry_snapshot(team_id: str | None = None):
+    teams = [team.model_dump() for team in DEFAULT_REGISTRY.list_teams()]
+    agents = [agent.model_dump() for agent in DEFAULT_REGISTRY.list_agents(team_id)]
+    preview_team = team_id or (teams[0]["team_id"] if teams else None)
+    delegation_preview = (
+        DEFAULT_REGISTRY.build_delegation_plan(preview_team, "Registry preview") if preview_team else []
+    )
+    return {"teams": teams, "agents": agents, "delegation_preview": delegation_preview}
 
 @router.post("/agents/register")
 async def register_agent(agent_data: AgentProfileCreate):
@@ -30,14 +47,19 @@ async def register_agent(agent_data: AgentProfileCreate):
 
 @router.post("/agents/seed")
 async def seed_agents():
-    existing = await db.agents.count_documents({})
-    if existing:
-        return {"message": "Agents already seeded", "count": existing}
     payloads = default_agent_payloads()
-    agents = [AgentProfile(**payload).model_dump() for payload in payloads]
-    if agents:
-        await db.agents.insert_many(agents)
-    return {"message": "Agents seeded", "count": len(agents)}
+    inserted = 0
+    for payload in payloads:
+        agent_id = payload.get("agent_id")
+        if agent_id:
+            exists = await db.agents.find_one({"agent_id": agent_id}, {"_id": 0})
+            if exists:
+                continue
+        profile = AgentProfile(**payload)
+        await db.agents.insert_one(profile.model_dump())
+        inserted += 1
+    total = await db.agents.count_documents({})
+    return {"message": "Agents seeded", "count": total, "inserted": inserted}
 
 @router.post("/agents/tasks")
 async def create_agent_task(task_data: AgentTask):

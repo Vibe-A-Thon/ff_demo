@@ -1,9 +1,17 @@
+import json
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
+
+INTEGRATIONS_CONFIG_PATH = ROOT_DIR.parent / "integrations_config.json"
+if INTEGRATIONS_CONFIG_PATH.exists():
+	with INTEGRATIONS_CONFIG_PATH.open("r", encoding="utf-8") as handle:
+		INTEGRATIONS_CONFIG = json.load(handle)
+else:
+	INTEGRATIONS_CONFIG = {}
 
 APP_NAME = os.environ.get("APP_NAME", "Fraud Forge API")
 APP_VERSION = os.environ.get("APP_VERSION", "1.0.0")

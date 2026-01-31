@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
+import io
+import json
+import zipfile
 from app.db import db
 from app.models import Battle, BattleCreate
 
@@ -51,3 +54,58 @@ async def delete_battle(battle_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Battle not found")
     return {"message": "Battle deleted"}
+
+@router.post("/battles/import-brc")
+async def import_brc(file: UploadFile = File(...)):
+    content = await file.read()
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail="Invalid BRC archive") from exc
+
+    manifest = {}
+    if "manifest.json" in archive.namelist():
+        manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+
+    battle_type = manifest.get("battle_type", "Imported Battle")
+    run_id = manifest.get("run_id", "imported")
+
+    red_output = {}
+    blue_output = {}
+    for name in archive.namelist():
+        if not name.endswith(".json") or name == "manifest.json":
+            continue
+        data = json.loads(archive.read(name).decode("utf-8"))
+        team = (data.get("team") or "").lower()
+        if team == "red" and not red_output:
+            red_output = data
+        if team == "blue" and not blue_output:
+            blue_output = data
+
+    turn = {
+        "red_team": {
+            "action": (red_output.get("outputs") or {}).get("attack_plan", {}).get("campaign", "synthetic"),
+            "success": True,
+        },
+        "blue_team": {
+            "action": (blue_output.get("outputs") or {}).get("decision", {}).get("outcome", "review"),
+            "blocked": True,
+        },
+    }
+
+    battle = Battle(
+        scenario_name=battle_type,
+        status="completed",
+        turns=[turn],
+        parameters={"imported_from": run_id, "source": "brc"},
+        metrics={
+            "success_rate": 100,
+            "money_at_risk": 0,
+            "money_saved": 0,
+            "time_to_immunity": 0,
+            "patterns_learned": 0,
+        },
+        completed_at=datetime.now(timezone.utc).isoformat(),
+    )
+    await db.battles.insert_one(battle.model_dump())
+    return battle

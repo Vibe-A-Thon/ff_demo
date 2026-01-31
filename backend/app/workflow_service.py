@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.db import db
 from app.models import ApprovalRequest
 from app.tooling import derive_seed, rng
-from app.agents import RED_AGENT, BLUE_AGENT, GOLD_AGENT
+from app.agents import RED_AGENT, BLUE_AGENT, GOLD_AGENT, get_orchestrator
 
 WAR_LOOP_STAGES: List[str] = [
     "red_simulate_attack",
@@ -185,19 +185,51 @@ async def ensure_stage_approval(run_id: str, stage: str, requestor_id: str = "sy
 
 async def execute_war_loop_stage(run: Dict[str, Any], stage: str, seed: int) -> Tuple[Dict[str, Any], Optional[str]]:
     context: Dict[str, Any] = {"scenario_id": run.get("scenario_id")}
-    if stage == "red_simulate_attack":
-        red_trace = await RED_AGENT.emit(context, seed)
-        return {"agent": red_trace.model_dump(), "outputs": red_trace.outputs}, None
+    stage_to_team = {
+        "red_simulate_attack": "red",
+        "blue_detect_respond": "blue",
+        "purple_rulespec_update": "purple",
+        "green_build_patch": "green",
+        "black_stress_test": "black",
+        "orange_review_approve": "orange",
+        "gold_generate_explanation": "gold",
+        "white_compliance_audit": "white",
+    }
 
-    if stage == "blue_detect_respond":
-        last_events = run.get("last_events") or []
-        blue_trace = await BLUE_AGENT.emit({"events": last_events}, seed)
-        return {"agent": blue_trace.model_dump(), "outputs": blue_trace.outputs}, None
-
-    if stage == "gold_generate_explanation":
-        decision = run.get("last_decision", "monitor")
-        gold_trace = await GOLD_AGENT.emit({"decision": decision}, seed)
-        return {"agent": gold_trace.model_dump(), "outputs": gold_trace.outputs}, None
+    team_id = stage_to_team.get(stage)
+    if team_id:
+        orchestrator = get_orchestrator(team_id)
+        if orchestrator:
+            if stage == "red_simulate_attack":
+                red_trace = await RED_AGENT.emit(context, seed)
+                return {
+                    "agent": red_trace.model_dump(),
+                    "outputs": red_trace.outputs,
+                    "orchestrator": (await orchestrator.emit(context, seed)).model_dump(),
+                }, None
+            if stage == "blue_detect_respond":
+                last_events = run.get("last_events") or []
+                blue_trace = await BLUE_AGENT.emit({"events": last_events}, seed)
+                return {
+                    "agent": blue_trace.model_dump(),
+                    "outputs": blue_trace.outputs,
+                    "orchestrator": (await orchestrator.emit({"events": last_events}, seed)).model_dump(),
+                }, None
+            if stage == "gold_generate_explanation":
+                decision = run.get("last_decision", "monitor")
+                gold_trace = await GOLD_AGENT.emit({"decision": decision}, seed)
+                return {
+                    "agent": gold_trace.model_dump(),
+                    "outputs": gold_trace.outputs,
+                    "orchestrator": (await orchestrator.emit({"decision": decision}, seed)).model_dump(),
+                }, None
+            orchestrator_trace = await orchestrator.emit(context, seed)
+            payload = {"agent": orchestrator_trace.model_dump(), "outputs": orchestrator_trace.outputs}
+            if stage == "black_stress_test":
+                report = orchestrator_trace.outputs.get("stress_test", {})
+                if report.get("failed", 0) > 0:
+                    return {"outputs": payload, "status": "failed"}, "purple_rulespec_update"
+            return payload, None
 
     payload = _stage_payload(stage, seed, context)
     if stage == "black_stress_test":

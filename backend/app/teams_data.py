@@ -78,86 +78,99 @@ def default_team_payloads() -> List[Dict[str, Any]]:
     ]
 
 
+def _agent_payload(
+    agent_id: str,
+    agent_name: str,
+    team_id: str,
+    role: str,
+    capabilities: List[str],
+    inputs: List[str],
+    outputs: List[str],
+    operating_mode: str,
+    guardrails: List[str] | None = None,
+) -> Dict[str, Any]:
+    return {
+        "agent_id": agent_id,
+        "agent_name": agent_name,
+        "team_id": team_id,
+        "role": role,
+        "capabilities": capabilities,
+        "inputs": inputs,
+        "outputs": outputs,
+        "operating_mode": operating_mode,
+        "guardrails": guardrails or ["synthetic_only"],
+    }
+
+
 def default_agent_payloads() -> List[Dict[str, Any]]:
     return [
-        {
-            "agent_name": "Red Orchestrator",
-            "team_id": "red",
-            "role": "Campaign Manager",
-            "capabilities": ["planning", "delegation", "attack-design"],
-            "inputs": ["Scenario"],
-            "outputs": ["AttackPlan"],
-            "operating_mode": "auto",
-            "guardrails": ["synthetic_only"],
-        },
-        {
-            "agent_name": "Blue Orchestrator",
-            "team_id": "blue",
-            "role": "Defense Manager",
-            "capabilities": ["detection", "decisioning", "response"],
-            "inputs": ["Telemetry"],
-            "outputs": ["Decision"],
-            "operating_mode": "auto",
-            "guardrails": ["synthetic_only"],
-        },
-        {
-            "agent_name": "Purple Strategist",
-            "team_id": "purple",
-            "role": "Rule Author",
-            "capabilities": ["rule-design", "analysis"],
-            "inputs": ["Evidence", "Telemetry"],
-            "outputs": ["RuleSpec"],
-            "operating_mode": "semi-auto",
-            "guardrails": ["synthetic_only"],
-        },
-        {
-            "agent_name": "Green Builder",
-            "team_id": "green",
-            "role": "Rule-to-Code Translator",
-            "capabilities": ["implementation", "testing"],
-            "inputs": ["RuleSpec"],
-            "outputs": ["Patch"],
-            "operating_mode": "semi-auto",
-            "guardrails": ["synthetic_only"],
-        },
-        {
-            "agent_name": "Black Stressor",
-            "team_id": "black",
-            "role": "Chaos Injection",
-            "capabilities": ["stress", "edge-cases"],
-            "inputs": ["Patch"],
-            "outputs": ["StressTestReport"],
-            "operating_mode": "auto",
-            "guardrails": ["synthetic_only"],
-        },
-        {
-            "agent_name": "Orange Gatekeeper",
-            "team_id": "orange",
-            "role": "Release Reviewer",
-            "capabilities": ["review", "approval"],
-            "inputs": ["Patch", "TestEvidence"],
-            "outputs": ["ApprovalDecision"],
-            "operating_mode": "manual",
-            "guardrails": ["synthetic_only"],
-        },
-        {
-            "agent_name": "Gold Narrator",
-            "team_id": "gold",
-            "role": "Decision Explainer",
-            "capabilities": ["xai", "narrative"],
-            "inputs": ["Decision", "Evidence"],
-            "outputs": ["ExplanationPack"],
-            "operating_mode": "auto",
-            "guardrails": ["synthetic_only"],
-        },
-        {
-            "agent_name": "White Council",
-            "team_id": "white",
-            "role": "Compliance Auditor",
-            "capabilities": ["compliance", "audit"],
-            "inputs": ["ApprovalDecision", "Evidence"],
-            "outputs": ["CompliancePack"],
-            "operating_mode": "manual",
-            "guardrails": ["synthetic_only"],
-        },
+        # Red Team
+        _agent_payload("red.orchestrator", "Red Orchestrator", "red", "Campaign Manager", ["planning", "delegation", "attack-design"], ["Scenario"], ["AttackPlan"], "auto"),
+        _agent_payload("red.scenario_generator", "Fraud Scenario Generator", "red", "Scenario Generator", ["mutation", "scenario-design"], ["Taxonomy"], ["Scenario"], "auto"),
+        _agent_payload("red.transaction_executor", "Transaction Fraud Executor", "red", "Executor", ["execution", "simulation"], ["Scenario"], ["SyntheticTransactionStream"], "auto"),
+        _agent_payload("red.loan_abuse", "Loan & Deposit Abuse Agent", "red", "Lifecycle Simulator", ["lifecycle", "abuse"], ["Scenario"], ["AttackVariantReport"], "auto"),
+        _agent_payload("red.identity_evasion", "Identity & KYC Evasion Agent", "red", "Persona Designer", ["identity", "context"], ["Scenario"], ["SyntheticIdentityBundle"], "auto"),
+        _agent_payload("red.bot_swarm", "Bot Swarm Controller", "red", "Collusion Coordinator", ["coordination", "collusion"], ["Scenario"], ["AttackCampaign"], "auto"),
+        _agent_payload("red.recon_finder", "Recon & Weak-Signal Finder", "red", "Recon Analyst", ["recon", "weak-signal"], ["Telemetry"], ["ReconFindings"], "auto"),
+        _agent_payload("red.adaptive_learning", "Adaptive Learning Agent", "red", "Feedback Learner", ["learning", "mutation"], ["AttackVariantReport"], ["AttackPlan"], "auto"),
+
+        # Blue Team
+        _agent_payload("blue.orchestrator", "Blue Orchestrator", "blue", "Defense Manager", ["detection", "response"], ["Telemetry"], ["Decision"], "auto"),
+        _agent_payload("blue.rule_evaluator", "Rule Evaluation Agent", "blue", "Rule Evaluator", ["rules", "thresholds"], ["Telemetry"], ["Alerts"], "auto"),
+        _agent_payload("blue.behavioral_baseline", "Behavioral Baseline Agent", "blue", "Baseline Analyst", ["behavior", "profiling"], ["Telemetry"], ["Observations"], "auto"),
+        _agent_payload("blue.graph_link", "Graph & Link Analysis Agent", "blue", "Link Analyst", ["graph", "ring-detection"], ["Telemetry"], ["GraphInsights"], "auto"),
+        _agent_payload("blue.device_risk", "Device & Session Risk Agent", "blue", "Session Risk", ["device", "geo"], ["Telemetry"], ["RiskSignals"], "auto"),
+        _agent_payload("blue.model_scoring", "Model Scoring Agent", "blue", "Scoring", ["scoring", "drift"], ["Telemetry"], ["RiskScores"], "auto"),
+        _agent_payload("blue.decision_action", "Decision & Action Agent", "blue", "Decisioning", ["decisioning", "policy"], ["RiskScores"], ["Decision"], "auto"),
+        _agent_payload("blue.escalation", "Escalation Agent", "blue", "Escalation", ["escalation", "packaging"], ["Decision"], ["IncidentDossier"], "auto"),
+        _agent_payload("blue.post_monitor", "Post-Decision Monitor", "blue", "Outcome Monitor", ["monitor", "feedback"], ["Decision"], ["LearningNote"], "auto"),
+
+        # Purple Team
+        _agent_payload("purple.orchestrator", "Purple Orchestrator", "purple", "Strategy Manager", ["planning", "delegation"], ["IncidentDossier"], ["RuleSpec"], "semi-auto"),
+        _agent_payload("purple.root_cause", "Root Cause Analysis Agent", "purple", "Root Cause", ["analysis", "causal"], ["IncidentDossier"], ["RootCauseReport"], "semi-auto"),
+        _agent_payload("purple.rule_author", "Rule Authoring Agent", "purple", "Rule Author", ["rules", "spec"], ["RootCauseReport"], ["RuleSpec"], "semi-auto"),
+        _agent_payload("purple.threat_forecast", "Threat Forecasting Agent", "purple", "Threat Forecaster", ["forecasting", "planning"], ["Taxonomy"], ["ThreatForecast"], "semi-auto"),
+        _agent_payload("purple.policy_constraint", "Policy Constraint Agent", "purple", "Policy Reviewer", ["policy", "governance"], ["RuleSpec"], ["PolicyNotes"], "semi-auto"),
+        _agent_payload("purple.kg_curator", "Knowledge Graph Curator", "purple", "Graph Curator", ["knowledge", "graph"], ["RuleSpec"], ["KnowledgeGraphDelta"], "semi-auto"),
+        _agent_payload("purple.requirements_pack", "Requirements Packager", "purple", "Requirements Packager", ["context", "packaging"], ["RuleSpec"], ["RequirementPack"], "semi-auto"),
+
+        # Green Team
+        _agent_payload("green.orchestrator", "Green Orchestrator", "green", "Build Manager", ["planning", "delegation"], ["RequirementPack"], ["Patch"], "semi-auto"),
+        _agent_payload("green.rule_to_code", "Rule-to-Code Translator", "green", "Rule Translator", ["codegen", "rules"], ["RuleSpec"], ["RuleCode"], "semi-auto"),
+        _agent_payload("green.pipeline_integration", "Pipeline & Integration Agent", "green", "Integrator", ["integration", "pipeline"], ["RuleCode"], ["Patch"], "semi-auto"),
+        _agent_payload("green.feature_engineer", "Feature Engineering Agent", "green", "Feature Engineer", ["features", "signals"], ["Telemetry"], ["FeatureSet"], "semi-auto"),
+        _agent_payload("green.observability", "Observability & Audit Agent", "green", "Observability", ["observability", "audit"], ["Patch"], ["AuditHooks"], "semi-auto"),
+        _agent_payload("green.test_generator", "Test Generator", "green", "Test Generator", ["tests", "coverage"], ["RuleSpec"], ["TestReport"], "semi-auto"),
+        _agent_payload("green.packaging", "Packaging Agent", "green", "Packager", ["packaging", "rsb"], ["Patch"], ["RSBPackage"], "semi-auto"),
+
+        # Black Team
+        _agent_payload("black.orchestrator", "Black Orchestrator", "black", "Test Manager", ["planning", "stress"], ["Patch"], ["StressTestReport"], "auto"),
+        _agent_payload("black.adversarial_replay", "Adversarial Replay Agent", "black", "Replay", ["replay", "regression"], ["AttackPlan"], ["ReplayReport"], "auto"),
+        _agent_payload("black.edge_case", "Edge-Case Generator", "black", "Edge Case", ["edge-cases", "mutation"], ["Scenario"], ["EdgeCaseReport"], "auto"),
+        _agent_payload("black.chaos_injection", "Chaos Injection Agent", "black", "Chaos", ["chaos", "fault"], ["Patch"], ["ChaosRun"], "auto"),
+        _agent_payload("black.load_burst", "Load/Burst Simulation Agent", "black", "Load Simulation", ["load", "burst"], ["Scenario"], ["LoadReport"], "auto"),
+        _agent_payload("black.regression_auditor", "Regression & Coverage Auditor", "black", "Regression", ["coverage", "regression"], ["TestReport"], ["RegressionReport"], "auto"),
+        _agent_payload("black.failure_injection", "Failure Injection Agent", "black", "Failure Injection", ["failure", "resilience"], ["Patch"], ["FailureInjectionReport"], "auto"),
+
+        # Orange Team
+        _agent_payload("orange.orchestrator", "Orange Orchestrator", "orange", "Release Manager", ["review", "release"], ["Patch", "TestReport"], ["ApprovalDecision"], "manual"),
+        _agent_payload("orange.code_reviewer", "Code Reviewer", "orange", "Code Reviewer", ["security", "review"], ["Patch"], ["ReviewNotes"], "manual"),
+        _agent_payload("orange.release_approver", "Release Approver", "orange", "Release Approver", ["approval", "risk"], ["ReviewNotes"], ["ApprovalDecision"], "manual"),
+        _agent_payload("orange.runtime_sre", "Runtime SRE/QA", "orange", "Runtime QA", ["sre", "qa"], ["DeploymentPlan"], ["ReleaseNote"], "manual"),
+
+        # Gold Team
+        _agent_payload("gold.orchestrator", "Gold Orchestrator", "gold", "Explanation Manager", ["explain", "narrative"], ["Decision"], ["ExplanationPack"], "auto"),
+        _agent_payload("gold.explanation_composer", "Explanation Composer", "gold", "Composer", ["explain", "summary"], ["Decision"], ["ExplanationPack"], "auto"),
+        _agent_payload("gold.evidence_graph", "Evidence Graph Builder", "gold", "Evidence Graph", ["graph", "lineage"], ["Evidence"], ["EvidenceGraph"], "auto"),
+        _agent_payload("gold.counterfactual", "Counterfactual Generator", "gold", "Counterfactual", ["counterfactual", "analysis"], ["Decision"], ["Counterfactual"], "auto"),
+        _agent_payload("gold.similar_case", "Similar-Case Retriever", "gold", "Similarity", ["retrieval", "cases"], ["Evidence"], ["SimilarCases"], "auto"),
+        _agent_payload("gold.audience_adapter", "Audience Adapter Agent", "gold", "Audience Adapter", ["audience", "tone"], ["ExplanationPack"], ["ExplanationPack"], "auto"),
+        _agent_payload("gold.case_narrative", "Case Narrative Agent", "gold", "Narrative", ["narrative", "timeline"], ["Evidence"], ["CaseNarrative"], "auto"),
+
+        # White Team
+        _agent_payload("white.orchestrator", "White Orchestrator", "white", "Governance Manager", ["compliance", "audit"], ["ApprovalDecision"], ["CompliancePack"], "manual"),
+        _agent_payload("white.policy_checker", "Policy Checker", "white", "Policy Checker", ["policy", "compliance"], ["ApprovalDecision"], ["PolicyChecklist"], "manual"),
+        _agent_payload("white.fairness_checker", "Fairness/Reasonableness Checker", "white", "Fairness Checker", ["fairness", "ethics"], ["Decision"], ["FairnessReport"], "manual"),
+        _agent_payload("white.audit_pack", "Audit Pack Reviewer", "white", "Audit Reviewer", ["audit", "evidence"], ["Evidence"], ["AuditPack"], "manual"),
+        _agent_payload("white.risk_assessor", "Compliance Risk Assessor", "white", "Risk Assessor", ["risk", "governance"], ["Evidence"], ["ComplianceRisk"], "manual"),
     ]

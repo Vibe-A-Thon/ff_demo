@@ -32,6 +32,7 @@ const AgentManagement = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [teams, setTeams] = useState([]);
   const [agents, setAgents] = useState([]);
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignAgent, setAssignAgent] = useState(null);
@@ -44,13 +45,19 @@ const AgentManagement = () => {
     const loadRoster = async () => {
       setLoading(true);
       try {
-        const [teamRes, agentRes] = await Promise.all([teamAPI.getAll(), agentAPI.getAll()]);
+        const [teamRes, agentRes, registryRes] = await Promise.all([
+          teamAPI.getAll(),
+          agentAPI.getAll(),
+          agentAPI.getRegistry(),
+        ]);
         setTeams(teamRes?.data || []);
         setAgents(agentRes?.data || []);
+        setRegistrySnapshot(registryRes?.data || null);
       } catch (error) {
         toast.error("Failed to load agent roster.");
         setTeams([]);
         setAgents([]);
+        setRegistrySnapshot(null);
       } finally {
         setLoading(false);
       }
@@ -167,6 +174,30 @@ const AgentManagement = () => {
               <SelectItem value="blocked">Blocked</SelectItem>
             </SelectContent>
           </Select>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border" data-testid="agent-registry-preview">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg">Registry Delegation Preview</CardTitle>
+          <Badge variant="outline" className="border-border">
+            {registrySnapshot?.agents?.length || 0} registry agents
+          </Badge>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {registrySnapshot?.delegation_preview?.length ? (
+            <div className="grid gap-2 md:grid-cols-3">
+              {registrySnapshot.delegation_preview.map((item) => (
+                <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-3">
+                  <div className="font-medium text-white">{item.agent_name}</div>
+                  <div className="text-xs text-muted-foreground">{item.role}</div>
+                  <div className="mt-2 text-xs text-muted-foreground">{item.objective}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">Registry preview not available.</div>
+          )}
         </CardContent>
       </Card>
 

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Input } from "../components/ui/input";
 import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
-import { evidenceAPI, battleAPI } from "../lib/api";
+import { evidenceAPI, battleAPI, agentAPI, runAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   FileSearch,
@@ -35,6 +35,8 @@ const EvidenceViewer = () => {
   const [selectedPack, setSelectedPack] = useState(null);
   const [battles, setBattles] = useState([]);
   const [selectedBattle, setSelectedBattle] = useState("");
+  const [runs, setRuns] = useState([]);
+  const [selectedRun, setSelectedRun] = useState("");
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [testStatusFilter, setTestStatusFilter] = useState("all");
@@ -45,20 +47,38 @@ const EvidenceViewer = () => {
   const [redactEmails, setRedactEmails] = useState(true);
   const [redactAccounts, setRedactAccounts] = useState(true);
   const [redactPhones, setRedactPhones] = useState(false);
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
+  const [expandedStages, setExpandedStages] = useState({});
+  const [selectedArtifact, setSelectedArtifact] = useState(null);
+  const [artifactDrawerOpen, setArtifactDrawerOpen] = useState(false);
+  const [artifactApprovals, setArtifactApprovals] = useState([]);
+  const [artifactFilter, setArtifactFilter] = useState(null);
+  const [packFilter, setPackFilter] = useState(null);
 
   useEffect(() => {
     loadData();
+    const loadRegistry = async () => {
+      try {
+        const response = await agentAPI.getRegistry();
+        setRegistrySnapshot(response?.data || null);
+      } catch (error) {
+        setRegistrySnapshot(null);
+      }
+    };
+    loadRegistry();
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [evidenceRes, battlesRes] = await Promise.all([
+      const [evidenceRes, battlesRes, runsRes] = await Promise.all([
         evidenceAPI.getAll(),
         battleAPI.getAll(),
+        runAPI.getAll(),
       ]);
       setEvidencePacks(evidenceRes.data);
       setBattles(battlesRes.data);
+      setRuns(runsRes.data || []);
       if (evidenceRes.data.length > 0) {
         setSelectedPack(evidenceRes.data[0]);
       }
@@ -82,6 +102,24 @@ const EvidenceViewer = () => {
       toast.success("Evidence pack generated!");
     } catch (error) {
       toast.error("Failed to generate evidence pack");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const generateRunEvidencePack = async () => {
+    if (!selectedRun) {
+      toast.error("Please select a war loop run");
+      return;
+    }
+    setGenerating(true);
+    try {
+      const response = await evidenceAPI.generateRun(selectedRun);
+      setEvidencePacks([...evidencePacks, response.data]);
+      setSelectedPack(response.data);
+      toast.success("Evidence pack generated from war loop!");
+    } catch (error) {
+      toast.error("Failed to generate evidence pack from run");
     } finally {
       setGenerating(false);
     }
@@ -121,6 +159,7 @@ const EvidenceViewer = () => {
               <table>
                 <tr><th>ID</th><td>${selectedPack.id}</td></tr>
                 <tr><th>Battle</th><td>${selectedPack.battle_id || "N/A"}</td></tr>
+                <tr><th>Run</th><td>${selectedPack.run_id || "N/A"}</td></tr>
                 <tr><th>Created</th><td>${new Date(selectedPack.created_at).toLocaleString()}</td></tr>
                 <tr><th>Confidence</th><td>${Math.round(selectedPack.confidence * 100)}%</td></tr>
               </table>
@@ -207,10 +246,74 @@ const EvidenceViewer = () => {
     return [raw];
   };
 
+  const getArtifactsFromPack = (pack) => {
+    if (Array.isArray(pack?.artifacts) && pack.artifacts.length > 0) {
+      return pack.artifacts;
+    }
+    const logs = normalizeLogs(pack);
+    return logs
+      .filter((entry) => ["agent.output", "orchestrator.output"].includes(entry?.event_type))
+      .map((entry) => ({
+        event_id: entry.id,
+        event_type: entry.event_type,
+        team: entry?.payload?.team,
+        agent: entry?.payload?.agent,
+        outputs: entry?.payload?.outputs || {},
+        created_at: entry?.created_at,
+      }));
+  };
+
+  const bucketArtifactsByStage = (artifacts, timeline) => {
+    const buckets = {};
+    if (!Array.isArray(artifacts)) return buckets;
+    const stages = Array.isArray(timeline)
+      ? [...timeline].filter((item) => item?.timestamp).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      : [];
+    artifacts.forEach((artifact) => {
+      let stageKey = "unknown";
+      if (stages.length && artifact?.created_at) {
+        const artifactTime = new Date(artifact.created_at).getTime();
+        for (let i = 0; i < stages.length; i += 1) {
+          const stageTime = new Date(stages[i].timestamp).getTime();
+          if (artifactTime >= stageTime) {
+            stageKey = stages[i].stage || stageKey;
+          } else {
+            break;
+          }
+        }
+      }
+      if (!buckets[stageKey]) buckets[stageKey] = [];
+      buckets[stageKey].push(artifact);
+    });
+    return buckets;
+  };
+
   const normalizeApprovals = (pack) => {
     const raw = pack?.approval_chain || pack?.approvals || [];
     if (Array.isArray(raw)) return raw;
     return [raw];
+  };
+
+  const buildStageTimeline = (pack) => {
+    const summaries = pack?.stage_summaries || pack?.stageSummaries || [];
+    if (Array.isArray(summaries) && summaries.length > 0) {
+      return summaries.map((item, idx) => ({
+        id: `${item.stage || "stage"}-${idx}`,
+        stage: item.stage,
+        step: item.step,
+        timestamp: item.timestamp,
+      }));
+    }
+    const logs = normalizeLogs(pack);
+    const derived = logs
+      .filter((entry) => (entry?.event_type || entry?.eventType) === "stage.changed")
+      .map((entry, idx) => ({
+        id: `${entry?.payload?.stage || "stage"}-${idx}`,
+        stage: entry?.payload?.stage,
+        step: entry?.payload?.step,
+        timestamp: entry?.created_at || entry?.timestamp,
+      }));
+    return derived;
   };
 
   const formatLogEntry = (entry) => {
@@ -232,13 +335,97 @@ const EvidenceViewer = () => {
     return target.includes(testQuery.toLowerCase());
   });
 
-  const logEntries = normalizeLogs(selectedPack);
+  const applyArtifactFilter = (stage) => {
+    setArtifactFilter({ stage });
+    toast.success(`Filtered artifacts for ${stage}`);
+  };
+
+  const clearArtifactFilter = () => {
+    setArtifactFilter(null);
+    toast.success("Artifact filter cleared");
+  };
+
+  const applyPackFilter = (type, value) => {
+    if (!value) return;
+    setPackFilter({ type, value });
+    toast.success(`Filtered packs by ${type}`);
+  };
+
+  const clearPackFilter = () => {
+    setPackFilter(null);
+    toast.success("Pack filter cleared");
+  };
+
+  const filteredPacks = packFilter
+    ? evidencePacks.filter((pack) => {
+        if (packFilter.type === "run") return pack.run_id === packFilter.value;
+        if (packFilter.type === "battle") return pack.battle_id === packFilter.value;
+        if (packFilter.type === "parent") return pack.lineage?.parent_pack_id === packFilter.value;
+        if (packFilter.type === "derived") return pack.lineage?.derived_from === packFilter.value;
+        return true;
+      })
+    : evidencePacks;
+
+  useEffect(() => {
+    if (filteredPacks.length === 0) return;
+    if (!selectedPack || !filteredPacks.find((pack) => pack.id === selectedPack.id)) {
+      setSelectedPack(filteredPacks[0]);
+    }
+  }, [packFilter, evidencePacks, filteredPacks, selectedPack]);
+
+  const effectivePack = selectedPack && filteredPacks.find((pack) => pack.id === selectedPack.id)
+    ? selectedPack
+    : filteredPacks[0] || selectedPack;
+
+  const logEntries = normalizeLogs(effectivePack);
   const filteredLogs = logEntries.filter((entry) => {
     if (!logQuery) return true;
     return formatLogEntry(entry).toLowerCase().includes(logQuery.toLowerCase());
   });
 
-  const approvalChain = normalizeApprovals(selectedPack);
+  const approvalChain = normalizeApprovals(effectivePack);
+  const approvalsByStage = approvalChain.reduce((acc, approval) => {
+    const stage = approval.stage || approval.action || approval.approval_action;
+    if (!stage) return acc;
+    if (!acc[stage]) acc[stage] = [];
+    acc[stage].push(approval);
+    return acc;
+  }, {});
+  const xaiBundle = effectivePack?.xai_bundle || effectivePack?.xaiBundle || null;
+  const stageTimeline = buildStageTimeline(effectivePack);
+  const artifacts = getArtifactsFromPack(effectivePack || {});
+  const filteredArtifacts = artifactFilter?.stage
+    ? artifacts.filter((artifact) => {
+        if (!artifact?.created_at) return true;
+        const artifactTime = new Date(artifact.created_at).getTime();
+        const stages = stageTimeline
+          .filter((item) => item?.timestamp)
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        let activeStage = "unknown";
+        for (let i = 0; i < stages.length; i += 1) {
+          const stageTime = new Date(stages[i].timestamp).getTime();
+          if (artifactTime >= stageTime) {
+            activeStage = stages[i].stage || activeStage;
+          } else {
+            break;
+          }
+        }
+        return activeStage === artifactFilter.stage;
+      })
+    : artifacts;
+  const artifactsByStage = bucketArtifactsByStage(filteredArtifacts, stageTimeline);
+
+  const openArtifactDrawer = (artifact, stage) => {
+    setSelectedArtifact({ ...artifact, stage });
+    setArtifactApprovals(approvalsByStage[stage] || []);
+    setArtifactDrawerOpen(true);
+  };
+
+  const closeArtifactDrawer = () => {
+    setArtifactDrawerOpen(false);
+    setSelectedArtifact(null);
+    setArtifactApprovals([]);
+  };
 
   return (
     <div className="h-full flex" data-testid="evidence-viewer">
@@ -246,6 +433,21 @@ const EvidenceViewer = () => {
       <div className="w-80 border-r border-border flex flex-col">
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold mb-4">Evidence Packs</h2>
+          {packFilter && (
+            <div className="mb-3 flex items-center justify-between rounded border border-border bg-black/30 p-2 text-xs">
+              <span>
+                Filtering packs by {packFilter.type}: <span className="font-mono">{packFilter.value}</span>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearPackFilter}
+                data-testid="clear-pack-filter"
+              >
+                Clear
+              </Button>
+            </div>
+          )}
           
           {/* Generate New */}
           <div className="space-y-2">
@@ -275,12 +477,39 @@ const EvidenceViewer = () => {
               <FileSearch className={`h-4 w-4 mr-2 ${generating ? 'animate-spin' : ''}`} />
               Generate Pack
             </Button>
+            <Select value={selectedRun} onValueChange={setSelectedRun}>
+              <SelectTrigger data-testid="run-select-evidence">
+                <SelectValue placeholder="Select war loop run" />
+              </SelectTrigger>
+              <SelectContent>
+                {runs.map((run) => (
+                  <SelectItem key={run.id} value={run.id}>
+                    {run.scenario_id} • {run.id.slice(0, 8)}...
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              className="w-full"
+              variant="secondary"
+              onClick={generateRunEvidencePack}
+              disabled={!selectedRun || generating}
+              data-testid="generate-evidence-run-btn"
+              data-explain="Generate Evidence Pack (War Loop)"
+              data-explain-title="War loop evidence pack generated"
+              data-explain-summary="Builds evidence from war loop artifacts, approvals, and workflow history."
+              data-explain-rules="EV-001,EV-014"
+              data-explain-evidence="War loop artifacts,Approvals,Workflow history"
+            >
+              <FileSearch className={`h-4 w-4 mr-2 ${generating ? 'animate-spin' : ''}`} />
+              Generate War Loop Pack
+            </Button>
           </div>
         </div>
 
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-2">
-            {evidencePacks.map((pack) => (
+            {filteredPacks.map((pack) => (
               <div
                 key={pack.id}
                 onClick={() => setSelectedPack(pack)}
@@ -311,11 +540,11 @@ const EvidenceViewer = () => {
                 </div>
               </div>
             ))}
-            {evidencePacks.length === 0 && (
+            {filteredPacks.length === 0 && (
               <div className="text-center text-muted-foreground py-8">
                 <FileSearch className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>No evidence packs yet</p>
-                <p className="text-sm">Generate from a battle</p>
+                <p className="text-sm">Generate from a battle or war loop run</p>
               </div>
             )}
           </div>
@@ -380,6 +609,33 @@ const EvidenceViewer = () => {
                 </div>
               </div>
 
+              <Card className="border-border" data-testid="evidence-registry">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Registry Snapshot</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="border-border">
+                      {registrySnapshot?.teams?.length || 0} teams
+                    </Badge>
+                    <Badge variant="outline" className="border-border">
+                      {registrySnapshot?.agents?.length || 0} agents
+                    </Badge>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+                      <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-2">
+                        <div className="text-white text-xs font-medium">{item.agent_name}</div>
+                        <div className="text-[11px] text-muted-foreground">{item.role}</div>
+                      </div>
+                    ))}
+                    {!registrySnapshot?.delegation_preview?.length && (
+                      <div className="text-xs text-muted-foreground">Registry data not available.</div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Redaction Controls */}
               <Card className="border-border">
                 <CardHeader>
@@ -427,6 +683,67 @@ const EvidenceViewer = () => {
                       <Label htmlFor="redaction-phone">Mask phone numbers</Label>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border" data-testid="evidence-xai-bundle">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-yellow-400" />
+                    XAI Bundle
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  {xaiBundle ? (
+                    <>
+                      <div>
+                        <p className="text-sm font-semibold">Summary</p>
+                        <p className="text-xs text-muted-foreground">{xaiBundle.summary}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">Details</p>
+                        <p className="text-xs text-muted-foreground">{xaiBundle.details}</p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-md border border-border bg-zinc-900/40 p-3">
+                          <p className="text-xs font-semibold mb-2">Counterfactuals</p>
+                          <ul className="space-y-2 text-xs text-muted-foreground">
+                            {(xaiBundle.counterfactuals || []).map((item, idx) => (
+                              <li key={`${item.label}-${idx}`}>
+                                <span className="text-white">{item.label}</span>
+                                <div>Expected: {item.expected_outcome}</div>
+                              </li>
+                            ))}
+                            {(!xaiBundle.counterfactuals || xaiBundle.counterfactuals.length === 0) && (
+                              <li>No counterfactuals provided.</li>
+                            )}
+                          </ul>
+                        </div>
+                        <div className="rounded-md border border-border bg-zinc-900/40 p-3">
+                          <p className="text-xs font-semibold mb-2">Similar Cases</p>
+                          <ul className="space-y-2 text-xs text-muted-foreground">
+                            {(xaiBundle.similar_cases || []).map((item, idx) => (
+                              <li key={`${item.case_id}-${idx}`}>
+                                <span className="text-white">{item.case_id}</span>
+                                <div>{item.summary}</div>
+                              </li>
+                            ))}
+                            {(!xaiBundle.similar_cases || xaiBundle.similar_cases.length === 0) && (
+                              <li>No similar cases.</li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-zinc-900/40 p-3">
+                        <p className="text-xs font-semibold mb-2">Evidence Graph</p>
+                        <div className="text-xs text-muted-foreground">
+                          Nodes: {xaiBundle.evidence_graph?.nodes?.length || 0} • Edges: {xaiBundle.evidence_graph?.edges?.length || 0}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">No XAI bundle attached to this pack.</div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -543,7 +860,11 @@ const EvidenceViewer = () => {
                     </div>
                     <div>
                       <label className="text-sm text-muted-foreground">Battle Reference</label>
-                      <p className="font-mono text-sm mt-1">{selectedPack.battle_id}</p>
+                      <p className="font-mono text-sm mt-1">{selectedPack.battle_id || "N/A"}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">War Loop Run</label>
+                      <p className="font-mono text-sm mt-1">{selectedPack.run_id || "N/A"}</p>
                     </div>
                     <div>
                       <label className="text-sm text-muted-foreground">Lineage Metadata</label>
@@ -567,6 +888,158 @@ const EvidenceViewer = () => {
                       </div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Artifacts Timeline */}
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-cyan-300" />
+                    Artifacts Timeline
+                    {packFilter && (
+                      <Badge variant="outline" className="text-xs">
+                        Filtered pack
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {artifactFilter?.stage && (
+                    <div className="mb-3 flex items-center justify-between rounded border border-border bg-black/30 p-2 text-xs">
+                      <span>
+                        Filtering by stage: <span className="font-mono">{artifactFilter.stage}</span>
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearArtifactFilter}
+                        data-testid="clear-artifact-filter"
+                      >
+                        Clear filter
+                      </Button>
+                    </div>
+                  )}
+                  {stageTimeline.length > 0 ? (
+                    <div className="space-y-3">
+                      {stageTimeline.map((item) => (
+                        <div key={item.id} className="p-3 rounded-lg border border-border bg-zinc-900/40">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="font-medium text-sm text-left hover:text-cyan-200"
+                                onClick={() => applyArtifactFilter(item.stage)}
+                                data-testid={`filter-stage-${item.stage || "unknown"}`}
+                              >
+                                {item.stage || "Stage"}
+                              </button>
+                              <Badge variant="outline" className="text-xs">
+                                Step {item.step || "-"}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                Artifacts {artifactsByStage[item.stage]?.length || 0}
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {item.timestamp ? new Date(item.timestamp).toLocaleString() : "N/A"}
+                            </span>
+                          </div>
+                          <div className="mt-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setExpandedStages((prev) => ({
+                                  ...prev,
+                                  [item.stage]: !prev[item.stage],
+                                }))
+                              }
+                              data-testid={`toggle-stage-${item.stage || "unknown"}`}
+                            >
+                              {expandedStages[item.stage] ? "Hide" : "Show"} artifacts
+                            </Button>
+                          </div>
+                          {expandedStages[item.stage] && (
+                            <div className="mt-3 space-y-2">
+                              {(artifactsByStage[item.stage] || []).map((artifact, idx) => (
+                                <div
+                                  key={`${item.id}-artifact-${idx}`}
+                                  className="rounded bg-black/30 p-2 text-xs"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="text-[10px]">
+                                        {artifact.event_type || "artifact"}
+                                      </Badge>
+                                      <span className="font-mono">
+                                        {(artifact.team || "team").toUpperCase()} / {artifact.agent || "agent"}
+                                      </span>
+                                    </div>
+                                    <span className="text-muted-foreground">
+                                      {artifact.created_at
+                                        ? new Date(artifact.created_at).toLocaleString()
+                                        : "N/A"}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => openArtifactDrawer(artifact, item.stage)}
+                                      data-testid={`view-artifact-${item.stage || "unknown"}-${idx}`}
+                                    >
+                                      View details
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(
+                                          JSON.stringify(artifact.outputs || artifact, null, 2)
+                                        );
+                                        toast.success("Artifact JSON copied");
+                                      }}
+                                      data-testid={`copy-artifact-${item.stage || "unknown"}-${idx}`}
+                                    >
+                                      Copy JSON
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                              {(!artifactsByStage[item.stage] || artifactsByStage[item.stage].length === 0) && (
+                                <div className="text-xs text-muted-foreground">No artifacts recorded.</div>
+                              )}
+                            </div>
+                          )}
+                          {approvalsByStage[item.stage]?.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {approvalsByStage[item.stage].map((approval, idx) => (
+                                <div
+                                  key={`${item.id}-approval-${idx}`}
+                                  className="flex items-center justify-between text-xs rounded bg-black/30 p-2"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">
+                                      {approval.approver_id || approval.approver || "Approver"}
+                                    </span>
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {approval.status || approval.action || "approved"}
+                                    </Badge>
+                                  </div>
+                                  <span className="text-muted-foreground">
+                                    {approval.timestamp ? new Date(approval.timestamp).toLocaleString() : "Pending"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No stage timeline available.</div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -774,6 +1247,171 @@ const EvidenceViewer = () => {
           </div>
         )}
       </div>
+
+      {/* Artifact Detail Drawer */}
+      {artifactDrawerOpen && (
+        <div className="fixed inset-0 z-50" data-testid="artifact-drawer">
+          <div
+            className="absolute inset-0 bg-black/70"
+            onClick={closeArtifactDrawer}
+            data-testid="artifact-drawer-overlay"
+          />
+          <div className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border bg-zinc-950 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold">Artifact Detail</h2>
+                <p className="text-xs text-muted-foreground font-mono">
+                  {selectedArtifact?.event_type || "artifact"}
+                </p>
+              </div>
+              <Button variant="ghost" onClick={closeArtifactDrawer} data-testid="artifact-drawer-close">
+                Close
+              </Button>
+            </div>
+            <ScrollArea className="h-[calc(100%-64px)]">
+              <div className="p-6 space-y-4">
+                <div className="rounded border border-border bg-black/30 p-3 text-xs">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-muted-foreground">Team</p>
+                      <p className="font-mono">{selectedArtifact?.team || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Agent</p>
+                      <p className="font-mono">{selectedArtifact?.agent || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Timestamp</p>
+                      <p className="font-mono">
+                        {selectedArtifact?.created_at
+                          ? new Date(selectedArtifact.created_at).toLocaleString()
+                          : "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Event</p>
+                      <p className="font-mono">{selectedArtifact?.event_type || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Stage</p>
+                      <p className="font-mono">{selectedArtifact?.stage || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Run</p>
+                      <p className="font-mono">{selectedPack?.run_id || "N/A"}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded border border-border bg-black/30 p-3 text-xs space-y-2">
+                  <p className="text-sm font-medium">Lineage Links</p>
+                    <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-muted-foreground">Evidence Pack</p>
+                      <button
+                        type="button"
+                        className="font-mono text-left text-cyan-200 hover:text-cyan-100"
+                        onClick={() => clearPackFilter()}
+                        data-testid="lineage-pack-link"
+                      >
+                        {selectedPack?.id || "N/A"}
+                      </button>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Battle</p>
+                      <button
+                        type="button"
+                        className="font-mono text-left text-cyan-200 hover:text-cyan-100"
+                        onClick={() => applyPackFilter("battle", selectedPack?.battle_id)}
+                        data-testid="lineage-battle-link"
+                      >
+                        {selectedPack?.battle_id || "N/A"}
+                      </button>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Parent Pack</p>
+                      <button
+                        type="button"
+                        className="font-mono text-left text-cyan-200 hover:text-cyan-100"
+                        onClick={() => applyPackFilter("parent", selectedPack?.lineage?.parent_pack_id)}
+                        data-testid="lineage-parent-pack-link"
+                      >
+                        {selectedPack?.lineage?.parent_pack_id || "N/A"}
+                      </button>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Derived From</p>
+                      <button
+                        type="button"
+                        className="font-mono text-left text-cyan-200 hover:text-cyan-100"
+                        onClick={() => applyPackFilter("derived", selectedPack?.lineage?.derived_from)}
+                        data-testid="lineage-derived-link"
+                      >
+                        {selectedPack?.lineage?.derived_from || "N/A"}
+                      </button>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Run</p>
+                      <button
+                        type="button"
+                        className="font-mono text-left text-cyan-200 hover:text-cyan-100"
+                        onClick={() => applyPackFilter("run", selectedPack?.run_id)}
+                        data-testid="lineage-run-link"
+                      >
+                        {selectedPack?.run_id || "N/A"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded border border-border bg-black/30 p-3 text-xs space-y-2">
+                  <p className="text-sm font-medium">Related Approvals</p>
+                  {artifactApprovals.length > 0 ? (
+                    <div className="space-y-2">
+                      {artifactApprovals.map((approval, idx) => (
+                        <div key={`artifact-approval-${idx}`} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px]">
+                              {approval.status || approval.action || "approved"}
+                            </Badge>
+                            <span className="font-mono">
+                              {approval.approver_id || approval.approver || "Unknown"}
+                            </span>
+                          </div>
+                          <span className="text-muted-foreground">
+                            {approval.timestamp ? new Date(approval.timestamp).toLocaleString() : "Pending"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">No approvals recorded for this stage.</div>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium">Artifact Output</h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          JSON.stringify(selectedArtifact?.outputs || selectedArtifact, null, 2)
+                        );
+                        toast.success("Artifact JSON copied");
+                      }}
+                      data-testid="artifact-drawer-copy"
+                    >
+                      Copy JSON
+                    </Button>
+                  </div>
+                  <pre className="text-xs bg-black/40 border border-border rounded p-3 overflow-auto whitespace-pre-wrap">
+                    {JSON.stringify(selectedArtifact?.outputs || selectedArtifact, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </ScrollArea>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { useAuth } from "../contexts/AuthContext";
+import { agentAPI } from "../lib/api";
 import {
   Activity,
   ShieldAlert,
@@ -75,6 +76,7 @@ const badgeStyles = {
 const DashboardHome = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
   const actionStyles = useMemo(
     () => ({
       red: "border-red-500/40 text-red-300 hover:bg-red-500/10",
@@ -90,6 +92,18 @@ const DashboardHome = () => {
     if (!user?.role || user.role === "admin") return items;
     return items.filter((item) => !item.roles || item.roles.includes(user.role));
   };
+
+  useEffect(() => {
+    const loadRegistry = async () => {
+      try {
+        const response = await agentAPI.getRegistry();
+        setRegistrySnapshot(response?.data || null);
+      } catch (error) {
+        setRegistrySnapshot(null);
+      }
+    };
+    loadRegistry();
+  }, []);
 
   const visibleKpis = filterByRole(kpis);
   const visibleActions = filterByRole(quickActions);
@@ -159,7 +173,41 @@ const DashboardHome = () => {
             ))}
           </CardContent>
         </Card>
-
+        <Card className="border-border" data-testid="dashboard-registry">
+          <CardHeader>
+            <CardTitle className="text-lg">Registry Snapshot</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline" className="border-border">
+                {registrySnapshot?.teams?.length || 0} teams
+              </Badge>
+              <Badge variant="outline" className="border-border">
+                {registrySnapshot?.agents?.length || 0} agents
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+                <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-3">
+                  <div className="text-sm font-medium text-white">{item.agent_name}</div>
+                  <div className="text-xs text-muted-foreground">{item.role}</div>
+                </div>
+              ))}
+              {!registrySnapshot?.delegation_preview?.length && (
+                <div className="text-xs text-muted-foreground">Registry data not available.</div>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => navigate("/agent-management")}
+              data-testid="dashboard-registry-manage"
+            >
+              Manage Agents
+            </Button>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">

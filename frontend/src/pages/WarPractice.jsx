@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -10,7 +10,7 @@ import { Switch } from "../components/ui/switch";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { battleAPI, runAPI, workflowAPI } from "../lib/api";
+import { battleAPI, runAPI, workflowAPI, agentAPI } from "../lib/api";
 import {
   Crosshair,
   Swords,
@@ -63,12 +63,25 @@ const WarPractice = () => {
   const [workflowHistory, setWorkflowHistory] = useState([]);
   const [workflowApprovalRequired, setWorkflowApprovalRequired] = useState(false);
   const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
 
   const estimatedRisk = useMemo(() => {
     const base = attackComplexity[0] * 6 + velocity[0] * 0.6 + muleDensity[0] * 7;
     const stealthFactor = 100 - stealth[0];
     return Math.min(98, Math.round(base / 3 + stealthFactor / 4));
   }, [attackComplexity, velocity, muleDensity, stealth]);
+
+  useEffect(() => {
+    const loadRegistry = async () => {
+      try {
+        const response = await agentAPI.getRegistry();
+        setRegistrySnapshot(response?.data || null);
+      } catch (error) {
+        setRegistrySnapshot(null);
+      }
+    };
+    loadRegistry();
+  }, []);
 
   const handleStart = async () => {
     setIsRunning(true);
@@ -248,6 +261,36 @@ const WarPractice = () => {
           <Badge className="bg-emerald-500/20 text-emerald-300">Sandbox Mode</Badge>
         </div>
       </div>
+
+      <Card className="border-border" data-testid="war-practice-registry">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-sm">Registry Snapshot</CardTitle>
+          <Badge variant="outline" className="border-border">
+            {registrySnapshot?.agents?.length || 0} agents
+          </Badge>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className="border-border">
+              {registrySnapshot?.teams?.length || 0} teams
+            </Badge>
+            <Badge variant="outline" className="border-border">
+              {(registrySnapshot?.delegation_preview || []).length} on deck
+            </Badge>
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+              <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-3">
+                <div className="text-white text-xs font-medium">{item.agent_name}</div>
+                <div className="text-[11px] text-muted-foreground">{item.role}</div>
+              </div>
+            ))}
+            {!registrySnapshot?.delegation_preview?.length && (
+              <div className="text-xs text-muted-foreground">Registry data not available.</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-6">

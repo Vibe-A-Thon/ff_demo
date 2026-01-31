@@ -139,13 +139,19 @@ class RSBPackageCreate(BaseModel):
 class EvidencePack(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    battle_id: str
+    battle_id: Optional[str] = None
+    run_id: Optional[str] = None
     narrative: str
     triggered_rules: List[str]
     contributing_factors: List[Dict[str, Any]]
     confidence: float
     logs: List[Dict[str, Any]]
     approvals: List[Dict[str, Any]] = []
+    artifacts: List[Dict[str, Any]] = []
+    workflow_history: List[Dict[str, Any]] = []
+    workflow_state: Optional[str] = None
+    metrics: Dict[str, Any] = {}
+    xai_bundle: Optional[Dict[str, Any]] = None
     checksum: str = ""
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -308,6 +314,41 @@ class ExplanationBundle(BaseModel):
     details: str
     evidence: List[EvidenceItem] = []
     confidence_statement: Optional[str] = None
+    evidence_graph: Optional[Dict[str, Any]] = None
+    counterfactuals: List[Dict[str, Any]] = []
+    similar_cases: List[Dict[str, Any]] = []
+
+class EvidenceGraphNode(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    node_id: str
+    node_type: str
+    label: str
+    metadata: Dict[str, Any] = {}
+
+class EvidenceGraphEdge(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    source: str
+    target: str
+    relation: str
+    metadata: Dict[str, Any] = {}
+
+class EvidenceGraph(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    nodes: List[EvidenceGraphNode] = []
+    edges: List[EvidenceGraphEdge] = []
+
+class Counterfactual(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    label: str
+    changes: Dict[str, Any]
+    expected_outcome: str
+
+class SimilarCase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    case_id: str
+    summary: str
+    similarity: float
+    metadata: Dict[str, Any] = {}
 
 class ToolSpec(BaseModel):
     model_config = ConfigDict(extra="ignore")

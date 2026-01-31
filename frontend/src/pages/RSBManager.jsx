@@ -9,7 +9,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Progress } from "../components/ui/progress";
-import { rsbAPI } from "../lib/api";
+import { rsbAPI, agentAPI, xaiAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   Package,
@@ -54,12 +54,24 @@ const RSBManager = () => {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [testRunning, setTestRunning] = useState(null);
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
+  const [xaiBundle, setXaiBundle] = useState(null);
+  const [xaiLoading, setXaiLoading] = useState(false);
   const ruleGraphRef = useRef(null);
   const ruleGraphWrapperRef = useRef(null);
   const [ruleGraphSize, setRuleGraphSize] = useState({ width: 640, height: 220 });
 
   useEffect(() => {
     loadPackages();
+    const loadRegistry = async () => {
+      try {
+        const response = await agentAPI.getRegistry();
+        setRegistrySnapshot(response?.data || null);
+      } catch (error) {
+        setRegistrySnapshot(null);
+      }
+    };
+    loadRegistry();
   }, []);
 
   useEffect(() => {
@@ -81,6 +93,43 @@ const RSBManager = () => {
     setGraphLoading(true);
     const timer = setTimeout(() => setGraphLoading(false), 420);
     return () => clearTimeout(timer);
+  }, [selectedPackage]);
+
+  useEffect(() => {
+    const loadXai = async () => {
+      if (!selectedPackage) {
+        setXaiBundle(null);
+        return;
+      }
+      const runId = selectedPackage.run_id || selectedPackage?.manifest?.run_id;
+      if (runId) {
+        setXaiLoading(true);
+        try {
+          const response = await xaiAPI.explainRunFull(runId);
+          setXaiBundle(response?.data?.bundle || null);
+          return;
+        } catch (error) {
+          setXaiBundle(selectedPackage.xai_bundle || null);
+        } finally {
+          setXaiLoading(false);
+        }
+        return;
+      }
+      if (selectedPackage.xai_bundle) {
+        setXaiBundle(selectedPackage.xai_bundle);
+        return;
+      }
+      setXaiLoading(true);
+      try {
+        const response = await xaiAPI.explainPackage(selectedPackage.id);
+        setXaiBundle(response?.data?.bundle || null);
+      } catch (error) {
+        setXaiBundle(null);
+      } finally {
+        setXaiLoading(false);
+      }
+    };
+    loadXai();
   }, [selectedPackage]);
 
   useEffect(() => {
@@ -696,6 +745,52 @@ const RSBManager = () => {
                   </Button>
                 </div>
               </div>
+
+              <Card className="border-border mt-4" data-testid="rsb-registry">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Registry Snapshot</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="border-border">
+                      {registrySnapshot?.teams?.length || 0} teams
+                    </Badge>
+                    <Badge variant="outline" className="border-border">
+                      {registrySnapshot?.agents?.length || 0} agents
+                    </Badge>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+                      <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-2">
+                        <div className="text-white text-xs font-medium">{item.agent_name}</div>
+                        <div className="text-[11px] text-muted-foreground">{item.role}</div>
+                      </div>
+                    ))}
+                    {!registrySnapshot?.delegation_preview?.length && (
+                      <div className="text-xs text-muted-foreground">Registry data not available.</div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border mt-4" data-testid="rsb-xai-linkage">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">XAI Linkage</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs text-muted-foreground">
+                  {xaiBundle ? (
+                    <>
+                      <div className="text-white text-xs font-medium">{xaiBundle.summary}</div>
+                      <div>Evidence Nodes: {xaiBundle.evidence_graph?.nodes?.length || 0}</div>
+                      <div>Counterfactuals: {xaiBundle.counterfactuals?.length || 0}</div>
+                    </>
+                  ) : xaiLoading ? (
+                    <div>Loading XAI bundle...</div>
+                  ) : (
+                    <div>No XAI bundle linked to this RSB yet.</div>
+                  )}
+                </CardContent>
+              </Card>
 
               <div className="grid grid-cols-4 gap-4 mt-6">
                 <Card className="border-border">

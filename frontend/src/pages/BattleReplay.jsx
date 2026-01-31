@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
-import { battleAPI } from "../lib/api";
+import { battleAPI, agentAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   Play,
@@ -33,6 +33,7 @@ import {
   Share2,
   Link2,
   FileDown,
+  FileUp,
 } from "lucide-react";
 
 // Comparison Card Component
@@ -164,9 +165,21 @@ const BattleReplay = () => {
   const [playbackSpeed, setPlaybackSpeed] = useState([1]);
   const [syncPlayback, setSyncPlayback] = useState(true);
   const playbackRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
 
   useEffect(() => {
     loadBattles();
+    const loadRegistry = async () => {
+      try {
+        const response = await agentAPI.getRegistry();
+        setRegistrySnapshot(response?.data || null);
+      } catch (error) {
+        setRegistrySnapshot(null);
+      }
+    };
+    loadRegistry();
     return () => {
       if (playbackRef.current) clearInterval(playbackRef.current);
     };
@@ -247,6 +260,28 @@ const BattleReplay = () => {
     toast.success("Share link copied");
   };
 
+  const handleImportBrc = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await battleAPI.importBrc(formData);
+      toast.success("BRC imported");
+      await loadBattles();
+      if (response?.data) {
+        setAfterBattle(response.data);
+        setBeforeBattle((prev) => prev || response.data);
+      }
+    } catch (error) {
+      toast.error("Failed to import BRC");
+    } finally {
+      setIsImporting(false);
+      event.target.value = "";
+    }
+  };
+
   const handleDownloadSummary = () => {
     const summary = {
       generated_at: new Date().toISOString(),
@@ -297,30 +332,49 @@ const BattleReplay = () => {
             </h1>
             <p className="text-sm text-muted-foreground">Compare battle performance before and after rule changes</p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" data-testid="share-replay-btn">
-                <Share2 className="h-4 w-4 mr-2" />
-                Share
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Share Options</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleCopyShareLink}>
-                <Link2 className="h-4 w-4 mr-2" />
-                Copy replay link
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportGif}>
-                <Share2 className="h-4 w-4 mr-2" />
-                Export highlight GIF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDownloadSummary}>
-                <FileDown className="h-4 w-4 mr-2" />
-                Download summary JSON
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".brc,application/octet-stream"
+              className="hidden"
+              onChange={handleImportBrc}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              data-testid="import-brc-btn"
+            >
+              <FileUp className="h-4 w-4 mr-2" />
+              Import BRC
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" data-testid="share-replay-btn">
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Share Options</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleCopyShareLink}>
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Copy replay link
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportGif}>
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Export highlight GIF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDownloadSummary}>
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Download summary JSON
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
@@ -368,6 +422,35 @@ const BattleReplay = () => {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="px-4 pb-4 border-b border-border bg-zinc-900/50">
+        <Card className="border-border" data-testid="battle-replay-registry">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Registry Snapshot</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="border-border">
+                {registrySnapshot?.teams?.length || 0} teams
+              </Badge>
+              <Badge variant="outline" className="border-border">
+                {registrySnapshot?.agents?.length || 0} agents
+              </Badge>
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+              {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+                <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-2">
+                  <div className="text-white text-xs font-medium">{item.agent_name}</div>
+                  <div className="text-[11px] text-muted-foreground">{item.role}</div>
+                </div>
+              ))}
+              {!registrySnapshot?.delegation_preview?.length && (
+                <div className="text-xs text-muted-foreground">Registry data not available.</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Playback Controls */}
