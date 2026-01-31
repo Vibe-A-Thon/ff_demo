@@ -55,8 +55,15 @@ export const rsbAPI = {
   getAll: () => api.get('/rsb-packages'),
   get: (id) => api.get(`/rsb-packages/${id}`),
   create: (data) => api.post('/rsb-packages', data),
+  upload: (formData) =>
+    api.post('/rsb-packages/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   test: (id) => api.post(`/rsb-packages/${id}/test`),
   merge: (id) => api.post(`/rsb-packages/${id}/merge`),
+  resolveConflicts: (id, data) => api.post(`/rsb-packages/${id}/resolve-conflicts`, data),
+  stage: (id) => api.post(`/rsb-packages/${id}/stage`),
+  export: (id) => api.get(`/rsb-packages/${id}/export`, { responseType: 'blob' }),
   delete: (id) => api.delete(`/rsb-packages/${id}`),
 };
 

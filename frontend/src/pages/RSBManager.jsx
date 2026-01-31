@@ -21,6 +21,7 @@ import {
   XCircle,
   AlertTriangle,
   Eye,
+  Download,
   Trash2,
   Shield,
   Clock,
@@ -49,6 +50,9 @@ const RSBManager = () => {
     rules: [],
     compliance_badges: [],
   });
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [testRunning, setTestRunning] = useState(null);
   const ruleGraphRef = useRef(null);
   const ruleGraphWrapperRef = useRef(null);
@@ -79,6 +83,18 @@ const RSBManager = () => {
     return () => clearTimeout(timer);
   }, [selectedPackage]);
 
+  useEffect(() => {
+    if (!selectedPackage) return;
+    const validation = selectedPackage.validation;
+    if (!validation) {
+      setValidationStatus("idle");
+      setValidationProgress(0);
+      return;
+    }
+    setValidationStatus(validation.valid ? "passed" : "failed");
+    setValidationProgress(100);
+  }, [selectedPackage]);
+
   const loadPackages = async () => {
     try {
       const response = await rsbAPI.getAll();
@@ -89,33 +105,52 @@ const RSBManager = () => {
   };
 
   const handleImport = async () => {
-    if (!importData.name || !importData.version) {
-      toast.error("Please fill in required fields");
+    if (!importFile && (!importData.name || !importData.version)) {
+      toast.error("Please select an .rsb file or fill in required fields");
       return;
     }
-    const tempId = `temp-${Date.now()}`;
-    const optimisticPackage = {
-      ...importData,
-      id: tempId,
-      status: "pending",
-      created_at: new Date().toISOString(),
-    };
-    setPackages((prev) => [optimisticPackage, ...prev]);
+
+    setImporting(true);
     try {
-      const manifest = {
-        rules: importData.rules?.length || 0,
-        patterns: 5,
-        compliance: importData.compliance_badges || [],
-      };
-      const response = await rsbAPI.create({ ...importData, manifest });
-      setPackages((prev) => prev.map((pkg) => (pkg.id === tempId ? response.data : pkg)));
+      if (importFile) {
+        const formData = new FormData();
+        formData.append("file", importFile);
+        if (importData.name) formData.append("name", importData.name);
+        if (importData.version) formData.append("version", importData.version);
+        if (importData.description) formData.append("description", importData.description);
+        if (importData.compliance_badges?.length) {
+          formData.append("compliance_badges", importData.compliance_badges.join(", "));
+        }
+        const response = await rsbAPI.upload(formData);
+        setPackages((prev) => [response.data, ...prev]);
+        setSelectedPackage(response.data);
+      } else {
+        const tempId = `temp-${Date.now()}`;
+        const optimisticPackage = {
+          ...importData,
+          id: tempId,
+          status: "pending",
+          created_at: new Date().toISOString(),
+        };
+        setPackages((prev) => [optimisticPackage, ...prev]);
+        const manifest = {
+          rules: importData.rules?.length || 0,
+          patterns: 5,
+          compliance: importData.compliance_badges || [],
+        };
+        const response = await rsbAPI.create({ ...importData, manifest });
+        setPackages((prev) => prev.map((pkg) => (pkg.id === tempId ? response.data : pkg)));
+        setSelectedPackage(response.data);
+      }
       toast.success("RSB Package imported successfully!");
       setShowImportModal(false);
       setImportData({ name: "", version: "", description: "", manifest: {}, rules: [], compliance_badges: [] });
+      setImportFile(null);
       loadPackages();
     } catch (error) {
-      setPackages((prev) => prev.filter((pkg) => pkg.id !== tempId));
       toast.error("Failed to import package");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -142,6 +177,16 @@ const RSBManager = () => {
     const previousPackages = packages;
     setPackages((prev) => prev.map((pkg) => (pkg.id === packageId ? { ...pkg, status: "merging" } : pkg)));
     try {
+      const pkg = packages.find((item) => item.id === packageId);
+      if (pkg?.conflicts?.length) {
+        const unresolved = pkg.conflicts.filter((conflict) => !conflictDecisions[conflict.id]);
+        if (unresolved.length > 0) {
+          toast.error("Resolve merge conflicts before merging");
+          setPackages(previousPackages);
+          return;
+        }
+        await rsbAPI.resolveConflicts(packageId, conflictDecisions);
+      }
       await rsbAPI.merge(packageId);
       loadPackages();
       toast.success("Package merged successfully!");
@@ -163,6 +208,26 @@ const RSBManager = () => {
     } catch (error) {
       setPackages(previousPackages);
       toast.error("Delete failed");
+    }
+  };
+
+  const handleExport = async (packageId, packageName) => {
+    setExporting(true);
+    try {
+      const response = await rsbAPI.export(packageId);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${packageName || "rsb-package"}.rsb`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("RSB package exported");
+    } catch (error) {
+      toast.error("Export failed");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -197,31 +262,43 @@ const RSBManager = () => {
   };
 
   const triggerValidation = () => {
+    if (!selectedPackage) return;
     setValidationStatus("running");
-    setValidationProgress(10);
-    let progress = 10;
-    const timer = setInterval(() => {
-      progress += 18;
-      setValidationProgress(Math.min(progress, 100));
-      if (progress >= 100) {
-        clearInterval(timer);
-        setValidationStatus("passed");
-        toast.success("Validation passed: package ready for merge");
-      }
-    }, 350);
+    setValidationProgress(30);
+    rsbAPI
+      .get(selectedPackage.id)
+      .then((response) => {
+        const validation = response.data.validation || { valid: true };
+        setValidationProgress(100);
+        setValidationStatus(validation.valid ? "passed" : "failed");
+        setSelectedPackage(response.data);
+        setPackages((prev) => prev.map((pkg) => (pkg.id === response.data.id ? response.data : pkg)));
+        toast[validation.valid ? "success" : "error"](
+          validation.valid ? "Validation passed" : "Validation failed"
+        );
+      })
+      .catch(() => {
+        setValidationStatus("failed");
+        toast.error("Validation failed");
+      });
   };
 
-  const deployStagedQueue = () => {
+  const deployStagedQueue = async () => {
     if (stagedQueue.length === 0) {
       toast.error("No packages staged for deployment");
       return;
     }
     setDeploying(true);
-    setTimeout(() => {
+    try {
+      await Promise.all(stagedQueue.map((pkg) => rsbAPI.stage(pkg.id)));
       toast.success(`Deployment queued for ${stagedQueue.length} packages`);
       setStagedQueue([]);
+      loadPackages();
+    } catch (error) {
+      toast.error("Failed to stage packages");
+    } finally {
       setDeploying(false);
-    }, 600);
+    }
   };
 
   const handleCompareVersion = (version) => {
@@ -237,10 +314,23 @@ const RSBManager = () => {
     });
   };
 
-  const conflictItems = [
-    { id: "conf-1", label: "Rule action mismatch", suggestion: "Require approval" },
-    { id: "conf-2", label: "Version jump detected", suggestion: "Manual review" },
-  ];
+  const conflictItems = useMemo(() => {
+    if (selectedPackage?.conflicts?.length) {
+      return selectedPackage.conflicts.map((conflict) => ({
+        id: conflict.id,
+        label: conflict.type === "rule_id_collision"
+          ? `Rule ID collision: ${conflict.rule_id}`
+          : conflict.type || "Conflict detected",
+        suggestion: conflict.existing_version
+          ? `Existing version ${conflict.existing_version}`
+          : "Manual review",
+      }));
+    }
+    return [
+      { id: "conf-1", label: "Rule action mismatch", suggestion: "Require approval" },
+      { id: "conf-2", label: "Version jump detected", suggestion: "Manual review" },
+    ];
+  }, [selectedPackage]);
 
   const versionTimeline = selectedPackage
     ? [
@@ -433,6 +523,16 @@ const RSBManager = () => {
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
+                      <label className="text-sm text-muted-foreground">RSB File (.rsb) *</label>
+                      <Input
+                        type="file"
+                        accept=".rsb,.zip"
+                        onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                        data-testid="import-file-input"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Optional: override metadata below.</p>
+                    </div>
+                    <div>
                       <label className="text-sm text-muted-foreground">Package Name *</label>
                       <Input
                         value={importData.name}
@@ -474,6 +574,7 @@ const RSBManager = () => {
                     <Button
                       onClick={handleImport}
                       className="w-full"
+                      disabled={importing}
                       data-testid="confirm-import-btn"
                       data-explain="Confirm import"
                       data-explain-title="Import validation"
@@ -482,7 +583,7 @@ const RSBManager = () => {
                       data-explain-evidence="Package metadata,Checksum,Policy badges"
                     >
                       <Package className="h-4 w-4 mr-2" />
-                      Import Package
+                      {importing ? "Importing..." : "Import Package"}
                     </Button>
                   </div>
                 </DialogContent>
@@ -579,6 +680,15 @@ const RSBManager = () => {
                   </Button>
                   <Button
                     variant="outline"
+                    onClick={() => handleExport(selectedPackage.id, selectedPackage.name)}
+                    disabled={exporting}
+                    data-testid="rsb-export"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {exporting ? "Exporting" : "Export"}
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => handleDelete(selectedPackage.id)}
                     data-testid="rsb-delete"
                   >
@@ -606,6 +716,20 @@ const RSBManager = () => {
                       <CheckCircle2 className="h-4 w-4 mr-2" />
                       Run Validation
                     </Button>
+                    {selectedPackage.validation?.errors?.length > 0 && (
+                      <div className="text-xs text-red-400 space-y-1">
+                        {selectedPackage.validation.errors.map((err) => (
+                          <div key={err}>• {err}</div>
+                        ))}
+                      </div>
+                    )}
+                    {selectedPackage.validation?.warnings?.length > 0 && (
+                      <div className="text-xs text-yellow-400 space-y-1">
+                        {selectedPackage.validation.warnings.map((warn) => (
+                          <div key={warn}>• {warn}</div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
                 <Card className="border-border">
@@ -901,9 +1025,22 @@ const RSBManager = () => {
                       <CardTitle>Compliance Documentation</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="p-4 bg-black/30 rounded-lg text-sm text-muted-foreground">
-                        {selectedPackage.description || "Compliance narrative not provided. Please attach compliance docs to this package."}
-                      </div>
+                      {selectedPackage.compliance_docs?.length > 0 ? (
+                        <div className="space-y-3">
+                          {selectedPackage.compliance_docs.map((doc) => (
+                            <div key={doc.name} className="p-3 bg-black/30 rounded-lg">
+                              <div className="text-xs text-muted-foreground font-mono mb-2">{doc.name}</div>
+                              <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-56 overflow-auto">
+                                {typeof doc.content === "string" ? doc.content : JSON.stringify(doc.content, null, 2)}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-black/30 rounded-lg text-sm text-muted-foreground">
+                          {selectedPackage.description || "Compliance narrative not provided. Please attach compliance docs to this package."}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </TabsContent>
