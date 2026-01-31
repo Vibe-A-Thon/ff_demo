@@ -1,0 +1,160 @@
+from fastapi import APIRouter, HTTPException
+from app.db import db
+from app.models import WorkflowAdvanceRequest, WorkflowDecisionRequest, WorkflowAutoRunRequest
+from app.run_helpers import record_run_event
+from app.workflow_service import (
+    WORKFLOW_STATES,
+    APPROVAL_STATES,
+    TERMINAL_WORKFLOW_STATES,
+    advance_workflow,
+    decide_workflow,
+)
+
+router = APIRouter()
+
+@router.get("/workflow/{run_id}")
+async def get_workflow(run_id: str):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {
+        "run_id": run_id,
+        "workflow_state": run.get("workflow_state", "incident_created"),
+        "workflow_status": run.get("workflow_status", "running"),
+        "workflow_history": run.get("workflow_history", []),
+        "pending_approval": run.get("pending_approval"),
+        "is_terminal": run.get("workflow_state") in TERMINAL_WORKFLOW_STATES,
+        "approval_required": run.get("workflow_state") in APPROVAL_STATES,
+    }
+
+@router.post("/workflow/{run_id}/advance")
+async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    current_state = run.get("workflow_state", "incident_created")
+    if current_state not in WORKFLOW_STATES:
+        raise HTTPException(status_code=400, detail="Unknown workflow state")
+
+    if current_state in APPROVAL_STATES:
+        return {
+            "run_id": run_id,
+            "workflow_state": current_state,
+            "status": "awaiting_approval",
+        }
+
+    next_state, transitions = await advance_workflow(run, payload.actor_id, payload.outcome, payload.notes)
+    if not transitions:
+        return {"run_id": run_id, "workflow_state": current_state, "status": "no_transition"}
+
+    await record_run_event(run_id, "workflow.state_changed", {"from": current_state, "to": next_state})
+    await db.runs.update_one(
+        {"id": run_id},
+        {
+            "$set": {
+                "workflow_state": next_state,
+                "workflow_status": "completed" if next_state in TERMINAL_WORKFLOW_STATES else "running",
+            },
+            "$push": {"workflow_history": {"$each": transitions}},
+        },
+    )
+
+    return {
+        "run_id": run_id,
+        "workflow_state": next_state,
+        "transitions": transitions,
+    }
+
+@router.post("/workflow/{run_id}/decision")
+async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    current_state = run.get("workflow_state", "incident_created")
+    if current_state not in APPROVAL_STATES:
+        raise HTTPException(status_code=400, detail="Current state does not require approval")
+
+    next_state, entry = await decide_workflow(run, payload.actor_id, payload.actor_role, payload.decision, payload.notes)
+    if next_state == current_state:
+        return {"run_id": run_id, "workflow_state": current_state, "message": entry.get("message")}
+
+    await record_run_event(
+        run_id,
+        "workflow.approval_decision",
+        {"from": current_state, "to": next_state, "decision": payload.decision},
+    )
+    await db.runs.update_one(
+        {"id": run_id},
+        {
+            "$set": {
+                "workflow_state": next_state,
+                "workflow_status": "completed" if next_state in TERMINAL_WORKFLOW_STATES else "running",
+            },
+            "$push": {"workflow_history": entry},
+        },
+    )
+
+    return {
+        "run_id": run_id,
+        "workflow_state": next_state,
+        "decision": payload.decision,
+    }
+
+@router.post("/workflow/{run_id}/auto-run")
+async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    current_state = run.get("workflow_state", "incident_created")
+    if current_state not in WORKFLOW_STATES:
+        raise HTTPException(status_code=400, detail="Unknown workflow state")
+
+    transitions = []
+    steps = 0
+    while current_state not in TERMINAL_WORKFLOW_STATES and current_state not in APPROVAL_STATES:
+        if steps >= payload.max_steps:
+            break
+        next_state, new_entries = await advance_workflow(run, payload.actor_id, payload.outcome, payload.notes)
+        if not new_entries:
+            break
+        await record_run_event(run_id, "workflow.state_changed", {"from": current_state, "to": next_state})
+        transitions.extend(new_entries)
+        current_state = next_state
+        run["workflow_state"] = current_state
+        steps += 1
+
+    pending_approval = None
+    workflow_status = "running"
+    if current_state in APPROVAL_STATES:
+        workflow_status = "awaiting_approval"
+        pending_approval = await db.approvals.find_one(
+            {"resource_type": "run", "resource_id": run_id, "action": current_state, "status": "pending"},
+            {"_id": 0},
+        )
+    if current_state in TERMINAL_WORKFLOW_STATES:
+        workflow_status = "completed"
+
+    if transitions:
+        await db.runs.update_one(
+            {"id": run_id},
+            {
+                "$set": {
+                    "workflow_state": current_state,
+                    "workflow_status": workflow_status,
+                    "pending_approval": pending_approval,
+                },
+                "$push": {"workflow_history": {"$each": transitions}},
+            },
+        )
+
+    return {
+        "run_id": run_id,
+        "workflow_state": current_state,
+        "workflow_status": workflow_status,
+        "approval_required": current_state in APPROVAL_STATES,
+        "is_terminal": current_state in TERMINAL_WORKFLOW_STATES,
+        "transitions": transitions,
+    }

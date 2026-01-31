@@ -223,6 +223,10 @@ class RunSession(BaseModel):
     mode: str = "auto"
     status: str = "running"
     current_stage: str = "init"
+    workflow_state: str = "incident_created"
+    workflow_status: str = "running"
+    workflow_history: List[Dict[str, Any]] = []
+    pending_approval: Optional[Dict[str, Any]] = None
     started_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     ended_at: Optional[str] = None
 
@@ -233,6 +237,24 @@ class RunEvent(BaseModel):
     event_type: str
     payload: Dict[str, Any] = {}
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+class WorkflowAdvanceRequest(BaseModel):
+    actor_id: str
+    mode: str = "manual"
+    outcome: Optional[str] = None
+    notes: Optional[str] = None
+
+class WorkflowDecisionRequest(BaseModel):
+    actor_id: str
+    actor_role: Optional[str] = None
+    decision: str = "approved"
+    notes: Optional[str] = None
+
+class WorkflowAutoRunRequest(BaseModel):
+    actor_id: str
+    max_steps: int = 25
+    outcome: Optional[str] = None
+    notes: Optional[str] = None
 
 class AgentTask(BaseModel):
     model_config = ConfigDict(extra="ignore")

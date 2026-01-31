@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -17,10 +18,11 @@ import {
 } from "lucide-react";
 
 const quickActions = [
-  { id: "start-battle", label: "Start Battle", icon: Swords, intent: "red", roles: ["analyst", "engineer", "admin"] },
-  { id: "open-evidence", label: "Open Evidence", icon: FileSearch, intent: "gold", roles: ["analyst", "compliance", "admin"] },
-  { id: "review-diff", label: "Review Diff", icon: GitCompare, intent: "orange", roles: ["engineer", "admin"] },
-  { id: "configure", label: "Configure", icon: Settings, intent: "white", roles: ["admin", "compliance"] },
+  { id: "start-battle", label: "Start Battle", icon: Swords, intent: "red", path: "/war-room", roles: ["analyst", "engineer", "admin"] },
+  { id: "lifecycle-auto", label: "Lifecycle Auto-Run", icon: Activity, intent: "blue", path: "/war-room?lifecycle=auto", roles: ["analyst", "engineer", "admin"] },
+  { id: "open-evidence", label: "Open Evidence", icon: FileSearch, intent: "gold", path: "/evidence", roles: ["analyst", "compliance", "admin"] },
+  { id: "review-diff", label: "Review Diff", icon: GitCompare, intent: "orange", path: "/diff-viewer", roles: ["engineer", "admin"] },
+  { id: "configure", label: "Configure", icon: Settings, intent: "white", path: "/settings", roles: ["admin", "compliance"] },
 ];
 
 const kpis = [
@@ -72,9 +74,11 @@ const badgeStyles = {
 
 const DashboardHome = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const actionStyles = useMemo(
     () => ({
       red: "border-red-500/40 text-red-300 hover:bg-red-500/10",
+      blue: "border-blue-500/40 text-blue-300 hover:bg-blue-500/10",
       gold: "border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10",
       orange: "border-orange-500/40 text-orange-300 hover:bg-orange-500/10",
       white: "border-slate-200/40 text-slate-200 hover:bg-slate-200/10",
@@ -146,6 +150,7 @@ const DashboardHome = () => {
                 key={action.id}
                 variant="outline"
                 className={`justify-start gap-3 border ${actionStyles[action.intent]}`}
+                onClick={() => action.path && navigate(action.path)}
                 data-testid={`dashboard-action-${action.id}`}
               >
                 <action.icon className="h-4 w-4" />

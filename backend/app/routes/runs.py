@@ -1,10 +1,16 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
-from app.agents import RED_AGENT, BLUE_AGENT, GOLD_AGENT
 from app.db import db
 from app.models import RunSession, RunStartRequest
 from app.run_helpers import record_run_event
 from app.tooling import derive_seed
+from app.workflow_service import (
+    WAR_LOOP_STAGES,
+    next_war_loop_stage,
+    execute_war_loop_stage,
+    stage_is_approved,
+    ensure_stage_approval,
+)
 
 router = APIRouter()
 
@@ -30,47 +36,96 @@ async def step_run(run_id: str):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
+    current_stage = run.get("current_stage") or "init"
+    if current_stage == "init":
+        current_stage = WAR_LOOP_STAGES[0]
+
+    if current_stage == "done":
+        return {"run_id": run_id, "status": "completed"}
+
     step_index = int(run.get("step_count", 0)) + 1
     base_seed = int(run.get("seed", int(datetime.now(timezone.utc).timestamp())))
-    step_seed = derive_seed(base_seed, f"step-{step_index}")
+    step_seed = derive_seed(base_seed, f"{current_stage}-{step_index}")
 
-    await record_run_event(run_id, "stage.changed", {"stage": "red_simulate", "step": step_index})
-    red_trace = await RED_AGENT.emit({"scenario_id": run.get("scenario_id")}, step_seed)
-    simulated = red_trace.outputs.get("simulate_transactions", {})
-    attacked = red_trace.outputs.get("apply_attack", {})
+    if current_stage in {"orange_review_approve", "white_compliance_audit"}:
+        approved = await stage_is_approved(run_id, current_stage)
+        if not approved:
+            approval = await ensure_stage_approval(run_id, current_stage, requestor_id="system")
+            await record_run_event(
+                run_id,
+                "stage.pending_approval",
+                {"stage": current_stage, "step": step_index, "approval_id": (approval or {}).get("id")},
+            )
+            await db.runs.update_one(
+                {"id": run_id},
+                {
+                    "$set": {
+                        "current_stage": current_stage,
+                        "status": "awaiting_approval",
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                },
+            )
+            return {"run_id": run_id, "stage": current_stage, "status": "awaiting_approval"}
 
-    events = attacked.get("attacked_events") or simulated.get("events") or []
-    await record_run_event(run_id, "agent.output", {"agent": red_trace.agent_id, "team": red_trace.team_id, "outputs": red_trace.outputs})
+    await record_run_event(run_id, "stage.changed", {"stage": current_stage, "step": step_index})
+    stage_payload, next_override = await execute_war_loop_stage(run, current_stage, step_seed)
 
-    await record_run_event(run_id, "stage.changed", {"stage": "blue_detect", "step": step_index})
-    blue_trace = await BLUE_AGENT.emit({"events": events}, step_seed)
-    scored = blue_trace.outputs.get("score_risk", {})
-    response = blue_trace.outputs.get("respond_actions", {})
-    await record_run_event(run_id, "agent.output", {"agent": blue_trace.agent_id, "team": blue_trace.team_id, "outputs": blue_trace.outputs})
-
-    decision = response.get("decision", "monitor")
-    await record_run_event(run_id, "stage.changed", {"stage": "gold_explain", "step": step_index})
-    gold_trace = await GOLD_AGENT.emit({"decision": decision}, step_seed)
-    await record_run_event(run_id, "agent.output", {"agent": gold_trace.agent_id, "team": gold_trace.team_id, "outputs": gold_trace.outputs})
+    if stage_payload.get("agent"):
+        agent_info = stage_payload["agent"]
+        await record_run_event(
+            run_id,
+            "agent.output",
+            {"agent": agent_info.get("agent_id"), "team": agent_info.get("team_id"), "outputs": stage_payload.get("outputs")},
+        )
 
     update_fields = {
-        "current_stage": "gold_explain",
+        "current_stage": current_stage,
         "step_count": step_index,
-        "last_decision": decision,
-        "last_metrics": {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "status": "running",
+    }
+
+    if current_stage == "red_simulate_attack":
+        outputs = stage_payload.get("outputs", {})
+        simulated = outputs.get("simulate_transactions", {})
+        attacked = outputs.get("apply_attack", {})
+        events = attacked.get("attacked_events") or simulated.get("events") or []
+        update_fields["last_events"] = events
+    elif current_stage == "blue_detect_respond":
+        outputs = stage_payload.get("outputs", {})
+        scored = outputs.get("score_risk", {})
+        response = outputs.get("respond_actions", {})
+        decision = response.get("decision", "monitor")
+        update_fields["last_decision"] = decision
+        update_fields["last_metrics"] = {
             "avg_score": scored.get("avg_score", 0),
             "decision": decision,
             "actions": len(response.get("actions", [])),
-        },
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
+        }
+
+    if next_override:
+        await record_run_event(run_id, "stage.failed", {"stage": current_stage, "next": next_override, "step": step_index})
+        update_fields["current_stage"] = next_override
+        await db.runs.update_one({"id": run_id}, {"$set": update_fields})
+        return {
+            "run_id": run_id,
+            "stage": current_stage,
+            "status": "failed",
+            "loop_back": next_override,
+            "payload": stage_payload,
+        }
+
+    next_stage = next_war_loop_stage(current_stage)
+    update_fields["current_stage"] = next_stage
+    if next_stage == "done":
+        update_fields["status"] = "completed"
 
     await db.runs.update_one({"id": run_id}, {"$set": update_fields})
     return {
         "run_id": run_id,
-        "step": step_index,
-        "red": red_trace.model_dump(),
-        "blue": blue_trace.model_dump(),
-        "gold": gold_trace.model_dump(),
-        "metrics": update_fields["last_metrics"],
+        "stage": current_stage,
+        "next_stage": next_stage,
+        "payload": stage_payload,
+        "metrics": update_fields.get("last_metrics"),
     }

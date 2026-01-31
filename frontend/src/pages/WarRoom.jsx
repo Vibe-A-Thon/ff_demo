@@ -10,7 +10,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
-import { battleAPI, aiAPI, createBattleWebSocket } from "../lib/api";
+import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI } from "../lib/api";
 import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
 import {
@@ -265,6 +265,7 @@ const useAnimatedNumber = (value, duration = 800) => {
 
 const WarRoom = () => {
   const location = useLocation();
+  const lifecycleAutoRef = useRef(false);
   const initialBattleId = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return location.state?.battleId || params.get("battleId");
@@ -282,6 +283,12 @@ const WarRoom = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentTurn, setCurrentTurn] = useState(0);
   const [wsConnected, setWsConnected] = useState(false);
+  const [workflowRunId, setWorkflowRunId] = useState("");
+  const [workflowState, setWorkflowState] = useState("incident_created");
+  const [workflowStatus, setWorkflowStatus] = useState("idle");
+  const [workflowHistory, setWorkflowHistory] = useState([]);
+  const [workflowApprovalRequired, setWorkflowApprovalRequired] = useState(false);
+  const [workflowBusy, setWorkflowBusy] = useState(false);
   const [blockedBursts, setBlockedBursts] = useState([]);
   const [scenarioName, setScenarioName] = useState("Custom Scenario");
   const [scenarioSteps, setScenarioSteps] = useState([]);
@@ -704,6 +711,91 @@ const WarRoom = () => {
     setAutoPlay(false);
   };
 
+  const syncWorkflow = useCallback(async (runId) => {
+    if (!runId) return;
+    const response = await workflowAPI.get(runId);
+    const data = response?.data;
+    if (!data) return;
+    setWorkflowState(data.workflow_state || "incident_created");
+    setWorkflowStatus(data.workflow_status || "running");
+    setWorkflowApprovalRequired(Boolean(data.approval_required));
+    setWorkflowHistory(data.workflow_history || []);
+  }, []);
+
+  const handleLifecycleAutoRun = useCallback(async () => {
+    setWorkflowBusy(true);
+    try {
+      let runId = workflowRunId;
+      if (!runId) {
+        const startResponse = await runAPI.start({ scenario_id: "war-room", mode: "auto" });
+        runId = startResponse?.data?.id;
+        setWorkflowRunId(runId || "");
+      }
+      if (!runId) {
+        toast.error("Failed to create workflow run");
+        return;
+      }
+      const autoResponse = await workflowAPI.autoRun(runId, {
+        actor_id: "current-user",
+        max_steps: 25,
+      });
+      const data = autoResponse?.data;
+      setWorkflowState(data?.workflow_state || "incident_created");
+      setWorkflowStatus(data?.workflow_status || "running");
+      setWorkflowApprovalRequired(Boolean(data?.approval_required));
+      if (data?.transitions?.length) {
+        setWorkflowHistory((prev) => [...prev, ...data.transitions]);
+      }
+      toast.success("Lifecycle workflow auto-run complete");
+    } catch (error) {
+      toast.error("Failed to auto-run lifecycle workflow");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }, [workflowRunId]);
+
+  const handleWorkflowAdvance = useCallback(async () => {
+    if (!workflowRunId) {
+      toast.error("Start a workflow run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      const response = await workflowAPI.advance(workflowRunId, {
+        actor_id: "current-user",
+        mode: "manual",
+      });
+      const data = response?.data;
+      setWorkflowState(data?.workflow_state || workflowState);
+      if (data?.transitions?.length) {
+        setWorkflowHistory((prev) => [...prev, ...data.transitions]);
+      }
+      await syncWorkflow(workflowRunId);
+      toast.success("Workflow advanced");
+    } catch (error) {
+      toast.error("Failed to advance workflow");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }, [workflowRunId, workflowState, syncWorkflow]);
+
+  const handleWorkflowRefresh = useCallback(async () => {
+    try {
+      await syncWorkflow(workflowRunId);
+    } catch (error) {
+      toast.error("Failed to refresh workflow state");
+    }
+  }, [workflowRunId, syncWorkflow]);
+
+  useEffect(() => {
+    if (lifecycleAutoRef.current) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("lifecycle") === "auto") {
+      lifecycleAutoRef.current = true;
+      handleLifecycleAutoRun();
+    }
+  }, [location.search, handleLifecycleAutoRun]);
+
   const metrics = selectedBattle?.metrics || {};
   const animatedMoneySaved = useAnimatedNumber(metrics.money_saved || 0);
   const displayMetrics = { ...metrics, money_saved: animatedMoneySaved };
@@ -899,6 +991,81 @@ const WarRoom = () => {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-lifecycle">
+        <Card className="border-border">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">Lifecycle Workflow Controls</CardTitle>
+            {workflowApprovalRequired && (
+              <Badge className="bg-yellow-500/15 text-yellow-300 border border-yellow-500/30">
+                Approval Required
+              </Badge>
+            )}
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-[1.2fr_1fr]">
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between">
+                <span>Run ID</span>
+                <span className="text-white truncate max-w-[220px]">
+                  {workflowRunId || "Not started"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>State</span>
+                <Badge className="bg-slate-500/15 text-slate-200 border border-slate-500/30">
+                  {workflowState}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Status</span>
+                <Badge className={workflowStatus === "awaiting_approval" ? "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30" : "bg-blue-500/15 text-blue-300 border border-blue-500/30"}>
+                  {workflowStatus}
+                </Badge>
+              </div>
+              <ScrollArea className="h-16 pr-3">
+                <ul className="mt-2 space-y-1">
+                  {(workflowHistory || []).slice(-4).map((item, idx) => (
+                    <li key={`${item.state}-${idx}`} className="flex items-center justify-between">
+                      <span className="text-white">{item.state}</span>
+                      <span>{item.timestamp?.slice(11, 19)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                className="gap-2"
+                onClick={handleLifecycleAutoRun}
+                disabled={workflowBusy}
+                data-testid="war-room-workflow-auto"
+              >
+                <Play className="h-4 w-4" />
+                Auto-Run
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleWorkflowAdvance}
+                disabled={workflowBusy}
+                data-testid="war-room-workflow-advance"
+              >
+                <SkipForward className="h-4 w-4" />
+                Advance
+              </Button>
+              <Button
+                variant="secondary"
+                className="gap-2 col-span-2"
+                onClick={handleWorkflowRefresh}
+                disabled={!workflowRunId}
+                data-testid="war-room-workflow-refresh"
+              >
+                Refresh State
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Metric Drilldown */}

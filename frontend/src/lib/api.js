@@ -36,6 +36,21 @@ export const battleAPI = {
   delete: (id) => api.delete(`/battles/${id}`),
 };
 
+// Run (War Loop) APIs
+export const runAPI = {
+  start: (data) => api.post('/runs/start', data),
+  get: (id) => api.get(`/runs/${id}`),
+  step: (id) => api.post(`/runs/${id}/step`),
+};
+
+// Workflow APIs
+export const workflowAPI = {
+  get: (runId) => api.get(`/workflow/${runId}`),
+  advance: (runId, data) => api.post(`/workflow/${runId}/advance`, data),
+  decide: (runId, data) => api.post(`/workflow/${runId}/decision`, data),
+  autoRun: (runId, data) => api.post(`/workflow/${runId}/auto-run`, data),
+};
+
 // Rule APIs
 export const ruleAPI = {
   getAll: () => api.get('/rules'),
