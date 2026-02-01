@@ -943,6 +943,56 @@ const WarRoom = () => {
     }
   }, [workflowRunId, syncWorkflow]);
 
+  const handleRunReplay = useCallback(async () => {
+    if (!workflowRunId) {
+      toast.error("Start a lifecycle run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      await runAPI.replay(workflowRunId, { reset_events: true, clear_agent_tasks: true, clear_agent_artifacts: true });
+      await syncWorkflow(workflowRunId);
+      toast.success("Run replayed");
+    } catch (error) {
+      toast.error("Failed to replay run");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }, [workflowRunId, syncWorkflow]);
+
+  const handleDeterministicReplay = useCallback(async () => {
+    if (!workflowRunId) {
+      toast.error("Start a lifecycle run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      const runResponse = await runAPI.get(workflowRunId);
+      const seedValue = runResponse?.data?.run?.seed;
+      await runAPI.replay(workflowRunId, {
+        seed: seedValue,
+        reset_events: true,
+        clear_agent_tasks: true,
+        clear_agent_artifacts: true,
+      });
+
+      let nextStage = "init";
+      let stepGuard = 0;
+      while (nextStage !== "done" && stepGuard < 25) {
+        const stepResponse = await runAPI.step(workflowRunId);
+        nextStage = stepResponse?.data?.next_stage || "done";
+        stepGuard += 1;
+      }
+
+      await syncWorkflow(workflowRunId);
+      toast.success("Deterministic replay completed");
+    } catch (error) {
+      toast.error("Failed to replay war loop");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }, [workflowRunId, syncWorkflow]);
+
   const handleExportBrc = useCallback(async () => {
     if (!workflowRunId) {
       toast.error("Start a lifecycle run first");
@@ -1383,6 +1433,26 @@ const WarRoom = () => {
               >
                 <RefreshCcw className="h-4 w-4" />
                 Reset
+              </Button>
+              <Button
+                variant="secondary"
+                className="gap-2"
+                onClick={handleDeterministicReplay}
+                disabled={!workflowRunId || workflowBusy}
+                data-testid="war-room-workflow-replay-full"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Replay (Seeded)
+              </Button>
+              <Button
+                variant="secondary"
+                className="gap-2"
+                onClick={handleRunReplay}
+                disabled={!workflowRunId || workflowBusy}
+                data-testid="war-room-run-replay"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Replay
               </Button>
               <Button
                 variant="secondary"

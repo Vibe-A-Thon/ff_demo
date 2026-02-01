@@ -221,6 +221,14 @@ class RunStartRequest(BaseModel):
     seed: Optional[int] = None
     mode: str = "auto"
 
+
+class RunReplayRequest(BaseModel):
+    seed: Optional[int] = None
+    mode: Optional[str] = None
+    reset_events: bool = True
+    clear_agent_tasks: bool = False
+    clear_agent_artifacts: bool = False
+
 class RunSession(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -279,6 +287,9 @@ class AgentTask(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     seed: Optional[int] = None
+    trace_id: Optional[str] = None
+    span_id: Optional[str] = None
+    parent_span_id: Optional[str] = None
 
 class AgentResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -287,6 +298,49 @@ class AgentResult(BaseModel):
     metrics: Dict[str, Any] = {}
     decision_trace: List[str] = []
     logs_ref: Optional[str] = None
+    trace_id: Optional[str] = None
+
+
+class AgentArtifact(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    artifact_id: str
+    artifact_type: str
+    schema_version: str = "1.0"
+    agent_id: str
+    team_id: str
+    task_id: str
+    run_id: str
+    payload: Dict[str, Any] = {}
+    lineage: Dict[str, Any] = {}
+    safety_flags: Dict[str, Any] = {}
+    hash: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    trace_id: Optional[str] = None
+    span_id: Optional[str] = None
+
+
+class AgentRouteRequest(BaseModel):
+    run_id: str
+    team_id: str
+    objective: str
+    task_type: str = "agent_task"
+    inputs: List[Dict[str, Any]] = []
+    params: Dict[str, Any] = {}
+    max_agents: int = 3
+    auto_execute: bool = False
+    seed: Optional[int] = None
+
+
+class AgentOrchestrationRequest(BaseModel):
+    run_id: str
+    objective: str
+    teams: List[str]
+    task_type: str = "orchestration_task"
+    inputs: List[Dict[str, Any]] = []
+    params: Dict[str, Any] = {}
+    max_agents_per_team: int = 2
+    auto_execute: bool = False
+    seed: Optional[int] = None
 
 class EvidenceItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -406,11 +460,13 @@ class AgentProfile(BaseModel):
     agent_name: str
     team_id: str
     role: str
+    version: str = "1.0"
     capabilities: List[str] = []
     inputs: List[str] = []
     outputs: List[str] = []
     operating_mode: str = "manual"
     guardrails: List[str] = []
+    allowed_tools: List[str] = []
     status: str = "idle"
     metrics: Dict[str, Any] = {}
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -420,11 +476,13 @@ class AgentProfileCreate(BaseModel):
     agent_name: str
     team_id: str
     role: str
+    version: str = "1.0"
     capabilities: List[str] = []
     inputs: List[str] = []
     outputs: List[str] = []
     operating_mode: str = "manual"
     guardrails: List[str] = []
+    allowed_tools: List[str] = []
     status: str = "idle"
     metrics: Dict[str, Any] = {}
 

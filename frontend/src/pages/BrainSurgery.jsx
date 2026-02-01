@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../c
 import { Switch } from "../components/ui/switch";
 import { Progress } from "../components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { knowledgeAPI, ragAPI, settingsAPI } from "../lib/api";
+import { knowledgeAPI, ragAPI, settingsAPI, agentAPI, graphAPI, evidenceAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   Plus,
@@ -73,6 +73,24 @@ const BrainSurgery = () => {
   const [perfCpu, setPerfCpu] = useState(4);
   const [ragGraphQuality, setRagGraphQuality] = useState(null);
   const [ragSettings, setRagSettings] = useState(null);
+  const [lineageArtifactId, setLineageArtifactId] = useState("");
+  const [lineageLoading, setLineageLoading] = useState(false);
+  const [lineagePayload, setLineagePayload] = useState(null);
+  const [lineageRunId, setLineageRunId] = useState("");
+  const [evidencePacks, setEvidencePacks] = useState([]);
+  const [selectedPackId, setSelectedPackId] = useState("");
+  const [lineageGraphData, setLineageGraphData] = useState({ nodes: [], links: [] });
+  const [lineageGraphLoading, setLineageGraphLoading] = useState(false);
+  const [lineageViewEnabled, setLineageViewEnabled] = useState(false);
+  const [lineageTypeFilters, setLineageTypeFilters] = useState({
+    run: true,
+    stage: true,
+    task: true,
+    agent: true,
+    artifact: true,
+    evidence_pack: true,
+  });
+  const [lineageGroupByType, setLineageGroupByType] = useState(true);
   const graphRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -122,6 +140,22 @@ const BrainSurgery = () => {
     window.addEventListener("resize", updateDimensions);
     return () => window.removeEventListener("resize", updateDimensions);
   }, []);
+
+  useEffect(() => {
+    const loadEvidencePacks = async () => {
+      try {
+        const response = await evidenceAPI.getAll();
+        const packs = response?.data || [];
+        setEvidencePacks(packs);
+        if (packs.length > 0 && !selectedPackId) {
+          setSelectedPackId(packs[0].id);
+        }
+      } catch (error) {
+        setEvidencePacks([]);
+      }
+    };
+    loadEvidencePacks();
+  }, [selectedPackId]);
 
   useEffect(() => {
     const loadRagQuality = async () => {
@@ -233,6 +267,111 @@ const BrainSurgery = () => {
       toast.error("Failed to delete node");
     }
   };
+
+  const loadLineage = async (artifactIdOverride) => {
+    const artifactId = (artifactIdOverride || lineageArtifactId).trim();
+    if (!artifactId) {
+      toast.error("Enter an artifact id to load lineage");
+      return;
+    }
+    setLineageLoading(true);
+    try {
+      const response = await agentAPI.getLineage(artifactId);
+      setLineagePayload(response?.data || null);
+      toast.success("Lineage loaded");
+    } catch (error) {
+      setLineagePayload(null);
+      toast.error("Failed to load lineage");
+    } finally {
+      setLineageLoading(false);
+    }
+  };
+
+  const loadLineageGraph = async () => {
+    if (!lineageRunId.trim()) {
+      toast.error("Enter a run id to load lineage graph");
+      return;
+    }
+    setLineageGraphLoading(true);
+    try {
+      const response = await graphAPI.getRunLineage(lineageRunId.trim());
+      const graph = response?.data?.graph || response?.data || { nodes: [], edges: [] };
+      setLineageGraphData({
+        nodes: graph.nodes || [],
+        links: graph.edges || [],
+      });
+      toast.success("Lineage graph loaded");
+    } catch (error) {
+      setLineageGraphData({ nodes: [], links: [] });
+      toast.error("Failed to load lineage graph");
+    } finally {
+      setLineageGraphLoading(false);
+    }
+  };
+
+  const loadEvidenceLineageGraph = async (packId) => {
+    if (!packId) return;
+    setLineageGraphLoading(true);
+    try {
+      const response = await graphAPI.getEvidenceLineage(packId);
+      const graph = response?.data?.graph || response?.data || { nodes: [], edges: [] };
+      const nodes = graph.nodes || [];
+      const edges = graph.edges || [];
+      const filteredNodes = nodes.filter((node) => lineageTypeFilters[node.type] ?? true);
+      const allowedIds = new Set(filteredNodes.map((node) => node.id));
+      const filteredLinks = edges.filter((edge) => allowedIds.has(edge.source) && allowedIds.has(edge.target));
+
+      if (lineageGroupByType) {
+        const typeOrder = ["run", "stage", "task", "agent", "artifact", "evidence_pack"];
+        const columns = new Map(typeOrder.map((type, index) => [type, index]));
+        const columnCounts = new Map(typeOrder.map((type) => [type, 0]));
+        const groupedNodes = filteredNodes.map((node) => {
+          const columnIndex = columns.get(node.type) ?? 0;
+          const rowIndex = columnCounts.get(node.type) ?? 0;
+          columnCounts.set(node.type, rowIndex + 1);
+          return {
+            ...node,
+            fx: 120 + columnIndex * 120,
+            fy: 40 + rowIndex * 40,
+          };
+        });
+        setLineageGraphData({ nodes: groupedNodes, links: filteredLinks });
+      } else {
+        setLineageGraphData({ nodes: filteredNodes, links: filteredLinks });
+      }
+      if (!lineageViewEnabled) {
+        setLineageViewEnabled(true);
+      }
+    } catch (error) {
+      setLineageGraphData({ nodes: [], links: [] });
+    } finally {
+      setLineageGraphLoading(false);
+    }
+  };
+
+  const deriveArtifactId = useCallback((node) => {
+    if (!node) return "";
+    return (
+      node?.data?.artifact_id ||
+      node?.data?.artifactId ||
+      node?.data?.artifact ||
+      ""
+    );
+  }, []);
+
+  useEffect(() => {
+    const artifactId = deriveArtifactId(selectedNode);
+    if (artifactId && artifactId !== lineageArtifactId) {
+      setLineageArtifactId(artifactId);
+      loadLineage(artifactId);
+    }
+  }, [selectedNode, deriveArtifactId, lineageArtifactId]);
+
+  useEffect(() => {
+    if (selectedPackId) {
+      loadEvidenceLineageGraph(selectedPackId);
+    }
+  }, [selectedPackId]);
 
   const handleZoom = (direction) => {
     if (graphRef.current) {
@@ -385,6 +524,40 @@ const BrainSurgery = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <Select value={selectedPackId} onValueChange={setSelectedPackId}>
+            <SelectTrigger className="w-44" data-testid="lineage-pack-select">
+              <SelectValue placeholder="Evidence pack" />
+            </SelectTrigger>
+            <SelectContent>
+              {evidencePacks.map((pack) => (
+                <SelectItem key={pack.id} value={pack.id}>
+                  {pack.id.slice(0, 8)}...
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            value={lineageRunId}
+            onChange={(event) => setLineageRunId(event.target.value)}
+            placeholder="Run id"
+            className="w-40"
+            data-testid="lineage-run-id"
+          />
+          <Button
+            variant="outline"
+            onClick={loadLineageGraph}
+            disabled={lineageGraphLoading}
+            data-testid="lineage-load-graph"
+          >
+            {lineageGraphLoading ? "Loading" : "Load Lineage"}
+          </Button>
+          <Button
+            variant={lineageViewEnabled ? "default" : "outline"}
+            onClick={() => setLineageViewEnabled((prev) => !prev)}
+            data-testid="lineage-toggle-view"
+          >
+            {lineageViewEnabled ? "Graph View" : "Lineage View"}
+          </Button>
           <Badge
             className={(() => {
               const value = ragGraphQuality?.metrics?.avg_faithfulness;
@@ -420,55 +593,94 @@ const BrainSurgery = () => {
             </div>
           </div>
         )}
-        <ForceGraph2D
-          ref={graphRef}
-          graphData={graphData}
-          width={dimensions.width}
-          height={dimensions.height}
-          backgroundColor="#09090B"
-          nodeLabel={(node) => node.name}
-          nodeColor={(node) => node.color}
-          nodeVal={(node) => node.size}
-          linkColor={(link) => link.color || "#F87171"}
-          linkWidth={2}
-          linkDirectionalArrowLength={6}
-          linkDirectionalArrowRelPos={1}
-          onNodeClick={handleNodeClick}
-          nodeCanvasObject={(node, ctx, globalScale) => {
-            const label = node.name;
-            const fontSize = 12 / globalScale;
-            ctx.font = `${fontSize}px JetBrains Mono`;
-            ctx.fillStyle = node.color;
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, node.size, 0, 2 * Math.PI);
-            ctx.fill();
-
-            // Draw label below node
-            ctx.fillStyle = "#A1A1AA";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "top";
-            ctx.fillText(label, node.x, node.y + node.size + 4);
-
-            // Draw ROOT badge for root nodes
-            if (node.type === "root") {
-              ctx.fillStyle = "#FAFAFA";
-              ctx.fillRect(node.x - 20, node.y - 8, 40, 16);
-              ctx.fillStyle = "#09090B";
-              ctx.font = `bold ${10 / globalScale}px Manrope`;
-              ctx.fillText("ROOT", node.x, node.y - 4);
-            }
-
-            if (conflictNodeIds.has(node.id)) {
-              ctx.fillStyle = "#EF4444";
+        {!lineageViewEnabled && (
+          <ForceGraph2D
+            ref={graphRef}
+            graphData={graphData}
+            width={dimensions.width}
+            height={dimensions.height}
+            backgroundColor="#09090B"
+            nodeLabel={(node) => node.name}
+            nodeColor={(node) => node.color}
+            nodeVal={(node) => node.size}
+            linkColor={(link) => link.color || "#F87171"}
+            linkWidth={2}
+            linkDirectionalArrowLength={6}
+            linkDirectionalArrowRelPos={1}
+            onNodeClick={handleNodeClick}
+            nodeCanvasObject={(node, ctx, globalScale) => {
+              const label = node.name;
+              const fontSize = 12 / globalScale;
+              ctx.font = `${fontSize}px JetBrains Mono`;
+              ctx.fillStyle = node.color;
               ctx.beginPath();
-              ctx.arc(node.x + node.size - 4, node.y - node.size + 4, 5, 0, 2 * Math.PI);
+              ctx.arc(node.x, node.y, node.size, 0, 2 * Math.PI);
               ctx.fill();
-            }
-          }}
-          cooldownTicks={100}
-          d3AlphaDecay={0.02}
-          d3VelocityDecay={0.3}
-        />
+
+              // Draw label below node
+              ctx.fillStyle = "#A1A1AA";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "top";
+              ctx.fillText(label, node.x, node.y + node.size + 4);
+
+              // Draw ROOT badge for root nodes
+              if (node.type === "root") {
+                ctx.fillStyle = "#FAFAFA";
+                ctx.fillRect(node.x - 20, node.y - 8, 40, 16);
+                ctx.fillStyle = "#09090B";
+                ctx.font = `bold ${10 / globalScale}px Manrope`;
+                ctx.fillText("ROOT", node.x, node.y - 4);
+              }
+
+              if (conflictNodeIds.has(node.id)) {
+                ctx.fillStyle = "#EF4444";
+                ctx.beginPath();
+                ctx.arc(node.x + node.size - 4, node.y - node.size + 4, 5, 0, 2 * Math.PI);
+                ctx.fill();
+              }
+            }}
+            cooldownTicks={100}
+            d3AlphaDecay={0.02}
+            d3VelocityDecay={0.3}
+          />
+        )}
+        {lineageViewEnabled && (
+          <div className="relative h-full w-full">
+            {lineageGraphLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+                <div className="text-sm text-muted-foreground">Loading lineage graph...</div>
+              </div>
+            )}
+            {!lineageGraphLoading && lineageGraphData.nodes.length === 0 && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center text-sm text-muted-foreground">
+                Load a run lineage graph to visualize.
+              </div>
+            )}
+            <ForceGraph2D
+              ref={graphRef}
+              graphData={lineageGraphData}
+              width={dimensions.width}
+              height={dimensions.height}
+              backgroundColor="#09090B"
+              nodeLabel={(node) => node.label || node.id}
+              nodeColor={(node) => {
+                if (node.type === "stage") return "#F59E0B";
+                if (node.type === "artifact") return "#38BDF8";
+                if (node.type === "evidence_pack") return "#A78BFA";
+                if (node.type === "task") return "#10B981";
+                if (node.type === "agent") return "#F97316";
+                return "#64748B";
+              }}
+              linkColor={() => "#475569"}
+              linkWidth={2}
+              linkDirectionalArrowLength={6}
+              linkDirectionalArrowRelPos={1}
+              cooldownTicks={100}
+              d3AlphaDecay={0.02}
+              d3VelocityDecay={0.3}
+            />
+          </div>
+        )}
 
         {/* Legend */}
         <div className="absolute bottom-4 left-4 glass rounded-lg p-4">
@@ -567,6 +779,129 @@ const BrainSurgery = () => {
                 </pre>
               </div>
             )}
+
+            <div>
+              <label className="text-sm text-muted-foreground">Lineage Explorer</label>
+              <div className="mt-2 space-y-2">
+                <details className="rounded-md border border-border bg-black/30 p-2" open>
+                  <summary className="cursor-pointer text-xs text-muted-foreground">Lineage controls</summary>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      { key: "run", label: "Run" },
+                      { key: "stage", label: "Stage" },
+                      { key: "task", label: "Task" },
+                      { key: "agent", label: "Agent" },
+                      { key: "artifact", label: "Artifact" },
+                      { key: "evidence_pack", label: "Evidence" },
+                    ].map((item) => (
+                      <Button
+                        key={item.key}
+                        size="sm"
+                        variant={lineageTypeFilters[item.key] ? "default" : "outline"}
+                        onClick={() =>
+                          setLineageTypeFilters((prev) => ({
+                            ...prev,
+                            [item.key]: !prev[item.key],
+                          }))
+                        }
+                        data-testid={`brain-lineage-filter-${item.key}`}
+                      >
+                        {item.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Group by type</span>
+                    <Switch
+                      checked={lineageGroupByType}
+                      onCheckedChange={setLineageGroupByType}
+                      data-testid="brain-lineage-group-toggle"
+                    />
+                  </div>
+                </details>
+                <Input
+                  placeholder="Artifact id"
+                  value={lineageArtifactId}
+                  onChange={(event) => setLineageArtifactId(event.target.value)}
+                  data-testid="lineage-artifact-input"
+                />
+                <Button
+                  variant="outline"
+                  onClick={loadLineage}
+                  disabled={lineageLoading}
+                  data-testid="lineage-load-btn"
+                >
+                  {lineageLoading ? "Loading" : "Load Lineage"}
+                </Button>
+                {!lineageLoading && !lineagePayload && (
+                  <div className="text-xs text-muted-foreground">
+                    Enter an artifact id to visualize lineage.
+                  </div>
+                )}
+                {lineagePayload && (
+                  <div className="space-y-3 rounded-md border border-border bg-black/30 p-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Parents</span>
+                      <Badge variant="outline">{(lineagePayload.parents || []).length}</Badge>
+                    </div>
+                    {(lineagePayload.parents || []).slice(0, 4).map((item) => (
+                      <div key={item.artifact_id} className="text-xs">
+                        {item.artifact_type} • {item.artifact_id}
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-muted-foreground">Children</span>
+                      <Badge variant="outline">{(lineagePayload.children || []).length}</Badge>
+                    </div>
+                    {(lineagePayload.children || []).slice(0, 4).map((item) => (
+                      <div key={item.artifact_id} className="text-xs">
+                        {item.artifact_type} • {item.artifact_id}
+                      </div>
+                    ))}
+                    <div className="pt-2">
+                      <div className="text-xs font-semibold text-muted-foreground mb-2">Lineage Graph</div>
+                      <div className="rounded-md border border-border bg-black/40 p-2">
+                        <svg viewBox="0 0 260 140" className="w-full h-28">
+                          {(() => {
+                            const parents = lineagePayload.parents || [];
+                            const children = lineagePayload.children || [];
+                            const parentCount = Math.max(parents.length, 1);
+                            const childCount = Math.max(children.length, 1);
+                            const parentSpacing = 120 / (parentCount + 1);
+                            const childSpacing = 120 / (childCount + 1);
+                            const centerX = 130;
+                            const centerY = 70;
+                            return (
+                              <>
+                                {parents.map((item, idx) => {
+                                  const y = 10 + parentSpacing * (idx + 1);
+                                  return (
+                                    <g key={`parent-${item.artifact_id}`}>
+                                      <line x1="40" y1={y} x2={centerX - 20} y2={centerY} stroke="#475569" strokeWidth="1" />
+                                      <circle cx="40" cy={y} r="6" fill="#38BDF8" />
+                                    </g>
+                                  );
+                                })}
+                                {children.map((item, idx) => {
+                                  const y = 10 + childSpacing * (idx + 1);
+                                  return (
+                                    <g key={`child-${item.artifact_id}`}>
+                                      <line x1={centerX + 20} y1={centerY} x2="220" y2={y} stroke="#475569" strokeWidth="1" />
+                                      <circle cx="220" cy={y} r="6" fill="#A78BFA" />
+                                    </g>
+                                  );
+                                })}
+                                <circle cx={centerX} cy={centerY} r="10" fill="#FACC15" />
+                              </>
+                            );
+                          })()}
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
 
             <div className="flex gap-2 pt-4 border-t border-border">
               <Button

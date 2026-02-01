@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import ForceGraph2D from "react-force-graph-2d";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -7,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Input } from "../components/ui/input";
 import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
-import { evidenceAPI, battleAPI, agentAPI, runAPI, ragAPI, settingsAPI } from "../lib/api";
+import { evidenceAPI, battleAPI, agentAPI, runAPI, ragAPI, settingsAPI, graphAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   FileSearch,
@@ -57,6 +58,17 @@ const EvidenceViewer = () => {
   const [ragEvalSummary, setRagEvalSummary] = useState(null);
   const [ragAlerts, setRagAlerts] = useState([]);
   const [ragSettings, setRagSettings] = useState(null);
+  const [lineageGraph, setLineageGraph] = useState(null);
+  const [lineageLoading, setLineageLoading] = useState(false);
+  const [lineageTypeFilters, setLineageTypeFilters] = useState({
+    run: true,
+    stage: true,
+    task: true,
+    agent: true,
+    artifact: true,
+    evidence_pack: true,
+  });
+  const [lineageGroupByType, setLineageGroupByType] = useState(true);
 
   useEffect(() => {
     loadData();
@@ -90,6 +102,25 @@ const EvidenceViewer = () => {
     };
     loadRagSummary();
   }, []);
+
+  useEffect(() => {
+    const loadLineageGraph = async () => {
+      if (!selectedPack?.id) {
+        setLineageGraph(null);
+        return;
+      }
+      setLineageLoading(true);
+      try {
+        const response = await graphAPI.getEvidenceLineage(selectedPack.id);
+        setLineageGraph(response?.data || null);
+      } catch (error) {
+        setLineageGraph(null);
+      } finally {
+        setLineageLoading(false);
+      }
+    };
+    loadLineageGraph();
+  }, [selectedPack?.id]);
 
   const loadData = async () => {
     setLoading(true);
@@ -269,9 +300,22 @@ const EvidenceViewer = () => {
     return [raw];
   };
 
+  const normalizeArtifact = (artifact) => {
+    if (!artifact || typeof artifact !== "object") return null;
+    const artifactType = artifact.artifact_type || artifact.event_type || "artifact";
+    return {
+      ...artifact,
+      event_type: artifactType,
+      artifact_type: artifactType,
+      team: artifact.team || artifact.team_id || artifact.payload?.team_id,
+      agent: artifact.agent || artifact.agent_id || artifact.payload?.agent_id,
+      outputs: artifact.outputs || artifact.payload || artifact,
+    };
+  };
+
   const getArtifactsFromPack = (pack) => {
     if (Array.isArray(pack?.artifacts) && pack.artifacts.length > 0) {
-      return pack.artifacts;
+      return pack.artifacts.map(normalizeArtifact).filter(Boolean);
     }
     const logs = normalizeLogs(pack);
     return logs
@@ -283,7 +327,9 @@ const EvidenceViewer = () => {
         agent: entry?.payload?.agent,
         outputs: entry?.payload?.outputs || {},
         created_at: entry?.created_at,
-      }));
+      }))
+      .map(normalizeArtifact)
+      .filter(Boolean);
   };
 
   const bucketArtifactsByStage = (artifacts, timeline) => {
@@ -349,6 +395,48 @@ const EvidenceViewer = () => {
   };
 
   const comparePack = evidencePacks.find((pack) => pack.id === comparePackId) || null;
+  const lineageGraphData = useMemo(() => {
+    if (!lineageGraph) return { nodes: [], links: [] };
+    const nodes = lineageGraph.nodes || lineageGraph.graph?.nodes || [];
+    const edges = lineageGraph.edges || lineageGraph.graph?.edges || [];
+    const filteredNodes = nodes
+      .map((node) => ({
+        id: node.id,
+        label: node.label || node.id,
+        type: node.type,
+        metadata: node.metadata,
+      }))
+      .filter((node) => lineageTypeFilters[node.type] ?? true);
+
+    const allowedIds = new Set(filteredNodes.map((node) => node.id));
+    const filteredLinks = edges
+      .map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        type: edge.type,
+      }))
+      .filter((edge) => allowedIds.has(edge.source) && allowedIds.has(edge.target));
+
+    if (!lineageGroupByType) {
+      return { nodes: filteredNodes, links: filteredLinks };
+    }
+
+    const typeOrder = ["run", "stage", "task", "agent", "artifact", "evidence_pack"];
+    const columns = new Map(typeOrder.map((type, index) => [type, index]));
+    const columnCounts = new Map(typeOrder.map((type) => [type, 0]));
+    const groupedNodes = filteredNodes.map((node) => {
+      const columnIndex = columns.get(node.type) ?? 0;
+      const rowIndex = columnCounts.get(node.type) ?? 0;
+      columnCounts.set(node.type, rowIndex + 1);
+      return {
+        ...node,
+        fx: 120 + columnIndex * 120,
+        fy: 40 + rowIndex * 40,
+      };
+    });
+
+    return { nodes: groupedNodes, links: filteredLinks };
+  }, [lineageGraph, lineageTypeFilters, lineageGroupByType]);
   const tests = normalizeTests(selectedPack);
   const filteredTests = tests.filter((test) => {
     const status = (test.status || test.result || (test.passed ? "passed" : "failed") || "unknown").toLowerCase();
@@ -656,6 +744,77 @@ const EvidenceViewer = () => {
                       <div className="text-xs text-muted-foreground">Registry data not available.</div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border" data-testid="evidence-lineage-graph">
+                <CardHeader>
+                  <CardTitle className="text-sm">Artifact Lineage Graph</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-3 grid gap-2 md:grid-cols-2">
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: "run", label: "Run" },
+                        { key: "stage", label: "Stage" },
+                        { key: "task", label: "Task" },
+                        { key: "agent", label: "Agent" },
+                        { key: "artifact", label: "Artifact" },
+                        { key: "evidence_pack", label: "Evidence" },
+                      ].map((item) => (
+                        <Button
+                          key={item.key}
+                          size="sm"
+                          variant={lineageTypeFilters[item.key] ? "default" : "outline"}
+                          onClick={() =>
+                            setLineageTypeFilters((prev) => ({
+                              ...prev,
+                              [item.key]: !prev[item.key],
+                            }))
+                          }
+                          data-testid={`lineage-filter-${item.key}`}
+                        >
+                          {item.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                      <span>Group by type</span>
+                      <Checkbox
+                        checked={lineageGroupByType}
+                        onCheckedChange={(value) => setLineageGroupByType(Boolean(value))}
+                        data-testid="lineage-group-toggle"
+                      />
+                    </div>
+                  </div>
+                  {lineageLoading && (
+                    <div className="text-sm text-muted-foreground">Loading lineage graph...</div>
+                  )}
+                  {!lineageLoading && lineageGraphData.nodes.length === 0 && (
+                    <div className="text-sm text-muted-foreground">No lineage graph available.</div>
+                  )}
+                  {!lineageLoading && lineageGraphData.nodes.length > 0 && (
+                    <div className="h-[240px] rounded-md border border-border bg-black/30">
+                      <ForceGraph2D
+                        graphData={lineageGraphData}
+                        width={720}
+                        height={240}
+                        backgroundColor="#09090B"
+                        nodeLabel={(node) => node.label}
+                        nodeColor={(node) => {
+                          if (node.type === "stage") return "#F59E0B";
+                          if (node.type === "artifact") return "#38BDF8";
+                          if (node.type === "evidence_pack") return "#A78BFA";
+                          if (node.type === "task") return "#10B981";
+                          if (node.type === "agent") return "#F97316";
+                          return "#64748B";
+                        }}
+                        linkColor={() => "#475569"}
+                        linkDirectionalArrowLength={4}
+                        linkDirectionalArrowRelPos={1}
+                      />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1051,7 +1210,7 @@ const EvidenceViewer = () => {
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
                                       <Badge variant="outline" className="text-[10px]">
-                                        {artifact.event_type || "artifact"}
+                                        {artifact.artifact_type || artifact.event_type || "artifact"}
                                       </Badge>
                                       <span className="font-mono">
                                         {(artifact.team || "team").toUpperCase()} / {artifact.agent || "agent"}
@@ -1342,7 +1501,7 @@ const EvidenceViewer = () => {
               <div>
                 <h2 className="text-lg font-semibold">Artifact Detail</h2>
                 <p className="text-xs text-muted-foreground font-mono">
-                  {selectedArtifact?.event_type || "artifact"}
+                  {selectedArtifact?.artifact_type || selectedArtifact?.event_type || "artifact"}
                 </p>
               </div>
               <Button variant="ghost" onClick={closeArtifactDrawer} data-testid="artifact-drawer-close">
@@ -1355,11 +1514,11 @@ const EvidenceViewer = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <p className="text-muted-foreground">Team</p>
-                      <p className="font-mono">{selectedArtifact?.team || "N/A"}</p>
+                      <p className="font-mono">{selectedArtifact?.team || selectedArtifact?.team_id || "N/A"}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Agent</p>
-                      <p className="font-mono">{selectedArtifact?.agent || "N/A"}</p>
+                      <p className="font-mono">{selectedArtifact?.agent || selectedArtifact?.agent_id || "N/A"}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Timestamp</p>
@@ -1371,7 +1530,9 @@ const EvidenceViewer = () => {
                     </div>
                     <div>
                       <p className="text-muted-foreground">Event</p>
-                      <p className="font-mono">{selectedArtifact?.event_type || "N/A"}</p>
+                      <p className="font-mono">
+                        {selectedArtifact?.artifact_type || selectedArtifact?.event_type || "N/A"}
+                      </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Stage</p>

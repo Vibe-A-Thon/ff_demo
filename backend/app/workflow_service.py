@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from app.db import db
-from app.models import ApprovalRequest
+from app.models import ApprovalRequest, AgentArtifact
 from app.tooling import derive_seed, rng
-from app.agents import RED_AGENT, BLUE_AGENT, GOLD_AGENT, get_orchestrator
+from app.agents import RED_AGENT, BLUE_AGENT, GOLD_AGENT, get_orchestrator, execute_team_stage
 
 WAR_LOOP_STAGES: List[str] = [
     "red_simulate_attack",
@@ -199,6 +199,55 @@ async def execute_war_loop_stage(run: Dict[str, Any], stage: str, seed: int) -> 
     team_id = stage_to_team.get(stage)
     if team_id:
         orchestrator = get_orchestrator(team_id)
+        bundle = await execute_team_stage(
+            run_id=run.get("id", ""),
+            team_id=team_id,
+            objective=f"{stage} objective",
+            inputs=run.get("stage_inputs", []) or [],
+            params={"scenario_id": run.get("scenario_id")},
+            seed=seed,
+            max_agents=3,
+            auto_execute=True,
+        )
+
+        for task in bundle.get("tasks", []):
+            await db.agent_tasks.update_one(
+                {"task_id": task.task_id},
+                {"$set": task.model_dump()},
+                upsert=True,
+            )
+
+        for artifact in bundle.get("artifacts", []):
+            await db.agent_artifacts.update_one(
+                {"artifact_id": artifact.get("artifact_id")},
+                {"$set": AgentArtifact(**artifact).model_dump()},
+                upsert=True,
+            )
+
+        for execution in bundle.get("executions", []):
+            task = execution.get("task")
+            result = execution.get("result")
+            if task and result:
+                await db.agent_tasks.update_one(
+                    {"task_id": task.task_id},
+                    {"$set": {"status": result.status, "result": result.model_dump(), "updated_at": datetime.now(timezone.utc).isoformat()}},
+                )
+
+        bundle_payload = {
+            "team_id": team_id,
+            "tasks": [task.model_dump() for task in bundle["tasks"]],
+            "artifacts": bundle["artifacts"],
+            "lineage": bundle["lineage"],
+            "executions": [
+                {
+                    "task_id": execution["task"].task_id,
+                    "status": execution["result"].status,
+                    "metrics": execution["result"].metrics,
+                }
+                for execution in bundle.get("executions", [])
+            ],
+        }
+
         if orchestrator:
             if stage == "red_simulate_attack":
                 red_trace = await RED_AGENT.emit(context, seed)
@@ -206,6 +255,7 @@ async def execute_war_loop_stage(run: Dict[str, Any], stage: str, seed: int) -> 
                     "agent": red_trace.model_dump(),
                     "outputs": red_trace.outputs,
                     "orchestrator": (await orchestrator.emit(context, seed)).model_dump(),
+                    "bundle": bundle_payload,
                 }, None
             if stage == "blue_detect_respond":
                 last_events = run.get("last_events") or []
@@ -214,6 +264,7 @@ async def execute_war_loop_stage(run: Dict[str, Any], stage: str, seed: int) -> 
                     "agent": blue_trace.model_dump(),
                     "outputs": blue_trace.outputs,
                     "orchestrator": (await orchestrator.emit({"events": last_events}, seed)).model_dump(),
+                    "bundle": bundle_payload,
                 }, None
             if stage == "gold_generate_explanation":
                 decision = run.get("last_decision", "monitor")
@@ -222,9 +273,10 @@ async def execute_war_loop_stage(run: Dict[str, Any], stage: str, seed: int) -> 
                     "agent": gold_trace.model_dump(),
                     "outputs": gold_trace.outputs,
                     "orchestrator": (await orchestrator.emit({"decision": decision}, seed)).model_dump(),
+                    "bundle": bundle_payload,
                 }, None
             orchestrator_trace = await orchestrator.emit(context, seed)
-            payload = {"agent": orchestrator_trace.model_dump(), "outputs": orchestrator_trace.outputs}
+            payload = {"agent": orchestrator_trace.model_dump(), "outputs": orchestrator_trace.outputs, "bundle": bundle_payload}
             if stage == "black_stress_test":
                 report = orchestrator_trace.outputs.get("stress_test", {})
                 if report.get("failed", 0) > 0:

@@ -8,6 +8,7 @@ from app.core.logging_config import get_logger
 from app.audit import record_audit
 from app.security import require_permission
 from app.deps import get_db, get_llm_client
+from app.config import get_integration_setting
 from app.xai_utils import build_evidence_items, build_explanation_bundle
 from app.run_helpers import record_run_event
 
@@ -33,6 +34,7 @@ async def explain_run(
     run_id: str,
     current_user: dict = Depends(require_permission("xai:read")),
     db: DatabaseClient = Depends(get_db),
+    llm_client: LLMClient | None = Depends(get_llm_client),
 ):
     """Generate an explanation bundle for a run.
 
@@ -54,6 +56,28 @@ async def explain_run(
     events = await db.run_events.find({"run_id": run_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
     evidence_items = build_evidence_items(events)
     bundle = build_explanation_bundle(run_id, decision, evidence_items)
+
+    if llm_client:
+        try:
+            model_name = get_integration_setting("llm", "model", "gpt-4o") or "gpt-4o"
+            prompt = (
+                "You are the Gold Team XAI agent. Summarize the decision and evidence in 2-3 sentences. "
+                "Keep it synthetic and defensive.\n"
+                f"Decision: {decision}. Evidence count: {len(evidence_items)}."
+            )
+            summary = await llm_client.chat_completions_create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": "You provide concise fraud-defense explanations."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=160,
+            )
+            bundle.summary = summary.strip()
+            bundle.details = "LLM-derived explanation based on synthetic evidence."
+            bundle.confidence_statement = "Confidence based on LLM reasoning with synthetic evidence." 
+        except Exception:
+            pass
 
     similar_cases = []
     packs = await db.evidence_packs.find({}, {"_id": 0}).sort("created_at", -1).to_list(3)
@@ -206,8 +230,9 @@ async def generate_commentary(
 
     if llm_client:
         try:
+            model_name = get_integration_setting("llm", "model", "gpt-4o") or "gpt-4o"
             text = await llm_client.chat_completions_create(
-                model="gpt-4o",
+                model=model_name,
                 messages=[
                     {"role": "system", "content": "You provide safe, concise UI commentary."},
                     {"role": "user", "content": prompt},

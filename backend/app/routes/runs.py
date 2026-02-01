@@ -14,7 +14,7 @@ from app.core.external_services import DatabaseClient
 from app.core.logging_config import get_logger
 from app.audit import record_audit
 from app.deps import get_db
-from app.models import RunSession, RunStartRequest
+from app.models import RunSession, RunStartRequest, RunReplayRequest
 from app.run_helpers import record_run_event
 from app.tooling import derive_seed
 from app.workflow_service import (
@@ -205,6 +205,7 @@ async def step_run(
         extra={"payload": {"run_id": run_id, "stage": current_stage, "step": step_index}},
     )
     stage_payload, next_override = await execute_war_loop_stage(run, current_stage, step_seed)
+    bundle_artifacts = stage_payload.get("bundle", {}).get("artifacts", []) if isinstance(stage_payload, dict) else []
 
     if stage_payload.get("agent"):
         agent_info = stage_payload["agent"]
@@ -224,6 +225,11 @@ async def step_run(
                 "outputs": orchestrator_info.get("outputs"),
             },
         )
+    if bundle_artifacts:
+        update_fields["stage_inputs"] = [
+            {"artifact_id": artifact.get("artifact_id"), "artifact_type": artifact.get("artifact_type")}
+            for artifact in bundle_artifacts
+        ]
 
     update_fields = {
         "current_stage": current_stage,
@@ -298,6 +304,72 @@ async def step_run(
         "payload": stage_payload,
         "metrics": update_fields.get("last_metrics"),
     }
+
+
+@router.post("/runs/{run_id}/replay")
+async def replay_run(
+    run_id: str,
+    payload: RunReplayRequest,
+    current_user: dict = Depends(require_permission("workflow:control")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
+    """Replay a run by resetting stage state and optionally clearing events.
+
+    Args:
+        run_id: Run identifier.
+        payload: Replay payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        dict: Replay result.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    seed_value = payload.seed if payload.seed is not None else int(run.get("seed", int(datetime.now(timezone.utc).timestamp())))
+    mode_value = payload.mode or run.get("mode", "auto")
+
+    update_fields = {
+        "seed": seed_value,
+        "mode": mode_value,
+        "status": "running",
+        "current_stage": "init",
+        "step_count": 0,
+        "last_events": [],
+        "last_decision": None,
+        "last_metrics": {},
+        "stage_inputs": [],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.runs.update_one({"id": run_id}, {"$set": update_fields})
+
+    if payload.reset_events:
+        await db.run_events.delete_many({"run_id": run_id})
+
+    if payload.clear_agent_tasks:
+        await db.agent_tasks.delete_many({"run_id": run_id})
+    if payload.clear_agent_artifacts:
+        await db.agent_artifacts.delete_many({"run_id": run_id})
+
+    await record_run_event(run_id, "run.replayed", {"seed": seed_value, "mode": mode_value})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "run.replayed",
+        "run",
+        run_id,
+        metadata={"seed": seed_value, "mode": mode_value, "reset_events": payload.reset_events},
+    )
+    logger.info(
+        "run.replayed",
+        extra={"payload": {"run_id": run_id, "seed": seed_value, "mode": mode_value}},
+    )
+    return {"run_id": run_id, "seed": seed_value, "mode": mode_value, "status": "replayed"}
 
 
 @router.get("/runs/{run_id}/export-brc")

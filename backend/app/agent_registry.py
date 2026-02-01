@@ -133,7 +133,16 @@ class AgentRegistry:
         return agent
 
     def build_delegation_plan(self, team_id: str, objective: str, max_agents: int = 3) -> List[Dict[str, str]]:
-        agents = sorted(self.get_team_agents(team_id), key=lambda item: item.agent_id)
+        objective_tokens = {token for token in objective.lower().replace("_", " ").split() if token}
+        def score_agent(agent: AgentProfile) -> int:
+            return sum(1 for capability in agent.capabilities if capability.replace("_", " ") in objective_tokens)
+
+        agents = self.get_team_agents(team_id)
+        agents = sorted(
+            agents,
+            key=lambda item: (score_agent(item), item.agent_id),
+            reverse=True,
+        )
         selected = agents[:max_agents]
         return [
             {

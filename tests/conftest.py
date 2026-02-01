@@ -17,7 +17,7 @@ if BACKEND_PATH not in sys.path:
 from app.main import app  # noqa: E402
 from app.security import create_token  # noqa: E402
 from app import db as db_module  # noqa: E402
-from app.routes import approvals, battles, rag, rsb, rules, runs, evidence, workflow  # noqa: E402
+from app.routes import approvals, battles, rag, rsb, rules, runs, evidence, workflow, agents  # noqa: E402
 from tests.fixtures import InMemoryDB, seed_user  # noqa: E402
 
 
@@ -37,6 +37,7 @@ def client(in_memory_db):
     runs.db = in_memory_db
     evidence.db = in_memory_db
     workflow.db = in_memory_db
+    agents.db = in_memory_db
     return TestClient(app)
 
 

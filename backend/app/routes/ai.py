@@ -6,6 +6,7 @@ from app.core.external_services import LLMClient
 from app.deps import get_llm_client
 from app.audit import record_audit
 from app.security import require_permission
+from app.config import get_integration_setting
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -56,8 +57,9 @@ async def ai_think(
         }
 
     try:
+        model_name = get_integration_setting("llm", "model", "gpt-4o") or "gpt-4o"
         thinking = await llm_client.chat_completions_create(
-            model="gpt-4o",
+            model=model_name,
             messages=[
                 {"role": "system", "content": system_prompts.get(team, system_prompts["blue"])},
                 {"role": "user", "content": f"Stage: {stage}\nContext: {context}\n\nProvide your reasoning in 3-4 concise steps."},

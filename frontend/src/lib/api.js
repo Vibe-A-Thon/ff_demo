@@ -43,6 +43,7 @@ export const runAPI = {
   start: (data) => api.post('/runs/start', data),
   get: (id) => api.get(`/runs/${id}`),
   step: (id) => api.post(`/runs/${id}/step`),
+  replay: (id, data) => api.post(`/runs/${id}/replay`, data),
   exportBrc: (id) => api.get(`/runs/${id}/export-brc`, { responseType: 'blob' }),
 };
 
@@ -57,6 +58,13 @@ export const workflowAPI = {
   freeze: (runId, data) => api.post(`/workflow/${runId}/freeze`, data),
   rollback: (runId, data) => api.post(`/workflow/${runId}/rollback`, data),
   reset: (runId, data) => api.post(`/workflow/${runId}/reset`, data),
+};
+
+// Graph APIs
+export const graphAPI = {
+  getRunGraph: (runId) => api.get(`/runs/${runId}/graph`),
+  getRunLineage: (runId) => api.get(`/runs/${runId}/lineage-graph`),
+  getEvidenceLineage: (packId) => api.get(`/evidence-packs/${packId}/lineage-graph`),
 };
 
 // Rule APIs
@@ -138,9 +146,15 @@ export const agentAPI = {
   listTasks: (params) => api.get('/agents/tasks', { params }),
   createTask: (data) => api.post('/agents/tasks', data),
   completeTask: (taskId, data) => api.post(`/agents/tasks/${taskId}/complete`, data),
+  executeTask: (taskId) => api.post(`/agents/tasks/${taskId}/execute`),
+  routeTasks: (data) => api.post('/agents/route', data),
+  orchestrate: (data) => api.post('/agents/orchestrate', data),
   listRequests: (params) => api.get('/agents/requests', { params }),
   createRequest: (data) => api.post('/agents/requests', data),
   respondRequest: (requestId, data) => api.post(`/agents/requests/${requestId}/respond`, data),
+  listArtifacts: (params) => api.get('/agents/artifacts', { params }),
+  getArtifact: (id) => api.get(`/agents/artifacts/${id}`),
+  getLineage: (id) => api.get(`/agents/artifacts/${id}/lineage`),
 };
 
 // Metrics APIs

@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { agentAPI, teamAPI } from "../lib/api";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
-import { ClipboardList, CheckCircle2, XCircle } from "lucide-react";
+import { ClipboardList, CheckCircle2, XCircle, Play, Shuffle, Share2, Workflow } from "lucide-react";
 
 const statusStyles = {
   pending: "bg-zinc-800 text-zinc-300 border-zinc-700",
@@ -32,6 +32,19 @@ const AgentTaskQueue = () => {
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [routeRunId, setRouteRunId] = useState("ops");
+  const [routeObjective, setRouteObjective] = useState("Generate synthetic outputs");
+  const [routeTeam, setRouteTeam] = useState("red");
+  const [routeMaxAgents, setRouteMaxAgents] = useState("3");
+  const [routeAutoExecute, setRouteAutoExecute] = useState(true);
+  const [orchestrateRunId, setOrchestrateRunId] = useState("ops");
+  const [orchestrateObjective, setOrchestrateObjective] = useState("Cross-team coordination");
+  const [orchestrateTeams, setOrchestrateTeams] = useState("red,blue,purple");
+  const [orchestrateMaxAgents, setOrchestrateMaxAgents] = useState("2");
+  const [orchestrateAutoExecute, setOrchestrateAutoExecute] = useState(true);
+  const [artifacts, setArtifacts] = useState([]);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [lineage, setLineage] = useState(null);
 
   useEffect(() => {
     const loadQueue = async () => {
@@ -90,6 +103,89 @@ const AgentTaskQueue = () => {
       toast.success("Task status updated.");
     } catch (error) {
       toast.error("Failed to update task.");
+    }
+  };
+
+  const executeTask = async (taskId) => {
+    try {
+      const response = await agentAPI.executeTask(taskId);
+      const result = response?.data;
+      setTasks((prev) =>
+        prev.map((task) => (task.task_id === taskId ? { ...task, status: result?.status || "success" } : task))
+      );
+      if (result?.outputs?.length) {
+        setArtifacts(result.outputs);
+        setSelectedTaskId(taskId);
+      }
+      toast.success("Task executed.");
+    } catch (error) {
+      toast.error("Failed to execute task.");
+    }
+  };
+
+  const submitRoute = async () => {
+    try {
+      const payload = {
+        run_id: routeRunId || "ops",
+        team_id: routeTeam,
+        objective: routeObjective,
+        max_agents: Number(routeMaxAgents || 3),
+        auto_execute: routeAutoExecute,
+      };
+      const response = await agentAPI.routeTasks(payload);
+      const routed = response?.data?.tasks || [];
+      if (routed.length) {
+        setTasks((prev) => [...routed, ...prev]);
+      }
+      toast.success("Tasks routed to team.");
+    } catch (error) {
+      toast.error("Failed to route tasks.");
+    }
+  };
+
+  const submitOrchestration = async () => {
+    try {
+      const teamsList = orchestrateTeams
+        .split(",")
+        .map((team) => team.trim())
+        .filter(Boolean);
+      const payload = {
+        run_id: orchestrateRunId || "ops",
+        objective: orchestrateObjective,
+        teams: teamsList,
+        max_agents_per_team: Number(orchestrateMaxAgents || 2),
+        auto_execute: orchestrateAutoExecute,
+      };
+      const response = await agentAPI.orchestrate(payload);
+      const newTasks = response?.data?.tasks
+        ?.flatMap((group) => group.tasks || [])
+        .filter(Boolean);
+      if (newTasks?.length) {
+        setTasks((prev) => [...newTasks, ...prev]);
+      }
+      toast.success("Cross-team orchestration queued.");
+    } catch (error) {
+      toast.error("Failed to orchestrate teams.");
+    }
+  };
+
+  const loadArtifacts = async (taskId) => {
+    try {
+      const response = await agentAPI.listArtifacts({ task_id: taskId });
+      setArtifacts(response?.data || []);
+      setSelectedTaskId(taskId);
+      setLineage(null);
+    } catch (error) {
+      toast.error("Failed to load artifacts.");
+    }
+  };
+
+  const loadLineage = async (artifactId) => {
+    try {
+      const response = await agentAPI.getLineage(artifactId);
+      setLineage(response?.data || null);
+    } catch (error) {
+      toast.error("Failed to load lineage.");
     }
   };
 
@@ -162,6 +258,122 @@ const AgentTaskQueue = () => {
         </CardContent>
       </Card>
 
+      <div className="grid gap-4 lg:grid-cols-2" data-testid="agent-routing-panel">
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Shuffle className="h-4 w-4 text-blue-400" />
+              Route Tasks (Single Team)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                placeholder="Run ID"
+                value={routeRunId}
+                onChange={(event) => setRouteRunId(event.target.value)}
+                data-testid="route-run-id"
+              />
+              <Select value={routeTeam} onValueChange={setRouteTeam}>
+                <SelectTrigger data-testid="route-team">
+                  <SelectValue placeholder="Team" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teams.map((team) => (
+                    <SelectItem key={team.team_id} value={team.team_id}>
+                      {team.internal_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Input
+              placeholder="Objective"
+              value={routeObjective}
+              onChange={(event) => setRouteObjective(event.target.value)}
+              data-testid="route-objective"
+            />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                placeholder="Max agents"
+                type="number"
+                min="1"
+                value={routeMaxAgents}
+                onChange={(event) => setRouteMaxAgents(event.target.value)}
+                data-testid="route-max-agents"
+              />
+              <Select value={routeAutoExecute ? "auto" : "queue"} onValueChange={(value) => setRouteAutoExecute(value === "auto")}>
+                <SelectTrigger data-testid="route-execution">
+                  <SelectValue placeholder="Execution" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto-execute</SelectItem>
+                  <SelectItem value="queue">Queue only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button className="w-full" onClick={submitRoute} data-testid="route-submit">
+              <Share2 className="mr-2 h-4 w-4" />
+              Route Tasks
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Workflow className="h-4 w-4 text-purple-400" />
+              Orchestrate Across Teams
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                placeholder="Run ID"
+                value={orchestrateRunId}
+                onChange={(event) => setOrchestrateRunId(event.target.value)}
+                data-testid="orchestrate-run-id"
+              />
+              <Input
+                placeholder="Teams (comma-separated)"
+                value={orchestrateTeams}
+                onChange={(event) => setOrchestrateTeams(event.target.value)}
+                data-testid="orchestrate-teams"
+              />
+            </div>
+            <Input
+              placeholder="Objective"
+              value={orchestrateObjective}
+              onChange={(event) => setOrchestrateObjective(event.target.value)}
+              data-testid="orchestrate-objective"
+            />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                placeholder="Max agents/team"
+                type="number"
+                min="1"
+                value={orchestrateMaxAgents}
+                onChange={(event) => setOrchestrateMaxAgents(event.target.value)}
+                data-testid="orchestrate-max-agents"
+              />
+              <Select value={orchestrateAutoExecute ? "auto" : "queue"} onValueChange={(value) => setOrchestrateAutoExecute(value === "auto")}>
+                <SelectTrigger data-testid="orchestrate-execution">
+                  <SelectValue placeholder="Execution" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto-execute</SelectItem>
+                  <SelectItem value="queue">Queue only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button className="w-full" variant="secondary" onClick={submitOrchestration} data-testid="orchestrate-submit">
+              <Workflow className="mr-2 h-4 w-4" />
+              Orchestrate
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
       <Tabs defaultValue="tasks" className="space-y-4" data-testid="agent-queue-tabs">
         <TabsList>
           <TabsTrigger value="tasks" data-testid="agent-queue-tab-tasks">Tasks</TabsTrigger>
@@ -206,6 +418,23 @@ const AgentTaskQueue = () => {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => executeTask(task.task_id)}
+                          data-testid={`agent-task-execute-${task.task_id}`}
+                        >
+                          <Play className="mr-1 h-4 w-4" />
+                          Execute
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => loadArtifacts(task.task_id)}
+                          data-testid={`agent-task-artifacts-${task.task_id}`}
+                        >
+                          Artifacts
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => markTask(task.task_id, "success")}
                           data-testid={`agent-task-success-${task.task_id}`}
                         >
@@ -226,6 +455,45 @@ const AgentTaskQueue = () => {
                   ))}
                 </div>
               </ScrollArea>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border mt-4" data-testid="agent-artifacts-panel">
+            <CardHeader>
+              <CardTitle className="text-sm">Artifacts & Lineage</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-xs text-muted-foreground">
+                {selectedTaskId ? `Showing artifacts for task ${selectedTaskId}` : "Select a task to load artifacts."}
+              </div>
+              {artifacts.length === 0 && (
+                <div className="text-sm text-muted-foreground">No artifacts loaded.</div>
+              )}
+              {artifacts.map((artifact) => (
+                <div key={artifact.artifact_id} className="border border-border rounded-md p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{artifact.artifact_type}</p>
+                      <p className="text-xs text-muted-foreground">{artifact.artifact_id}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => loadLineage(artifact.artifact_id)}
+                      data-testid={`artifact-lineage-${artifact.artifact_id}`}
+                    >
+                      Lineage
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {lineage && (
+                <div className="border border-dashed border-border rounded-md p-3 text-xs space-y-2">
+                  <div className="font-semibold">Lineage</div>
+                  <div>Parents: {(lineage.parents || []).length}</div>
+                  <div>Children: {(lineage.children || []).length}</div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

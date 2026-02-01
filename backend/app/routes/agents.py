@@ -1,10 +1,23 @@
 """Agent registry and task routes."""
 
 from datetime import datetime, timezone
+from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
 from app.agent_registry import AgentRegistry
-from app.models import AgentProfile, AgentProfileCreate, AgentRequest, AgentRequestCreate, AgentRequestDecision, AgentResult, AgentTask
+from app.agents import get_agent_runtime, orchestrate_multi_team_tasks
+from app.models import (
+    AgentProfile,
+    AgentProfileCreate,
+    AgentRequest,
+    AgentRequestCreate,
+    AgentRequestDecision,
+    AgentResult,
+    AgentTask,
+    AgentArtifact,
+    AgentRouteRequest,
+    AgentOrchestrationRequest,
+)
 from app.rag_utils import contains_sensitive_identifiers
 from app.teams_data import default_agent_payloads
 from app.core.logging_config import get_logger
@@ -14,6 +27,45 @@ from app.security import require_permission
 router = APIRouter()
 logger = get_logger(__name__)
 DEFAULT_REGISTRY = AgentRegistry.from_defaults()
+
+
+async def _execute_task_with_runtime(task: AgentTask) -> AgentResult:
+    runtime = get_agent_runtime(task.target_agent_id or "")
+    if not runtime:
+        raise HTTPException(status_code=404, detail="Agent runtime not found")
+    result = await runtime.run_task(task)
+    if result.outputs:
+        artifacts = [AgentArtifact(**output).model_dump() for output in result.outputs]
+        await db.agent_artifacts.insert_many(artifacts)
+    await db.agent_tasks.update_one(
+        {"task_id": task.task_id},
+        {"$set": {"status": result.status, "result": result.model_dump(), "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return result
+
+
+def _build_task_payload(
+    run_id: str,
+    team_id: str,
+    agent_id: str,
+    task_type: str,
+    objective: str,
+    inputs: List[Dict[str, Any]],
+    params: Dict[str, Any],
+    seed: int | None,
+) -> AgentTask:
+    payload = {
+        "run_id": run_id,
+        "team_id": team_id,
+        "target_agent_id": agent_id,
+        "task_type": task_type,
+        "inputs": inputs,
+        "params": {**params, "objective": objective},
+        "seed": seed,
+        "created_by": "system",
+        "status": "pending",
+    }
+    return AgentTask(**payload)
 
 @router.get("/agents")
 async def list_agents(team_id: str | None = None, current_user: dict = Depends(require_permission("agents:read"))):
@@ -259,6 +311,260 @@ async def complete_agent_task(task_id: str, result: AgentResult, current_user: d
         extra={"payload": {"task_id": task_id, "status": result.status}},
     )
     return result
+
+
+@router.post("/agents/tasks/{task_id}/execute")
+async def execute_agent_task(task_id: str, current_user: dict = Depends(require_permission("agents:write"))):
+    """Execute an agent task with deterministic runtime.
+
+    Args:
+        task_id: Task identifier.
+
+    Returns:
+        AgentResult: Persisted result.
+
+    Raises:
+        HTTPException: If the task or agent runtime does not exist.
+    """
+    task_doc = await db.agent_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    if not task_doc:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    task = AgentTask(**task_doc)
+    agent_id = task.target_agent_id
+    if not agent_id:
+        team_agents = DEFAULT_REGISTRY.list_agents(task.team_id)
+        if not team_agents:
+            raise HTTPException(status_code=400, detail="No agents available for team")
+        agent_id = team_agents[0].agent_id
+
+    task = AgentTask(**{**task.model_dump(), "target_agent_id": agent_id})
+    result = await _execute_task_with_runtime(task)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.task.executed",
+        "agent_task",
+        task_id,
+        metadata={"status": result.status, "agent_id": agent_id},
+    )
+    logger.info(
+        "agent.task.executed",
+        extra={"payload": {"task_id": task_id, "status": result.status, "agent_id": agent_id}},
+    )
+    return result
+
+
+@router.post("/agents/route")
+async def route_agent_tasks(route: AgentRouteRequest, current_user: dict = Depends(require_permission("agents:write"))):
+    """Route tasks to multiple agents within a team.
+
+    Args:
+        route: Routing payload.
+
+    Returns:
+        dict: Routed tasks and optional results.
+
+    Raises:
+        HTTPException: If validation fails.
+    """
+    if route.inputs:
+        joined = __import__("json").dumps(route.inputs, default=str)
+        if contains_sensitive_identifiers(joined):
+            raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
+
+    delegation = DEFAULT_REGISTRY.build_delegation_plan(route.team_id, route.objective, max_agents=route.max_agents)
+    if not delegation:
+        raise HTTPException(status_code=404, detail="No agents available for team")
+
+    tasks: List[AgentTask] = []
+    results: List[AgentResult] = []
+    for delegate in delegation:
+        task = _build_task_payload(
+            route.run_id,
+            route.team_id,
+            delegate["agent_id"],
+            route.task_type,
+            route.objective,
+            route.inputs,
+            route.params,
+            route.seed,
+        )
+        await db.agent_tasks.insert_one(task.model_dump())
+        tasks.append(task)
+
+        if route.auto_execute:
+            result = await _execute_task_with_runtime(task)
+            results.append(result)
+
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.task.routed",
+        "agent_task",
+        route.team_id,
+        metadata={"run_id": route.run_id, "count": len(tasks), "auto_execute": route.auto_execute},
+    )
+    logger.info(
+        "agent.task.routed",
+        extra={"payload": {"team_id": route.team_id, "run_id": route.run_id, "count": len(tasks)}},
+    )
+    return {"tasks": [task.model_dump() for task in tasks], "results": [r.model_dump() for r in results]}
+
+
+@router.post("/agents/orchestrate")
+async def orchestrate_team_tasks(payload: AgentOrchestrationRequest, current_user: dict = Depends(require_permission("agents:write"))):
+    """Orchestrate tasks across multiple teams.
+
+    Args:
+        payload: Orchestration payload.
+
+    Returns:
+        dict: Orchestration result.
+
+    Raises:
+        HTTPException: If validation fails.
+    """
+    if payload.inputs:
+        joined = __import__("json").dumps(payload.inputs, default=str)
+        if contains_sensitive_identifiers(joined):
+            raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
+
+    orchestrated = await orchestrate_multi_team_tasks(
+        payload.run_id,
+        payload.objective,
+        payload.teams,
+        payload.task_type,
+        payload.inputs,
+        payload.params,
+        payload.max_agents_per_team,
+        payload.auto_execute,
+        payload.seed,
+    )
+
+    orchestrated_tasks: List[Dict[str, Any]] = []
+    all_results: List[Dict[str, Any]] = []
+    for bundle in orchestrated["teams"]:
+        team_tasks = bundle["tasks"]
+        for task in team_tasks:
+            await db.agent_tasks.insert_one(task.model_dump())
+        orchestrated_tasks.append(
+            {"team_id": bundle["team_id"], "tasks": [task.model_dump() for task in team_tasks]}
+        )
+        for execution in bundle["executions"]:
+            task = execution["task"]
+            result = execution["result"]
+            if result.outputs:
+                artifacts = [AgentArtifact(**output).model_dump() for output in result.outputs]
+                await db.agent_artifacts.insert_many(artifacts)
+            await db.agent_tasks.update_one(
+                {"task_id": task.task_id},
+                {"$set": {"status": result.status, "result": result.model_dump(), "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            all_results.append(result.model_dump())
+
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.orchestrated",
+        "agent_task",
+        payload.run_id,
+        metadata={"teams": payload.teams, "auto_execute": payload.auto_execute},
+    )
+    logger.info(
+        "agent.orchestrated",
+        extra={"payload": {"run_id": payload.run_id, "teams": payload.teams}},
+    )
+    return {"tasks": orchestrated_tasks, "results": all_results, "lineage": orchestrated["lineage"]}
+
+
+@router.get("/agents/artifacts")
+async def list_agent_artifacts(
+    run_id: str | None = None,
+    task_id: str | None = None,
+    agent_id: str | None = None,
+    artifact_type: str | None = None,
+    current_user: dict = Depends(require_permission("agents:read")),
+):
+    """List agent artifacts.
+
+    Args:
+        run_id: Optional run identifier.
+        task_id: Optional task identifier.
+        agent_id: Optional agent identifier.
+        artifact_type: Optional artifact type.
+
+    Returns:
+        list[dict]: Agent artifacts.
+    """
+    query: Dict[str, Any] = {}
+    if run_id:
+        query["run_id"] = run_id
+    if task_id:
+        query["task_id"] = task_id
+    if agent_id:
+        query["agent_id"] = agent_id
+    if artifact_type:
+        query["artifact_type"] = artifact_type
+    artifacts = await db.agent_artifacts.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.artifacts.list",
+        "agent_artifact",
+        run_id or agent_id or "all",
+        metadata={"run_id": run_id, "task_id": task_id, "agent_id": agent_id, "artifact_type": artifact_type},
+    )
+    return artifacts
+
+
+@router.get("/agents/artifacts/{artifact_id}")
+async def get_agent_artifact(artifact_id: str, current_user: dict = Depends(require_permission("agents:read"))):
+    """Get a single agent artifact.
+
+    Args:
+        artifact_id: Artifact identifier.
+
+    Returns:
+        dict: Agent artifact.
+    """
+    artifact = await db.agent_artifacts.find_one({"artifact_id": artifact_id}, {"_id": 0})
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.artifact.read",
+        "agent_artifact",
+        artifact_id,
+    )
+    return artifact
+
+
+@router.get("/agents/artifacts/{artifact_id}/lineage")
+async def get_agent_artifact_lineage(artifact_id: str, current_user: dict = Depends(require_permission("agents:read"))):
+    """Get lineage for a specific artifact.
+
+    Args:
+        artifact_id: Artifact identifier.
+
+    Returns:
+        dict: Lineage details.
+    """
+    artifact = await db.agent_artifacts.find_one({"artifact_id": artifact_id}, {"_id": 0})
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    lineage_inputs = artifact.get("lineage", {}).get("inputs", [])
+    parent_ids = [item.get("artifact_id") for item in lineage_inputs if isinstance(item, dict) and item.get("artifact_id")]
+    parents = []
+    if parent_ids:
+        parents = await db.agent_artifacts.find({"artifact_id": {"$in": parent_ids}}, {"_id": 0}).to_list(200)
+
+    children = await db.agent_artifacts.find({"lineage.inputs.artifact_id": artifact_id}, {"_id": 0}).to_list(200)
+
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.artifact.lineage",
+        "agent_artifact",
+        artifact_id,
+    )
+    return {"artifact": artifact, "parents": parents, "children": children}
 
 @router.post("/agents/requests")
 async def create_agent_request(request_data: AgentRequestCreate, current_user: dict = Depends(require_permission("agents:write"))):

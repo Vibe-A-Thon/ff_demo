@@ -6,6 +6,7 @@ Provides graph and comparison views for war loop runs.
 from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
 from app.graph_utils import build_run_graph, summarize_run_metrics
+from app.graph_utils import build_lineage_graph
 from app.core.logging_config import get_logger
 from app.audit import record_audit
 from app.security import require_permission
@@ -45,6 +46,71 @@ async def get_run_graph(run_id: str, current_user: dict = Depends(require_permis
     )
     return {"run_id": run_id, "graph": graph}
 
+@router.get("/runs/{run_id}/lineage-graph")
+async def get_run_lineage_graph(run_id: str, current_user: dict = Depends(require_permission("graph:read"))):
+    """Build a lineage graph for a run.
+
+    Args:
+        run_id: Run identifier.
+
+    Returns:
+        dict: Lineage graph payload.
+
+    Raises:
+        HTTPException: If the run is not found.
+    """
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    events = await db.run_events.find({"run_id": run_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    tasks = await db.agent_tasks.find({"run_id": run_id}, {"_id": 0}).to_list(500)
+    artifacts = await db.agent_artifacts.find({"run_id": run_id}, {"_id": 0}).to_list(1000)
+    evidence_packs = await db.evidence_packs.find({"run_id": run_id}, {"_id": 0}).to_list(50)
+
+    graph = build_lineage_graph(run_id, events, tasks, artifacts, evidence_packs)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "graph.lineage.generated",
+        "run",
+        run_id,
+        metadata={"nodes": len(graph.get("nodes", [])), "edges": len(graph.get("edges", []))},
+    )
+    return graph
+
+@router.get("/evidence-packs/{pack_id}/lineage-graph")
+async def get_evidence_lineage_graph(pack_id: str, current_user: dict = Depends(require_permission("graph:read"))):
+    """Build a lineage graph for an evidence pack.
+
+    Args:
+        pack_id: Evidence pack identifier.
+
+    Returns:
+        dict: Lineage graph payload.
+
+    Raises:
+        HTTPException: If the evidence pack is not found.
+    """
+    pack = await db.evidence_packs.find_one({"id": pack_id}, {"_id": 0})
+    if not pack:
+        raise HTTPException(status_code=404, detail="Evidence pack not found")
+    run_id = pack.get("run_id")
+    if not run_id:
+        raise HTTPException(status_code=400, detail="Evidence pack is not linked to a run")
+
+    events = await db.run_events.find({"run_id": run_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    tasks = await db.agent_tasks.find({"run_id": run_id}, {"_id": 0}).to_list(500)
+    artifacts = await db.agent_artifacts.find({"run_id": run_id}, {"_id": 0}).to_list(1000)
+    graph = build_lineage_graph(run_id, events, tasks, artifacts, [pack])
+
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "graph.lineage.evidence.generated",
+        "evidence_pack",
+        pack_id,
+        metadata={"nodes": len(graph.get("nodes", [])), "edges": len(graph.get("edges", []))},
+    )
+    return graph
 @router.get("/runs/compare")
 async def compare_runs(run_a: str, run_b: str, current_user: dict = Depends(require_permission("graph:read"))):
     """Compare two runs and return metric deltas.
