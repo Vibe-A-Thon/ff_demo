@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import ForceGraph2D from "react-force-graph-2d";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -391,7 +391,7 @@ const RSBManager = () => {
       ]
     : [];
 
-  const buildRuleNetwork = () => {
+  const buildRuleNetwork = useCallback(() => {
     const rules = selectedPackage?.rules?.length
       ? selectedPackage.rules
       : selectedPackage
@@ -408,9 +408,9 @@ const RSBManager = () => {
       target: ruleId,
     }));
     return { nodes, links };
-  };
+  }, [selectedPackage]);
 
-  const ruleNetwork = useMemo(() => buildRuleNetwork(), [selectedPackage]);
+  const ruleNetwork = useMemo(() => buildRuleNetwork(), [buildRuleNetwork]);
 
   const defaultManifestTree = [
     { name: "manifest.json" },

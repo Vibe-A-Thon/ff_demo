@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -27,7 +27,7 @@ const RAGEvaluationDashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [ragSettings, setRagSettings] = useState(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [historyRes, alertsRes, telemetryRes, settingsRes] = await Promise.all([
@@ -51,11 +51,11 @@ const RAGEvaluationDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [limit]);
 
   useEffect(() => {
     loadData();
-  }, [limit]);
+  }, [loadData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

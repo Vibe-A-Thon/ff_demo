@@ -139,7 +139,7 @@ const BrainSurgery = () => {
     updateDimensions();
     window.addEventListener("resize", updateDimensions);
     return () => window.removeEventListener("resize", updateDimensions);
-  }, []);
+  }, [loadNodes]);
 
   useEffect(() => {
     const loadEvidencePacks = async () => {
@@ -174,7 +174,7 @@ const BrainSurgery = () => {
     loadRagQuality();
   }, []);
 
-  const loadNodes = async () => {
+  const loadNodes = useCallback(async () => {
     setGraphLoading(true);
     try {
       const response = await knowledgeAPI.getNodes();
@@ -207,7 +207,7 @@ const BrainSurgery = () => {
     } finally {
       setGraphLoading(false);
     }
-  };
+  }, []);
 
   const handleNodeClick = useCallback((node) => {
     if (connectMode && connectSource) {
@@ -221,9 +221,9 @@ const BrainSurgery = () => {
     } else {
       setSelectedNode(node);
     }
-  }, [connectMode, connectSource]);
+  }, [connectMode, connectSource, handleConnectNodes]);
 
-  const handleConnectNodes = async (sourceId, targetId) => {
+  const handleConnectNodes = useCallback(async (sourceId, targetId) => {
     if (sourceId === targetId) {
       toast.error("Cannot connect node to itself");
       return;
@@ -235,7 +235,7 @@ const BrainSurgery = () => {
     } catch (error) {
       toast.error("Failed to connect nodes");
     }
-  };
+  }, [loadNodes]);
 
   const handleCreateNode = async () => {
     if (!newNodeName.trim()) {
@@ -268,7 +268,7 @@ const BrainSurgery = () => {
     }
   };
 
-  const loadLineage = async (artifactIdOverride) => {
+  const loadLineage = useCallback(async (artifactIdOverride) => {
     const artifactId = (artifactIdOverride || lineageArtifactId).trim();
     if (!artifactId) {
       toast.error("Enter an artifact id to load lineage");
@@ -285,9 +285,9 @@ const BrainSurgery = () => {
     } finally {
       setLineageLoading(false);
     }
-  };
+  }, [lineageArtifactId]);
 
-  const loadLineageGraph = async () => {
+  const loadLineageGraph = useCallback(async () => {
     if (!lineageRunId.trim()) {
       toast.error("Enter a run id to load lineage graph");
       return;
@@ -307,9 +307,9 @@ const BrainSurgery = () => {
     } finally {
       setLineageGraphLoading(false);
     }
-  };
+  }, [lineageRunId]);
 
-  const loadEvidenceLineageGraph = async (packId) => {
+  const loadEvidenceLineageGraph = useCallback(async (packId) => {
     if (!packId) return;
     setLineageGraphLoading(true);
     try {
@@ -347,7 +347,7 @@ const BrainSurgery = () => {
     } finally {
       setLineageGraphLoading(false);
     }
-  };
+  }, [lineageGroupByType, lineageTypeFilters, lineageViewEnabled]);
 
   const deriveArtifactId = useCallback((node) => {
     if (!node) return "";
@@ -365,13 +365,13 @@ const BrainSurgery = () => {
       setLineageArtifactId(artifactId);
       loadLineage(artifactId);
     }
-  }, [selectedNode, deriveArtifactId, lineageArtifactId]);
+  }, [selectedNode, deriveArtifactId, lineageArtifactId, loadLineage]);
 
   useEffect(() => {
     if (selectedPackId) {
       loadEvidenceLineageGraph(selectedPackId);
     }
-  }, [selectedPackId]);
+  }, [selectedPackId, loadEvidenceLineageGraph]);
 
   const handleZoom = (direction) => {
     if (graphRef.current) {

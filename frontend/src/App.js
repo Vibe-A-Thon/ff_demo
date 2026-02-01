@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense, lazy } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
@@ -12,30 +12,30 @@ import { AlertProvider } from "./contexts/AlertContext";
 // Layout
 import Layout from "./components/Layout";
 
-// Pages
-import Login from "./pages/Login";
-import WarRoom from "./pages/WarRoom";
-import BrainSurgery from "./pages/BrainSurgery";
-import MetricsDashboard from "./pages/MetricsDashboard";
-import RSBManager from "./pages/RSBManager";
-import DifferenceVisualizer from "./pages/DifferenceVisualizer";
-import EvidenceViewer from "./pages/EvidenceViewer";
-import RuleEditor from "./pages/RuleEditor";
-import Approvals from "./pages/Approvals";
-import BattleReplay from "./pages/BattleReplay";
-import WarPractice from "./pages/WarPractice";
-import DashboardHome from "./pages/DashboardHome";
-import AgentManagement from "./pages/AgentManagement";
-import AgentTaskQueue from "./pages/AgentTaskQueue";
-import TeamDirectory from "./pages/TeamDirectory";
-import FraudTaxonomyBrowser from "./pages/FraudTaxonomyBrowser";
-import IncidentTimeline from "./pages/IncidentTimeline";
-import AuditLogViewer from "./pages/AuditLogViewer";
-import SettingsConfiguration from "./pages/SettingsConfiguration";
-import UserManagement from "./pages/UserManagement";
-import RAGConsole from "./pages/RAGConsole";
-import Neo4jSyncDashboard from "./pages/Neo4jSyncDashboard";
-import RAGEvaluationDashboard from "./pages/RAGEvaluationDashboard";
+// Pages (lazy-loaded for smaller initial bundle)
+const Login = lazy(() => import("./pages/Login"));
+const WarRoom = lazy(() => import("./pages/WarRoom"));
+const BrainSurgery = lazy(() => import("./pages/BrainSurgery"));
+const MetricsDashboard = lazy(() => import("./pages/MetricsDashboard"));
+const RSBManager = lazy(() => import("./pages/RSBManager"));
+const DifferenceVisualizer = lazy(() => import("./pages/DifferenceVisualizer"));
+const EvidenceViewer = lazy(() => import("./pages/EvidenceViewer"));
+const RuleEditor = lazy(() => import("./pages/RuleEditor"));
+const Approvals = lazy(() => import("./pages/Approvals"));
+const BattleReplay = lazy(() => import("./pages/BattleReplay"));
+const WarPractice = lazy(() => import("./pages/WarPractice"));
+const DashboardHome = lazy(() => import("./pages/DashboardHome"));
+const AgentManagement = lazy(() => import("./pages/AgentManagement"));
+const AgentTaskQueue = lazy(() => import("./pages/AgentTaskQueue"));
+const TeamDirectory = lazy(() => import("./pages/TeamDirectory"));
+const FraudTaxonomyBrowser = lazy(() => import("./pages/FraudTaxonomyBrowser"));
+const IncidentTimeline = lazy(() => import("./pages/IncidentTimeline"));
+const AuditLogViewer = lazy(() => import("./pages/AuditLogViewer"));
+const SettingsConfiguration = lazy(() => import("./pages/SettingsConfiguration"));
+const UserManagement = lazy(() => import("./pages/UserManagement"));
+const RAGConsole = lazy(() => import("./pages/RAGConsole"));
+const Neo4jSyncDashboard = lazy(() => import("./pages/Neo4jSyncDashboard"));
+const RAGEvaluationDashboard = lazy(() => import("./pages/RAGEvaluationDashboard"));
 
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
@@ -143,6 +143,19 @@ const RoleGate = ({ children, route }) => {
   return children;
 };
 
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="text-center">
+      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+      <p className="text-muted-foreground">Loading...</p>
+    </div>
+  </div>
+);
+
+const SuspenseRoute = ({ children }) => (
+  <Suspense fallback={<PageLoader />}>{children}</Suspense>
+);
+
 function AppRoutes() {
   return (
     <BrowserRouter>
@@ -152,7 +165,9 @@ function AppRoutes() {
           path="/login"
           element={
             <PublicRoute>
-              <Login />
+              <SuspenseRoute>
+                <Login />
+              </SuspenseRoute>
             </PublicRoute>
           }
         />
@@ -167,28 +182,28 @@ function AppRoutes() {
           }
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<RoleGate route="dashboard"><DashboardHome /></RoleGate>} />
-          <Route path="war-room" element={<RoleGate route="war-room"><WarRoom /></RoleGate>} />
-          <Route path="war-practice" element={<RoleGate route="war-practice"><WarPractice /></RoleGate>} />
-          <Route path="brain-surgery" element={<RoleGate route="brain-surgery"><BrainSurgery /></RoleGate>} />
-          <Route path="metrics" element={<RoleGate route="metrics"><MetricsDashboard /></RoleGate>} />
-          <Route path="rsb-manager" element={<RoleGate route="rsb-manager"><RSBManager /></RoleGate>} />
-          <Route path="diff-viewer" element={<RoleGate route="diff-viewer"><DifferenceVisualizer /></RoleGate>} />
-          <Route path="evidence" element={<RoleGate route="evidence"><EvidenceViewer /></RoleGate>} />
-          <Route path="rules" element={<RoleGate route="rules"><RuleEditor /></RoleGate>} />
-          <Route path="approvals" element={<RoleGate route="approvals"><Approvals /></RoleGate>} />
-          <Route path="battle-replay" element={<RoleGate route="battle-replay"><BattleReplay /></RoleGate>} />
-          <Route path="teams" element={<RoleGate route="teams"><TeamDirectory /></RoleGate>} />
-          <Route path="agents" element={<RoleGate route="agents"><AgentManagement /></RoleGate>} />
-          <Route path="agent-queue" element={<RoleGate route="agent-queue"><AgentTaskQueue /></RoleGate>} />
-          <Route path="taxonomy" element={<RoleGate route="taxonomy"><FraudTaxonomyBrowser /></RoleGate>} />
-          <Route path="incidents" element={<RoleGate route="incidents"><IncidentTimeline /></RoleGate>} />
-          <Route path="audit-logs" element={<RoleGate route="audit-logs"><AuditLogViewer /></RoleGate>} />
-          <Route path="rag-console" element={<RoleGate route="rag-console"><RAGConsole /></RoleGate>} />
-          <Route path="rag-evaluation" element={<RoleGate route="rag-evaluation"><RAGEvaluationDashboard /></RoleGate>} />
-          <Route path="neo4j-sync" element={<RoleGate route="neo4j-sync"><Neo4jSyncDashboard /></RoleGate>} />
-          <Route path="settings" element={<RoleGate route="settings"><SettingsConfiguration /></RoleGate>} />
-          <Route path="users" element={<RoleGate route="users"><UserManagement /></RoleGate>} />
+          <Route path="dashboard" element={<RoleGate route="dashboard"><SuspenseRoute><DashboardHome /></SuspenseRoute></RoleGate>} />
+          <Route path="war-room" element={<RoleGate route="war-room"><SuspenseRoute><WarRoom /></SuspenseRoute></RoleGate>} />
+          <Route path="war-practice" element={<RoleGate route="war-practice"><SuspenseRoute><WarPractice /></SuspenseRoute></RoleGate>} />
+          <Route path="brain-surgery" element={<RoleGate route="brain-surgery"><SuspenseRoute><BrainSurgery /></SuspenseRoute></RoleGate>} />
+          <Route path="metrics" element={<RoleGate route="metrics"><SuspenseRoute><MetricsDashboard /></SuspenseRoute></RoleGate>} />
+          <Route path="rsb-manager" element={<RoleGate route="rsb-manager"><SuspenseRoute><RSBManager /></SuspenseRoute></RoleGate>} />
+          <Route path="diff-viewer" element={<RoleGate route="diff-viewer"><SuspenseRoute><DifferenceVisualizer /></SuspenseRoute></RoleGate>} />
+          <Route path="evidence" element={<RoleGate route="evidence"><SuspenseRoute><EvidenceViewer /></SuspenseRoute></RoleGate>} />
+          <Route path="rules" element={<RoleGate route="rules"><SuspenseRoute><RuleEditor /></SuspenseRoute></RoleGate>} />
+          <Route path="approvals" element={<RoleGate route="approvals"><SuspenseRoute><Approvals /></SuspenseRoute></RoleGate>} />
+          <Route path="battle-replay" element={<RoleGate route="battle-replay"><SuspenseRoute><BattleReplay /></SuspenseRoute></RoleGate>} />
+          <Route path="teams" element={<RoleGate route="teams"><SuspenseRoute><TeamDirectory /></SuspenseRoute></RoleGate>} />
+          <Route path="agents" element={<RoleGate route="agents"><SuspenseRoute><AgentManagement /></SuspenseRoute></RoleGate>} />
+          <Route path="agent-queue" element={<RoleGate route="agent-queue"><SuspenseRoute><AgentTaskQueue /></SuspenseRoute></RoleGate>} />
+          <Route path="taxonomy" element={<RoleGate route="taxonomy"><SuspenseRoute><FraudTaxonomyBrowser /></SuspenseRoute></RoleGate>} />
+          <Route path="incidents" element={<RoleGate route="incidents"><SuspenseRoute><IncidentTimeline /></SuspenseRoute></RoleGate>} />
+          <Route path="audit-logs" element={<RoleGate route="audit-logs"><SuspenseRoute><AuditLogViewer /></SuspenseRoute></RoleGate>} />
+          <Route path="rag-console" element={<RoleGate route="rag-console"><SuspenseRoute><RAGConsole /></SuspenseRoute></RoleGate>} />
+          <Route path="rag-evaluation" element={<RoleGate route="rag-evaluation"><SuspenseRoute><RAGEvaluationDashboard /></SuspenseRoute></RoleGate>} />
+          <Route path="neo4j-sync" element={<RoleGate route="neo4j-sync"><SuspenseRoute><Neo4jSyncDashboard /></SuspenseRoute></RoleGate>} />
+          <Route path="settings" element={<RoleGate route="settings"><SuspenseRoute><SettingsConfiguration /></SuspenseRoute></RoleGate>} />
+          <Route path="users" element={<RoleGate route="users"><SuspenseRoute><UserManagement /></SuspenseRoute></RoleGate>} />
         </Route>
 
         {/* Catch all - redirect to login */}

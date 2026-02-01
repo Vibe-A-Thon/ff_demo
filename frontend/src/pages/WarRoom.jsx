@@ -309,8 +309,25 @@ const WarRoom = () => {
   const wsRef = useRef(null);
   const autoPlayRef = useRef(null);
   const demoRef = useRef(null);
+  const redStreamRef = useRef("");
+  const blueStreamRef = useRef("");
   
   const { checkMetrics, alertsEnabled, setAlertsEnabled } = useAlerts();
+
+  const loadBattles = useCallback(async () => {
+    try {
+      const response = await battleAPI.getAll();
+      setBattles(response.data);
+      if (response.data.length > 0) {
+        const match = initialBattleId
+          ? response.data.find((battle) => battle.id === initialBattleId)
+          : null;
+        setSelectedBattle(match || response.data[0]);
+      }
+    } catch (error) {
+      console.error("Failed to load battles:", error);
+    }
+  }, [initialBattleId]);
 
   useEffect(() => {
     loadBattles();
@@ -328,7 +345,7 @@ const WarRoom = () => {
       if (autoPlayRef.current) clearInterval(autoPlayRef.current);
       if (demoRef.current) clearTimeout(demoRef.current);
     };
-  }, []);
+  }, [loadBattles]);
 
   useEffect(() => {
     let interval;
@@ -380,21 +397,6 @@ const WarRoom = () => {
       checkMetrics(selectedBattle.metrics);
     }
   }, [selectedBattle?.metrics, checkMetrics]);
-
-  const loadBattles = async () => {
-    try {
-      const response = await battleAPI.getAll();
-      setBattles(response.data);
-      if (response.data.length > 0) {
-        const match = initialBattleId
-          ? response.data.find((battle) => battle.id === initialBattleId)
-          : null;
-        setSelectedBattle(match || response.data[0]);
-      }
-    } catch (error) {
-      console.error("Failed to load battles:", error);
-    }
-  };
 
   const createNewBattle = async (scenarioOverride = null) => {
     try {
@@ -497,17 +499,27 @@ const WarRoom = () => {
         } else if (data.type === "thinking_chunk") {
           // Handle streaming thinking
           if (data.team === "red") {
-            setRedStreamText(prev => prev + data.chunk);
+            setRedStreamText((prev) => {
+              const next = prev + data.chunk;
+              redStreamRef.current = next;
+              return next;
+            });
           } else {
-            setBlueStreamText(prev => prev + data.chunk);
+            setBlueStreamText((prev) => {
+              const next = prev + data.chunk;
+              blueStreamRef.current = next;
+              return next;
+            });
           }
         } else if (data.type === "thinking_complete") {
           if (data.team === "red") {
-            setRedThinking(prev => prev + redStreamText);
+            setRedThinking((prev) => prev + redStreamRef.current);
             setRedStreamText("");
+            redStreamRef.current = "";
           } else {
-            setBlueThinking(prev => prev + blueStreamText);
+            setBlueThinking((prev) => prev + blueStreamRef.current);
             setBlueStreamText("");
+            blueStreamRef.current = "";
           }
         }
       };
@@ -526,7 +538,7 @@ const WarRoom = () => {
     }
   }, [selectedBattle]);
 
-  const triggerBlockedEffect = (turnNumber) => {
+  const triggerBlockedEffect = useCallback((turnNumber) => {
     const burstId = `${Date.now()}-${turnNumber}`;
     setBlockedBursts((prev) => [...prev, burstId]);
     toast.success(`Attack Blocked! Turn ${turnNumber}`, {
@@ -536,9 +548,9 @@ const WarRoom = () => {
     setTimeout(() => {
       setBlockedBursts((prev) => prev.filter((id) => id !== burstId));
     }, 900);
-  };
+  }, []);
 
-  const startBattle = async () => {
+  const startBattle = useCallback(async () => {
     if (!selectedBattle) return;
     try {
       await battleAPI.start(selectedBattle.id);
@@ -552,7 +564,7 @@ const WarRoom = () => {
     } catch (error) {
       toast.error("Failed to start battle");
     }
-  };
+  }, [selectedBattle, connectWebSocket]);
 
   const stopBattle = async () => {
     if (!selectedBattle) return;
@@ -579,7 +591,7 @@ const WarRoom = () => {
   };
 
   // Streaming AI thinking simulation
-  const streamThinking = async (team, turnNum) => {
+  const streamThinking = useCallback(async (team, turnNum) => {
     const stages = ["Recon", "Ideation", "Evaluation", "Action"];
     const redThoughts = {
       "Recon": "Scanning target perimeter for vulnerabilities...\nIdentifying weak authentication endpoints...",
@@ -614,9 +626,38 @@ const WarRoom = () => {
       setStream("");
       await new Promise(r => setTimeout(r, 300));
     }
-  };
+  }, []);
 
-  const runTurn = async () => {
+  const simulateTurn = useCallback((turnNumber, prevMetrics) => {
+    const redActions = ["Account Takeover", "Velocity Attack", "Device Spoofing", "Credential Stuffing", "Social Engineering"];
+    const blueActions = ["Pattern Detection", "Velocity Check", "Device Fingerprinting", "ML Score", "Rule Match"];
+    const redSuccess = Math.random() < 0.35;
+
+    const moneyAtRisk = Math.floor(5000 + Math.random() * 45000);
+    const savedThisTurn = redSuccess ? 0 : Math.floor(moneyAtRisk * (0.6 + Math.random() * 0.3));
+    const totalSaved = (prevMetrics.money_saved || 0) + savedThisTurn;
+
+    // Time to immunity decreases over time (learning effect)
+    const baseImmunity = Math.max(1, 10 - Math.floor(turnNumber / 3));
+    const immunityVariation = Math.random() * 2 - 1;
+    const timeToImmunity = Math.max(1, Math.round(baseImmunity + immunityVariation));
+
+    return {
+      type: "turn_update",
+      turn_number: turnNumber,
+      red_team: { action: redActions[Math.floor(Math.random() * redActions.length)], success: redSuccess },
+      blue_team: { action: blueActions[Math.floor(Math.random() * blueActions.length)], blocked: !redSuccess },
+      metrics: {
+        success_rate: Math.floor(65 + Math.random() * 30),
+        money_at_risk: moneyAtRisk,
+        money_saved: totalSaved,
+        time_to_immunity: timeToImmunity,
+        patterns_learned: turnNumber
+      }
+    };
+  }, []);
+
+  const runTurn = useCallback(async () => {
     if (!selectedBattle || !isRunning) return;
     
     setIsStreaming(true);
@@ -646,36 +687,7 @@ const WarRoom = () => {
     }
 
     setIsStreaming(false);
-  };
-
-  const simulateTurn = (turnNumber, prevMetrics) => {
-    const redActions = ["Account Takeover", "Velocity Attack", "Device Spoofing", "Credential Stuffing", "Social Engineering"];
-    const blueActions = ["Pattern Detection", "Velocity Check", "Device Fingerprinting", "ML Score", "Rule Match"];
-    const redSuccess = Math.random() < 0.35;
-
-    const moneyAtRisk = Math.floor(5000 + Math.random() * 45000);
-    const savedThisTurn = redSuccess ? 0 : Math.floor(moneyAtRisk * (0.6 + Math.random() * 0.3));
-    const totalSaved = (prevMetrics.money_saved || 0) + savedThisTurn;
-
-    // Time to immunity decreases over time (learning effect)
-    const baseImmunity = Math.max(1, 10 - Math.floor(turnNumber / 3));
-    const immunityVariation = Math.random() * 2 - 1;
-    const timeToImmunity = Math.max(1, Math.round(baseImmunity + immunityVariation));
-
-    return {
-      type: "turn_update",
-      turn_number: turnNumber,
-      red_team: { action: redActions[Math.floor(Math.random() * redActions.length)], success: redSuccess },
-      blue_team: { action: blueActions[Math.floor(Math.random() * blueActions.length)], blocked: !redSuccess },
-      metrics: {
-        success_rate: Math.floor(65 + Math.random() * 30),
-        money_at_risk: moneyAtRisk,
-        money_saved: totalSaved,
-        time_to_immunity: timeToImmunity,
-        patterns_learned: turnNumber
-      }
-    };
-  };
+  }, [selectedBattle, isRunning, currentTurn, streamThinking, simulateTurn, triggerBlockedEffect]);
 
   useEffect(() => {
     const handleKey = (event) => {
@@ -731,7 +743,7 @@ const WarRoom = () => {
     return () => {
       if (demoRef.current) clearTimeout(demoRef.current);
     };
-  }, [demoMode, isRunning]);
+  }, [demoMode, isRunning, runDemoMode]);
 
   // Regular autoplay
   useEffect(() => {
@@ -744,16 +756,16 @@ const WarRoom = () => {
     return () => {
       if (autoPlayRef.current) clearInterval(autoPlayRef.current);
     };
-  }, [autoPlay, isRunning, speed, demoMode]);
+  }, [autoPlay, isRunning, speed, demoMode, runTurn]);
 
-  const jumpToTurn = (index) => {
+  const jumpToTurn = useCallback((index) => {
     setCurrentTurn(index);
     const turn = selectedBattle?.turns?.[index];
     if (turn) {
       setRedThinking(`--- Replaying Turn ${index + 1} ---\n[ACTION] ${turn.red_team?.action || 'N/A'}\n[RESULT] ${turn.red_team?.success ? 'Attack succeeded' : 'Attack blocked'}`);
       setBlueThinking(`--- Replaying Turn ${index + 1} ---\n[ACTION] ${turn.blue_team?.action || 'N/A'}\n[RESULT] ${turn.blue_team?.blocked ? 'Successfully defended' : 'Defense bypassed'}`);
     }
-  };
+  }, [selectedBattle]);
 
   const resetBattle = () => {
     setCurrentTurn(0);
@@ -839,7 +851,7 @@ const WarRoom = () => {
     } finally {
       setWorkflowBusy(false);
     }
-  }, [workflowRunId]);
+  }, [workflowRunId, syncWorkflow]);
 
   const handleWorkflowAdvance = useCallback(async () => {
     if (!workflowRunId) {

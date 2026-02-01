@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -74,7 +74,7 @@ const MetricsDashboard = () => {
 
   useEffect(() => {
     loadMetrics();
-  }, []);
+  }, [loadMetrics]);
 
   useEffect(() => {
     const loadRagEvaluations = async () => {
@@ -122,7 +122,7 @@ const MetricsDashboard = () => {
     loadTaxonomy();
   }, []);
 
-  const loadMetrics = async () => {
+  const loadMetrics = useCallback(async () => {
     setLoading(true);
     try {
       const response = await metricsAPI.getDashboard();
@@ -144,7 +144,7 @@ const MetricsDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const generateMockTimeSeries = () => {
     const data = [];

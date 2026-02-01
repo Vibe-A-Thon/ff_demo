@@ -306,7 +306,7 @@ const Layout = () => {
 
   const RoleIcon = user?.role ? ROLE_ICONS[user.role] : User;
 
-  const routeExplainability = {
+  const routeExplainability = useMemo(() => ({
     "/war-room": {
       title: "War Room Explainability",
       summary: "Live decisioning, reasoning streams, and battle outcomes explained in context.",
@@ -352,9 +352,9 @@ const Layout = () => {
         investigator: "RuleSpec updates tracked with version history and evidence.",
       },
     },
-  };
+  }), []);
 
-  const explainContext = routeExplainability[location.pathname] || {
+  const explainContext = useMemo(() => routeExplainability[location.pathname] || {
     title: "Global Explainability",
     summary: "Context-aware explanations for decisions, evidence, and audit trails.",
     confidence: 0.82,
@@ -372,7 +372,7 @@ const Layout = () => {
       customer: "Decisions explained with clear, human language.",
       investigator: "Evidence and rules are traceable for post-incident review.",
     },
-  };
+  }, [location.pathname, routeExplainability]);
 
   const commentorContext = useMemo(() => {
     const base = explainPayload || explainContext;
