@@ -34,13 +34,15 @@ import AuditLogViewer from "./pages/AuditLogViewer";
 import SettingsConfiguration from "./pages/SettingsConfiguration";
 import UserManagement from "./pages/UserManagement";
 import RAGConsole from "./pages/RAGConsole";
+import Neo4jSyncDashboard from "./pages/Neo4jSyncDashboard";
+import RAGEvaluationDashboard from "./pages/RAGEvaluationDashboard";
 
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
   admin: ["*"], // Access to everything
-  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy", "teams", "rag-console", "agent-queue"],
-  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy", "teams", "rag-console", "agent-queue"],
-  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs", "teams", "rag-console", "agent-queue"],
+  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync"],
+  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync"],
+  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync"],
 };
 
 // Check if user has access to a route
@@ -183,6 +185,8 @@ function AppRoutes() {
           <Route path="incidents" element={<RoleGate route="incidents"><IncidentTimeline /></RoleGate>} />
           <Route path="audit-logs" element={<RoleGate route="audit-logs"><AuditLogViewer /></RoleGate>} />
           <Route path="rag-console" element={<RoleGate route="rag-console"><RAGConsole /></RoleGate>} />
+          <Route path="rag-evaluation" element={<RoleGate route="rag-evaluation"><RAGEvaluationDashboard /></RoleGate>} />
+          <Route path="neo4j-sync" element={<RoleGate route="neo4j-sync"><Neo4jSyncDashboard /></RoleGate>} />
           <Route path="settings" element={<RoleGate route="settings"><SettingsConfiguration /></RoleGate>} />
           <Route path="users" element={<RoleGate route="users"><UserManagement /></RoleGate>} />
         </Route>

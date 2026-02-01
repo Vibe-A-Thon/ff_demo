@@ -10,7 +10,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
-import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI, agentAPI } from "../lib/api";
+import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI, agentAPI, ragAPI, settingsAPI } from "../lib/api";
 import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
 import {
@@ -304,6 +304,8 @@ const WarRoom = () => {
   const [traceSearch, setTraceSearch] = useState("");
   const [runSummary, setRunSummary] = useState(null);
   const [registrySnapshot, setRegistrySnapshot] = useState(null);
+  const [ragHealth, setRagHealth] = useState(null);
+  const [ragSettings, setRagSettings] = useState(null);
   const wsRef = useRef(null);
   const autoPlayRef = useRef(null);
   const demoRef = useRef(null);
@@ -326,6 +328,29 @@ const WarRoom = () => {
       if (autoPlayRef.current) clearInterval(autoPlayRef.current);
       if (demoRef.current) clearTimeout(demoRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    let interval;
+    const loadRagHealth = async () => {
+      try {
+        const [historyRes, telemetryRes, settingsRes] = await Promise.all([
+          ragAPI.evaluationHistory({ limit: 1 }),
+          ragAPI.cacheTelemetry({ limit: 20 }),
+          settingsAPI.get(),
+        ]);
+        const latest = historyRes?.data?.items?.[0] || null;
+        const telemetry = telemetryRes?.data?.summary || null;
+        setRagHealth({ latest, telemetry });
+        setRagSettings(settingsRes?.data?.rag || null);
+      } catch (error) {
+        setRagHealth(null);
+        setRagSettings(null);
+      }
+    };
+    loadRagHealth();
+    interval = window.setInterval(loadRagHealth, 20000);
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -1092,6 +1117,27 @@ const WarRoom = () => {
                 Local
               </Badge>
             )}
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <Badge
+              variant="outline"
+              className={(() => {
+                const hitRate = ragHealth?.telemetry?.hit_rate;
+                const warn = Number(ragSettings?.hit_rate_warn ?? 0.6);
+                const crit = Number(ragSettings?.hit_rate_crit ?? 0.4);
+                if (hitRate === undefined || hitRate === null) return "border-purple-500 text-purple-300";
+                if (hitRate <= crit) return "border-red-500 text-red-300";
+                if (hitRate <= warn) return "border-yellow-500 text-yellow-300";
+                return "border-green-500 text-green-300";
+              })()}
+            >
+              <Brain className="h-3 w-3 mr-1" />
+              RAG {ragHealth?.telemetry ? `${(ragHealth.telemetry.hit_rate * 100).toFixed(0)}% hit` : "health"}
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              {ragHealth?.latest?.created_at ? `Eval ${ragHealth.latest.created_at}` : "No eval"}
+            </span>
           </div>
         </div>
 

@@ -109,6 +109,9 @@ export const knowledgeAPI = {
   createNode: (data) => api.post('/knowledge-nodes', data),
   connectNodes: (sourceId, targetId) => api.put(`/knowledge-nodes/${sourceId}/connect/${targetId}`),
   deleteNode: (id) => api.delete(`/knowledge-nodes/${id}`),
+  syncNeo4j: () => api.post('/knowledge-nodes/sync-neo4j'),
+  neo4jHealth: () => api.get('/knowledge-nodes/neo4j-health'),
+  graphSyncStatus: () => api.get('/knowledge-nodes/graph-sync-status'),
 };
 
 // Approval APIs
@@ -153,6 +156,17 @@ export const ragAPI = {
   seed: (params) => api.post('/rag/seed', null, { params }),
   retrieve: (data) => api.post('/rag/retrieve', data),
   query: (data) => api.post('/rag/query', data),
+  evaluate: (data) => api.post('/rag/evaluate', data),
+  evaluateGold: () => api.get('/rag/evaluate-gold'),
+  evaluationHistory: (params) => api.get('/rag/evaluations/history', { params }),
+  evaluationAlerts: (params) => api.get('/rag/evaluations/alerts', { params }),
+  cacheTelemetry: (params) => api.get('/rag/cache/telemetry', { params }),
+};
+
+// Settings APIs
+export const settingsAPI = {
+  get: () => api.get('/settings'),
+  update: (data) => api.put('/settings', data),
 };
 
 // AI APIs

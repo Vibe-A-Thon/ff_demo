@@ -460,6 +460,7 @@ class RAGDocument(BaseModel):
     title: Optional[str] = None
     content: str
     metadata: Dict[str, Any] = {}
+    allowed_roles: Optional[List[str]] = None
     embedding: Optional[List[float]] = None
     synthetic_only: bool = True
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -470,6 +471,28 @@ class RAGDocumentCreate(BaseModel):
     title: Optional[str] = None
     content: str
     metadata: Dict[str, Any] = {}
+    allowed_roles: Optional[List[str]] = None
+    synthetic_only: bool = True
+
+class RAGMediaDocument(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    collection: str
+    title: Optional[str] = None
+    media_type: str
+    metadata: Dict[str, Any] = {}
+    allowed_roles: Optional[List[str]] = None
+    embedding: Optional[List[float]] = None
+    synthetic_only: bool = True
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+class RAGMediaDocumentCreate(BaseModel):
+    collection: str
+    title: Optional[str] = None
+    media_type: str
+    metadata: Dict[str, Any] = {}
+    allowed_roles: Optional[List[str]] = None
     synthetic_only: bool = True
 
 class RAGQueryRequest(BaseModel):
@@ -478,6 +501,9 @@ class RAGQueryRequest(BaseModel):
     top_k: int = 5
     use_hybrid: bool = True
     include_graph_context: bool = True
+    rag_mode: str = "hybrid"
+    enable_crag: bool = False
+    graph_hops: int = 1
     retrieval_threshold: float = 0.55
     max_context_tokens: int = 1200
     synthetic_only: bool = True
@@ -501,3 +527,33 @@ class RAGResponse(BaseModel):
     retrieval_score: float = 0.0
     used_fallback: bool = False
     generated_by: str = "synthetic"
+    rag_mode_used: str = "hybrid"
+    corrections: List[str] = []
+    verification_score: float = 0.0
+    verification_passed: bool = False
+    agentic_trace: List[Dict[str, Any]] = []
+
+class RAGEvaluationCase(BaseModel):
+    query: str
+    expected_collections: Optional[List[str]] = None
+    expected_doc_ids: Optional[List[str]] = None
+    expected_keywords: Optional[List[str]] = None
+    synthetic_only: bool = True
+    reference_answer: Optional[str] = None
+
+class RAGEvaluationRequest(BaseModel):
+    cases: List[RAGEvaluationCase]
+    top_k: int = 5
+    use_hybrid: bool = True
+    rag_mode: str = "hybrid"
+    include_graph_context: bool = False
+    retrieval_threshold: float = 0.55
+    graph_hops: int = 1
+
+class RAGEvaluationReport(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    report_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    summary: str
+    metrics: Dict[str, Any] = {}
+    per_case: List[Dict[str, Any]] = []
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

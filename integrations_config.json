@@ -50,5 +50,24 @@
     "pre_stage": "",
     "post_stage": "",
     "audit_sink": ""
+  },
+  "multimodal": {
+    "model_cache_dir": {"env": "MODEL_CACHE_DIR", "default": ""},
+    "cpu_threads": {"env": "MODEL_CPU_THREADS", "default": "0"}
+  },
+  "model_cache": {
+    "shared_dir": {"env": "MODEL_CACHE_DIR", "default": ""}
+  },
+  "graph_sync": {
+    "enabled": {"env": "GRAPH_SYNC_ENABLED", "default": "false"},
+    "interval_seconds": {"env": "GRAPH_SYNC_INTERVAL", "default": "300"}
+  },
+  "rag_reranker": {
+    "batch_size": {"env": "RERANKER_BATCH_SIZE", "default": "8"},
+    "warmup_enabled": {"env": "RERANKER_WARMUP", "default": "false"}
+  },
+  "rag_evaluation": {
+    "faithfulness_drop": {"env": "RAG_EVAL_DROP_FAITH", "default": "0.05"},
+    "relevancy_drop": {"env": "RAG_EVAL_DROP_REL", "default": "0.05"}
   }
 }

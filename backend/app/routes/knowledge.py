@@ -9,6 +9,7 @@ from app.models import KnowledgeNode, KnowledgeNodeCreate
 from app.core.logging_config import get_logger
 from app.audit import record_audit
 from app.security import require_permission
+from app.graph_sync_neo4j import health_check, sync_nodes
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -121,3 +122,51 @@ async def delete_knowledge_node(node_id: str, current_user: dict = Depends(requi
     )
     logger.info("knowledge.node.deleted", extra={"payload": {"node_id": node_id}})
     return {"message": "Node deleted"}
+
+
+@router.post("/knowledge-nodes/sync-neo4j")
+async def sync_knowledge_nodes(current_user: dict = Depends(require_permission("knowledge:write"))):
+    """Sync knowledge nodes to Neo4j.
+
+    Returns:
+        dict: Sync summary.
+    """
+    nodes = await db.knowledge_nodes.find({}, {"_id": 0}).to_list(500)
+    result = sync_nodes(nodes)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "knowledge.nodes.sync",
+        "knowledge_node",
+        "neo4j",
+        metadata=result,
+    )
+    logger.info("knowledge.nodes.sync", extra={"payload": result})
+    return result
+
+
+@router.get("/knowledge-nodes/neo4j-health")
+async def neo4j_health(current_user: dict = Depends(require_permission("knowledge:read"))):
+    """Check Neo4j health."""
+    result = await health_check()
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "knowledge.neo4j.health",
+        "knowledge_node",
+        "neo4j",
+        metadata=result,
+    )
+    return result
+
+
+@router.get("/knowledge-nodes/graph-sync-status")
+async def graph_sync_status(current_user: dict = Depends(require_permission("knowledge:read"))):
+    """Return recent graph sync status entries."""
+    records = await db.graph_sync_status.find({}, {"_id": 0}).sort("timestamp", -1).to_list(20)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "knowledge.nodes.sync.status",
+        "knowledge_node",
+        "neo4j",
+        metadata={"count": len(records)},
+    )
+    return {"items": records}

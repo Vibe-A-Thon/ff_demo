@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -6,7 +6,8 @@ import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { ScrollArea } from "../components/ui/scroll-area";
-import { FileText, Download, Filter } from "lucide-react";
+import { FileText, Download, Filter, Brain, Database } from "lucide-react";
+import { ragAPI, settingsAPI } from "../lib/api";
 
 const auditLogs = [
   {
@@ -53,6 +54,9 @@ const AuditLogViewer = () => {
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [ragEvalEvents, setRagEvalEvents] = useState([]);
+  const [ragCacheTelemetry, setRagCacheTelemetry] = useState(null);
+  const [ragSettings, setRagSettings] = useState(null);
 
   const filteredLogs = useMemo(() => {
     return auditLogs.filter((log) => {
@@ -62,6 +66,26 @@ const AuditLogViewer = () => {
       return matchesSearch && matchesAction && matchesStatus;
     });
   }, [search, actionFilter, statusFilter]);
+
+  useEffect(() => {
+    const loadRagAudit = async () => {
+      try {
+        const [historyRes, telemetryRes, settingsRes] = await Promise.all([
+          ragAPI.evaluationHistory({ limit: 5 }),
+          ragAPI.cacheTelemetry({ limit: 20 }),
+          settingsAPI.get(),
+        ]);
+        setRagEvalEvents(historyRes?.data?.items || []);
+        setRagCacheTelemetry(telemetryRes?.data?.summary || null);
+        setRagSettings(settingsRes?.data?.rag || null);
+      } catch (error) {
+        setRagEvalEvents([]);
+        setRagCacheTelemetry(null);
+        setRagSettings(null);
+      }
+    };
+    loadRagAudit();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -120,6 +144,65 @@ const AuditLogViewer = () => {
           </Button>
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <Card className="border-border" data-testid="audit-rag-evals">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Brain className="h-4 w-4 text-purple-400" />
+              RAG Evaluation Events
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {!ragEvalEvents.length && (
+              <p className="text-sm text-muted-foreground">No RAG evaluation events logged yet.</p>
+            )}
+            {ragEvalEvents.map((event, index) => (
+              <div key={`${event.report_id}-${index}`} className="rounded-md border border-border p-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-foreground">{event.report_id}</span>
+                  <Badge variant="outline" className="border-border">
+                    {event.metrics?.cases || 0} cases
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground">{event.created_at}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card className="border-border" data-testid="audit-rag-cache">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Database className="h-4 w-4 text-blue-400" />
+              RAG Cache Telemetry
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {ragCacheTelemetry ? (
+              <>
+                <p className="text-muted-foreground">Hit rate: {(ragCacheTelemetry.hit_rate * 100).toFixed(1)}%</p>
+                <p className="text-muted-foreground">Hits: {ragCacheTelemetry.hits} • Misses: {ragCacheTelemetry.misses}</p>
+                <p className="text-muted-foreground">Cache size: {ragCacheTelemetry.cache_stats?.size || 0}</p>
+                {ragSettings && (
+                  <Badge className={ragCacheTelemetry.hit_rate <= (ragSettings.hit_rate_crit ?? 0.4)
+                    ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                    : ragCacheTelemetry.hit_rate <= (ragSettings.hit_rate_warn ?? 0.6)
+                      ? "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30"
+                      : "bg-green-500/15 text-green-400 border border-green-500/30"}>
+                    {ragCacheTelemetry.hit_rate <= (ragSettings.hit_rate_crit ?? 0.4)
+                      ? "CRITICAL"
+                      : ragCacheTelemetry.hit_rate <= (ragSettings.hit_rate_warn ?? 0.6)
+                        ? "WARN"
+                        : "OK"}
+                  </Badge>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No cache telemetry available.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="border-border" data-testid="audit-table">
         <CardHeader>

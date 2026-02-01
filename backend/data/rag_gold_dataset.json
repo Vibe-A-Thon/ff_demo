@@ -1,0 +1,107 @@
+{
+  "dataset_id": "rag_gold_synthetic_v1",
+  "description": "Synthetic gold dataset for RAG evaluation (fraud groups + taxonomy coverage)",
+  "expand_from_taxonomy": true,
+  "taxonomy_source": "banking_fraud_taxonomy_catalog_120.json",
+  "cases": [
+    {
+      "query": "What signals indicate account takeover?",
+      "expected_collections": ["patterns"],
+      "expected_keywords": ["device", "impossible travel", "beneficiary"],
+      "synthetic_only": true,
+      "reference_answer": "Common ATO signals include device mismatch, impossible travel, and risky beneficiary changes."
+    },
+    {
+      "query": "Explain velocity rule behavior",
+      "expected_collections": ["rules"],
+      "expected_keywords": ["velocity", "tx_count", "threshold"],
+      "synthetic_only": true,
+      "reference_answer": "Velocity rules flag bursts when transaction count exceeds a threshold within a short window."
+    },
+    {
+      "query": "Summarize synthetic fraud taxonomy coverage",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["fraud", "scenarios", "taxonomy"],
+      "synthetic_only": true,
+      "reference_answer": "The taxonomy enumerates synthetic fraud scenarios to cover common attack families."
+    },
+    {
+      "query": "List key fraud groups in the taxonomy (identity, ATO, social engineering, cards)",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["Identity", "Account Takeover", "Social Engineering", "Card"],
+      "synthetic_only": true,
+      "reference_answer": "Key groups include Identity/KYC fraud, Account Takeover, Social Engineering (APP), and Card payment fraud."
+    },
+    {
+      "query": "What telemetry indicators are common for mule networks?",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["mule", "network", "shared", "cluster"],
+      "synthetic_only": true,
+      "reference_answer": "Mule network signals include shared devices/IPs, clustered withdrawals, and rapid pass-through transfers."
+    },
+    {
+      "query": "Summarize ACH fraud risks in the taxonomy",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["ACH", "unauthorized", "payroll", "diversion"],
+      "synthetic_only": true,
+      "reference_answer": "ACH risks include unauthorized debits, payroll diversion, and corporate ACH compromise."
+    },
+    {
+      "query": "Summarize wire transfer fraud risks",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["wire", "BEC", "invoice", "diversion"],
+      "synthetic_only": true,
+      "reference_answer": "Wire fraud often involves BEC, invoice diversion, and real-estate wire redirection."
+    },
+    {
+      "query": "What are common card-not-present fraud patterns?",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["CNP", "account testing", "chargeback"],
+      "synthetic_only": true,
+      "reference_answer": "CNP patterns include account testing/BIN attacks, digital goods abuse, and chargeback fraud."
+    },
+    {
+      "query": "What is the goal of social engineering scams in payments?",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["authorized", "impersonation", "romance"],
+      "synthetic_only": true,
+      "reference_answer": "Social engineering scams aim to trick victims into authorizing payments via impersonation, romance, or investment scams."
+    },
+    {
+      "query": "Summarize onboarding and identity fraud indicators",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["synthetic identity", "document", "kyc"],
+      "synthetic_only": true,
+      "reference_answer": "Indicators include synthetic identities, forged documents, and early-life high-velocity cash-out behavior."
+    },
+    {
+      "query": "What controls are recommended for account takeover?",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["MFA", "device", "session"],
+      "synthetic_only": true,
+      "reference_answer": "Layered controls include strong MFA, device/session risk checks, and anomaly detection on access patterns."
+    },
+    {
+      "query": "Summarize instant payments fraud risks",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["P2P", "instant", "ATO"],
+      "synthetic_only": true,
+      "reference_answer": "Instant payments risks include P2P scams, ATO cash-outs, and rapid mule routing."
+    },
+    {
+      "query": "What is the focus of AML-financial crime typologies?",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["AML", "layering", "structuring"],
+      "synthetic_only": true,
+      "reference_answer": "AML typologies focus on mule networks, layering/structuring, and sanctions evasion patterns."
+    },
+    {
+      "query": "Summarize check fraud patterns",
+      "expected_collections": ["taxonomy"],
+      "expected_keywords": ["check", "counterfeit", "RDC"],
+      "synthetic_only": true,
+      "reference_answer": "Check fraud includes theft/washing, counterfeit checks, and duplicate RDC deposits."
+    }
+    }
+  ]
+}

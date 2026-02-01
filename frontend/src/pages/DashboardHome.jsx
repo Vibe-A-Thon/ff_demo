@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { useAuth } from "../contexts/AuthContext";
-import { agentAPI } from "../lib/api";
+import { agentAPI, ragAPI, settingsAPI } from "../lib/api";
 import {
   Activity,
   ShieldAlert,
@@ -77,6 +77,8 @@ const DashboardHome = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [registrySnapshot, setRegistrySnapshot] = useState(null);
+  const [ragSnapshot, setRagSnapshot] = useState(null);
+  const [ragLoading, setRagLoading] = useState(true);
   const actionStyles = useMemo(
     () => ({
       red: "border-red-500/40 text-red-300 hover:bg-red-500/10",
@@ -104,6 +106,47 @@ const DashboardHome = () => {
     };
     loadRegistry();
   }, []);
+
+  useEffect(() => {
+    const loadRagSnapshot = async () => {
+      setRagLoading(true);
+      try {
+        const [historyRes, telemetryRes, alertsRes, settingsRes] = await Promise.all([
+          ragAPI.evaluationHistory({ limit: 1 }),
+          ragAPI.cacheTelemetry({ limit: 50 }),
+          ragAPI.evaluationAlerts({ limit: 5 }),
+          settingsAPI.get(),
+        ]);
+        const latest = historyRes?.data?.items?.[0] || null;
+        const telemetry = telemetryRes?.data?.summary || null;
+        const alerts = alertsRes?.data?.items || [];
+        const ragSettings = settingsRes?.data?.rag || {};
+        setRagSnapshot({ latest, telemetry, alerts, ragSettings });
+      } catch (error) {
+        setRagSnapshot(null);
+      } finally {
+        setRagLoading(false);
+      }
+    };
+    loadRagSnapshot();
+  }, []);
+
+  const hitRateStatus = () => {
+    const hitRate = ragSnapshot?.telemetry?.hit_rate;
+    if (hitRate === undefined || hitRate === null) return "neutral";
+    const warn = Number(ragSnapshot?.ragSettings?.hit_rate_warn ?? 0.6);
+    const crit = Number(ragSnapshot?.ragSettings?.hit_rate_crit ?? 0.4);
+    if (hitRate <= crit) return "critical";
+    if (hitRate <= warn) return "warning";
+    return "ok";
+  };
+
+  const hitRateBadge = () => {
+    const status = hitRateStatus();
+    if (status === "critical") return "bg-red-500/15 text-red-400 border border-red-500/30";
+    if (status === "warning") return "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30";
+    return "bg-green-500/15 text-green-400 border border-green-500/30";
+  };
 
   const visibleKpis = filterByRole(kpis);
   const visibleActions = filterByRole(quickActions);
@@ -151,6 +194,54 @@ const DashboardHome = () => {
             </Card>
           </Link>
         ))}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <Card className="border-border" data-testid="dashboard-rag-status">
+          <CardHeader>
+            <CardTitle className="text-lg">RAG Quality Snapshot</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {ragLoading && <p className="text-sm text-muted-foreground">Loading RAG status...</p>}
+            {!ragLoading && !ragSnapshot && (
+              <p className="text-sm text-muted-foreground">RAG telemetry not available.</p>
+            )}
+            {ragSnapshot && (
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-md border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Last Eval</p>
+                  <p className="text-sm font-mono text-foreground">
+                    {ragSnapshot.latest?.created_at || "—"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Cache Hit Rate</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-mono text-foreground">
+                      {ragSnapshot.telemetry ? `${(ragSnapshot.telemetry.hit_rate * 100).toFixed(1)}%` : "—"}
+                    </p>
+                    {ragSnapshot.telemetry && (
+                      <Badge className={hitRateBadge()}> {hitRateStatus().toUpperCase()} </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Regression Alerts</p>
+                  <p className="text-sm font-mono text-foreground">
+                    {ragSnapshot.alerts?.length ?? 0}
+                  </p>
+                </div>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => navigate("/rag-evaluation")}
+              data-testid="dashboard-rag-open"
+            >
+              Review RAG Evaluation
+            </Button>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">

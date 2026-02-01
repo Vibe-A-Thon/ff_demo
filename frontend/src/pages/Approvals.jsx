@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { approvalAPI, ruleAPI, rsbAPI, agentAPI } from "../lib/api";
+import { approvalAPI, ruleAPI, rsbAPI, agentAPI, ragAPI, settingsAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   ShieldCheck,
@@ -33,6 +33,8 @@ const Approvals = () => {
   const [rules, setRules] = useState([]);
   const [packages, setPackages] = useState([]);
   const [registrySnapshot, setRegistrySnapshot] = useState(null);
+  const [ragAlerts, setRagAlerts] = useState([]);
+  const [ragSettings, setRagSettings] = useState(null);
   
   const [formData, setFormData] = useState({
     resource_type: "rule",
@@ -52,6 +54,20 @@ const Approvals = () => {
       }
     };
     loadRegistry();
+    const loadRagAlerts = async () => {
+      try {
+        const [alertsRes, settingsRes] = await Promise.all([
+          ragAPI.evaluationAlerts({ limit: 5 }),
+          settingsAPI.get(),
+        ]);
+        setRagAlerts(alertsRes?.data?.items || []);
+        setRagSettings(settingsRes?.data?.rag || null);
+      } catch (error) {
+        setRagAlerts([]);
+        setRagSettings(null);
+      }
+    };
+    loadRagAlerts();
   }, []);
 
   const loadData = async () => {
@@ -86,6 +102,11 @@ const Approvals = () => {
   };
 
   const handleApprove = async (approvalId) => {
+    const target = approvals.find((item) => item.id === approvalId);
+    if (ragAlerts.length > 0 && ["deploy", "merge"].includes(target?.action)) {
+      toast.error("Release approval blocked: RAG regression alert detected.");
+      return;
+    }
     try {
       await approvalAPI.approve(approvalId, "admin-user");
       loadData();
@@ -186,6 +207,9 @@ const Approvals = () => {
   }
   if (selectedApproval?.resource_type === "rsb_package" && selectedApproval?.action === "merge") {
     sodWarnings.push("RSB merges require compliance sign-off before release");
+  }
+  if (ragAlerts.length > 0 && ["deploy", "merge"].includes(selectedApproval?.action)) {
+    sodWarnings.push("RAG regression alert active: release approval blocked until resolved");
   }
 
   return (
@@ -309,6 +333,22 @@ const Approvals = () => {
               </p>
             </div>
           )}
+          {ragAlerts.length > 0 && (
+            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-400" />
+                <span className="font-semibold text-red-400">RELEASES BLOCKED</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                RAG regression alerts detected. Approvals for deploy/merge are paused.
+              </p>
+              {ragSettings && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Thresholds: faith drop {ragSettings.faithfulness_drop}, rel drop {ragSettings.relevancy_drop}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <ScrollArea className="flex-1">
@@ -401,6 +441,7 @@ const Approvals = () => {
                     </Button>
                     <Button
                       onClick={() => handleApprove(selectedApproval.id)}
+                      disabled={ragAlerts.length > 0 && ["deploy", "merge"].includes(selectedApproval.action)}
                       data-testid="approve-approval-btn"
                       data-explain="Approve change"
                       data-explain-title="Approval rationale"

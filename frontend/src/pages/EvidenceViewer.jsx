@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Input } from "../components/ui/input";
 import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
-import { evidenceAPI, battleAPI, agentAPI, runAPI } from "../lib/api";
+import { evidenceAPI, battleAPI, agentAPI, runAPI, ragAPI, settingsAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   FileSearch,
@@ -54,6 +54,9 @@ const EvidenceViewer = () => {
   const [artifactApprovals, setArtifactApprovals] = useState([]);
   const [artifactFilter, setArtifactFilter] = useState(null);
   const [packFilter, setPackFilter] = useState(null);
+  const [ragEvalSummary, setRagEvalSummary] = useState(null);
+  const [ragAlerts, setRagAlerts] = useState([]);
+  const [ragSettings, setRagSettings] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -66,6 +69,26 @@ const EvidenceViewer = () => {
       }
     };
     loadRegistry();
+  }, []);
+
+  useEffect(() => {
+    const loadRagSummary = async () => {
+      try {
+        const [historyRes, alertsRes, settingsRes] = await Promise.all([
+          ragAPI.evaluationHistory({ limit: 1 }),
+          ragAPI.evaluationAlerts({ limit: 5 }),
+          settingsAPI.get(),
+        ]);
+        setRagEvalSummary(historyRes?.data?.items?.[0] || null);
+        setRagAlerts(alertsRes?.data?.items || []);
+        setRagSettings(settingsRes?.data?.rag || null);
+      } catch (error) {
+        setRagEvalSummary(null);
+        setRagAlerts([]);
+        setRagSettings(null);
+      }
+    };
+    loadRagSummary();
   }, []);
 
   const loadData = async () => {
@@ -633,6 +656,64 @@ const EvidenceViewer = () => {
                       <div className="text-xs text-muted-foreground">Registry data not available.</div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border" data-testid="evidence-rag-summary">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-purple-400" />
+                    RAG Evaluation Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  {ragEvalSummary ? (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="rounded-md border border-border p-3">
+                          <p className="text-xs text-muted-foreground">Faithfulness</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-mono text-foreground">
+                              {ragEvalSummary?.metrics?.avg_faithfulness?.toFixed?.(3) ?? "—"}
+                            </p>
+                            {ragSettings && (
+                              <Badge className={(ragEvalSummary?.metrics?.avg_faithfulness || 0) < (ragSettings.faithfulness_warn ?? 0.75)
+                                ? "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30"
+                                : "bg-green-500/15 text-green-400 border border-green-500/30"}>
+                                {(ragEvalSummary?.metrics?.avg_faithfulness || 0) < (ragSettings.faithfulness_warn ?? 0.75) ? "WARN" : "OK"}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-md border border-border p-3">
+                          <p className="text-xs text-muted-foreground">Relevancy</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-mono text-foreground">
+                              {ragEvalSummary?.metrics?.avg_answer_relevancy?.toFixed?.(3) ?? "—"}
+                            </p>
+                            {ragSettings && (
+                              <Badge className={(ragEvalSummary?.metrics?.avg_answer_relevancy || 0) < (ragSettings.relevancy_warn ?? 0.75)
+                                ? "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30"
+                                : "bg-green-500/15 text-green-400 border border-green-500/30"}>
+                                {(ragEvalSummary?.metrics?.avg_answer_relevancy || 0) < (ragSettings.relevancy_warn ?? 0.75) ? "WARN" : "OK"}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-md border border-border p-3">
+                          <p className="text-xs text-muted-foreground">Alerts</p>
+                          <p className="text-sm font-mono text-foreground">
+                            {ragAlerts.length}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Latest evaluation: {ragEvalSummary.created_at}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No RAG evaluation data available.</p>
+                  )}
                 </CardContent>
               </Card>
 

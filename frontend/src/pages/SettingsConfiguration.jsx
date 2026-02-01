@@ -7,6 +7,8 @@ import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { ShieldCheck, KeyRound, Save, RefreshCw } from "lucide-react";
+import { settingsAPI } from "../lib/api";
+import { toast } from "sonner";
 
 const apiKeys = [
   { id: "key-01", name: "OpenAI (Primary)", lastRotated: "2026-01-10", status: "active" },
@@ -25,6 +27,67 @@ const SettingsConfiguration = () => {
   const [incidentPaging, setIncidentPaging] = useState(false);
   const [bankName, setBankName] = useState("Fraud Forge Bank");
   const [region, setRegion] = useState("US-East");
+  const [faithfulnessDrop, setFaithfulnessDrop] = useState("0.05");
+  const [relevancyDrop, setRelevancyDrop] = useState("0.05");
+  const [faithfulnessWarn, setFaithfulnessWarn] = useState("0.75");
+  const [relevancyWarn, setRelevancyWarn] = useState("0.75");
+  const [hitRateWarn, setHitRateWarn] = useState("0.6");
+  const [hitRateCrit, setHitRateCrit] = useState("0.4");
+  const [cacheDir, setCacheDir] = useState("");
+  const [cacheTtl, setCacheTtl] = useState("600");
+  const [cacheMaxItems, setCacheMaxItems] = useState("200");
+  const [settingsLoading, setSettingsLoading] = useState(true);
+
+  const loadSettings = async () => {
+    setSettingsLoading(true);
+    try {
+      const response = await settingsAPI.get();
+      const rag = response?.data?.rag || {};
+      setFaithfulnessDrop(String(rag.faithfulness_drop ?? "0.05"));
+      setRelevancyDrop(String(rag.relevancy_drop ?? "0.05"));
+      setFaithfulnessWarn(String(rag.faithfulness_warn ?? "0.75"));
+      setRelevancyWarn(String(rag.relevancy_warn ?? "0.75"));
+      setHitRateWarn(String(rag.hit_rate_warn ?? "0.6"));
+      setHitRateCrit(String(rag.hit_rate_crit ?? "0.4"));
+      setCacheDir(String(rag.cache_dir ?? ""));
+      setCacheTtl(String(rag.cache_ttl_seconds ?? "600"));
+      setCacheMaxItems(String(rag.cache_max_items ?? "200"));
+    } catch (error) {
+      toast.error("Failed to load settings.");
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      const payload = {
+        rag: {
+          faithfulness_drop: Number(faithfulnessDrop),
+          relevancy_drop: Number(relevancyDrop),
+          faithfulness_warn: Number(faithfulnessWarn),
+          relevancy_warn: Number(relevancyWarn),
+          hit_rate_warn: Number(hitRateWarn),
+          hit_rate_crit: Number(hitRateCrit),
+          cache_dir: cacheDir,
+          cache_ttl_seconds: Number(cacheTtl),
+          cache_max_items: Number(cacheMaxItems),
+        },
+      };
+      await settingsAPI.update(payload);
+      toast.success("Settings updated.");
+    } catch (error) {
+      toast.error("Failed to update settings.");
+    }
+  };
+
+  const handleReset = async () => {
+    await loadSettings();
+  };
+
+  React.useEffect(() => {
+    loadSettings();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -35,11 +98,11 @@ const SettingsConfiguration = () => {
             <h1 className="text-2xl font-semibold">Settings & Configuration</h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" data-testid="settings-reset">
+            <Button variant="outline" data-testid="settings-reset" onClick={handleReset}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Reset
             </Button>
-            <Button data-testid="settings-save">
+            <Button data-testid="settings-save" onClick={handleSave} disabled={settingsLoading}>
               <Save className="mr-2 h-4 w-4" />
               Save Changes
             </Button>
@@ -143,6 +206,103 @@ const SettingsConfiguration = () => {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-border" data-testid="settings-rag">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-purple-400" />
+            RAG Evaluation & Cache Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="rag-faith-drop">Faithfulness Drop Threshold</Label>
+            <Input
+              id="rag-faith-drop"
+              value={faithfulnessDrop}
+              onChange={(event) => setFaithfulnessDrop(event.target.value)}
+              data-testid="settings-rag-faith-drop"
+            />
+            <p className="text-xs text-muted-foreground">Used for regression alerts.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rag-rel-drop">Relevancy Drop Threshold</Label>
+            <Input
+              id="rag-rel-drop"
+              value={relevancyDrop}
+              onChange={(event) => setRelevancyDrop(event.target.value)}
+              data-testid="settings-rag-rel-drop"
+            />
+            <p className="text-xs text-muted-foreground">Used for regression alerts.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rag-faith-warn">Faithfulness Warning Floor</Label>
+            <Input
+              id="rag-faith-warn"
+              value={faithfulnessWarn}
+              onChange={(event) => setFaithfulnessWarn(event.target.value)}
+              data-testid="settings-rag-faith-warn"
+            />
+            <p className="text-xs text-muted-foreground">Warn when faithfulness drops below this.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rag-rel-warn">Relevancy Warning Floor</Label>
+            <Input
+              id="rag-rel-warn"
+              value={relevancyWarn}
+              onChange={(event) => setRelevancyWarn(event.target.value)}
+              data-testid="settings-rag-rel-warn"
+            />
+            <p className="text-xs text-muted-foreground">Warn when relevancy drops below this.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rag-hit-warn">Cache Hit Rate Warn</Label>
+            <Input
+              id="rag-hit-warn"
+              value={hitRateWarn}
+              onChange={(event) => setHitRateWarn(event.target.value)}
+              data-testid="settings-rag-hit-warn"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rag-hit-crit">Cache Hit Rate Critical</Label>
+            <Input
+              id="rag-hit-crit"
+              value={hitRateCrit}
+              onChange={(event) => setHitRateCrit(event.target.value)}
+              data-testid="settings-rag-hit-crit"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rag-cache-dir">Shared Model Cache</Label>
+            <Input
+              id="rag-cache-dir"
+              value={cacheDir}
+              onChange={(event) => setCacheDir(event.target.value)}
+              data-testid="settings-rag-cache-dir"
+            />
+            <p className="text-xs text-muted-foreground">Points to shared storage path.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rag-cache-ttl">CAG Cache TTL (seconds)</Label>
+            <Input
+              id="rag-cache-ttl"
+              value={cacheTtl}
+              onChange={(event) => setCacheTtl(event.target.value)}
+              data-testid="settings-rag-cache-ttl"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rag-cache-max">CAG Cache Max Items</Label>
+            <Input
+              id="rag-cache-max"
+              value={cacheMaxItems}
+              onChange={(event) => setCacheMaxItems(event.target.value)}
+              data-testid="settings-rag-cache-max"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-border" data-testid="settings-integrations">
         <CardHeader>

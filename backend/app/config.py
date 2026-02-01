@@ -18,6 +18,28 @@ if INTEGRATIONS_CONFIG_PATH.exists():
 else:
 	INTEGRATIONS_CONFIG = {}
 
+
+def get_integration_setting(section: str, key: str, default: str | None = None) -> str | None:
+	"""Resolve an integration setting from config/env.
+
+	Args:
+		section: Integration section name.
+		key: Key within the section.
+		default: Fallback value.
+
+	Returns:
+		str | None: Resolved value.
+	"""
+	section_cfg = (INTEGRATIONS_CONFIG or {}).get(section) or {}
+	entry = section_cfg.get(key)
+	if isinstance(entry, dict):
+		env_key = entry.get("env")
+		value = os.environ.get(env_key) if env_key else None
+		return value if value is not None else entry.get("default", default)
+	if entry is not None:
+		return str(entry)
+	return default
+
 APP_NAME = os.environ.get("APP_NAME", "Fraud Forge API")
 APP_VERSION = os.environ.get("APP_VERSION", "1.0.0")
 DEBUG_MODE = os.environ.get("DEBUG", "false").lower() == "true"

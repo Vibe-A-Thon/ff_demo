@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../c
 import { Switch } from "../components/ui/switch";
 import { Progress } from "../components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { knowledgeAPI } from "../lib/api";
+import { knowledgeAPI, ragAPI, settingsAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   Plus,
@@ -71,6 +71,8 @@ const BrainSurgery = () => {
   const [perfImpact, setPerfImpact] = useState(18);
   const [perfLatency, setPerfLatency] = useState(6);
   const [perfCpu, setPerfCpu] = useState(4);
+  const [ragGraphQuality, setRagGraphQuality] = useState(null);
+  const [ragSettings, setRagSettings] = useState(null);
   const graphRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -119,6 +121,23 @@ const BrainSurgery = () => {
     updateDimensions();
     window.addEventListener("resize", updateDimensions);
     return () => window.removeEventListener("resize", updateDimensions);
+  }, []);
+
+  useEffect(() => {
+    const loadRagQuality = async () => {
+      try {
+        const [historyRes, settingsRes] = await Promise.all([
+          ragAPI.evaluationHistory({ limit: 1 }),
+          settingsAPI.get(),
+        ]);
+        setRagGraphQuality(historyRes?.data?.items?.[0] || null);
+        setRagSettings(settingsRes?.data?.rag || null);
+      } catch (error) {
+        setRagGraphQuality(null);
+        setRagSettings(null);
+      }
+    };
+    loadRagQuality();
   }, []);
 
   const loadNodes = async () => {
@@ -366,6 +385,18 @@ const BrainSurgery = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <Badge
+            className={(() => {
+              const value = ragGraphQuality?.metrics?.avg_faithfulness;
+              const warn = Number(ragSettings?.faithfulness_warn ?? 0.75);
+              if (value === undefined || value === null) return "bg-zinc-800 text-zinc-300 border border-zinc-700";
+              if (value < warn) return "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30";
+              return "bg-green-500/15 text-green-400 border border-green-500/30";
+            })()}
+            data-testid="brain-rag-quality"
+          >
+            GraphRAG Quality: {ragGraphQuality?.metrics?.avg_faithfulness?.toFixed?.(3) ?? "—"}
+          </Badge>
           <Button variant="ghost" size="icon" onClick={() => handleZoom("in")} data-testid="zoom-in-btn">
             <ZoomIn className="h-4 w-4" />
           </Button>

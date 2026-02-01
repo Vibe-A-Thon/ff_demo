@@ -7,7 +7,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { metricsAPI, battleAPI } from "../lib/api";
+import { metricsAPI, battleAPI, ragAPI, settingsAPI } from "../lib/api";
 import { toast } from "sonner";
 import JudgeModeBanner from "../components/JudgeModeBanner";
 import {
@@ -68,10 +68,45 @@ const MetricsDashboard = () => {
   const [timeRange, setTimeRange] = useState("7d");
   const [judgeMode, setJudgeMode] = useState(false);
   const [taxonomyFamilies, setTaxonomyFamilies] = useState([]);
+  const [ragEvalSeries, setRagEvalSeries] = useState([]);
+  const [ragEvalLoading, setRagEvalLoading] = useState(false);
+  const [ragSettings, setRagSettings] = useState(null);
 
   useEffect(() => {
     loadMetrics();
   }, []);
+
+  useEffect(() => {
+    const loadRagEvaluations = async () => {
+      setRagEvalLoading(true);
+      try {
+        const [response, settingsRes] = await Promise.all([
+          ragAPI.evaluationHistory({ limit: 20 }),
+          settingsAPI.get(),
+        ]);
+        const items = response?.data?.items || [];
+        const series = [...items]
+          .reverse()
+          .map((item, index) => ({
+            name: `Eval ${index + 1}`,
+            faithfulness: item?.metrics?.avg_faithfulness || 0,
+            relevancy: item?.metrics?.avg_answer_relevancy || 0,
+          }));
+        setRagEvalSeries(series);
+        setRagSettings(settingsRes?.data?.rag || null);
+      } catch (error) {
+        setRagEvalSeries([]);
+        setRagSettings(null);
+      } finally {
+        setRagEvalLoading(false);
+      }
+    };
+    loadRagEvaluations();
+  }, []);
+
+  const latestRagEval = ragEvalSeries[ragEvalSeries.length - 1];
+  const ragWarn = Number(ragSettings?.faithfulness_warn ?? 0.75);
+  const relWarn = Number(ragSettings?.relevancy_warn ?? 0.75);
 
   useEffect(() => {
     const loadTaxonomy = async () => {
@@ -405,6 +440,63 @@ const MetricsDashboard = () => {
                   <Bar dataKey="timeToImmunity" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Minutes" />
                 </BarChart>
               </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* RAG Faithfulness & Relevancy */}
+          <Card className="border-border" data-testid="rag-eval-trend">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-purple-400" />
+                RAG Faithfulness & Relevancy
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {ragEvalLoading && (
+                <div className="text-sm text-muted-foreground">Loading RAG evaluation trends...</div>
+              )}
+              {!ragEvalLoading && ragEvalSeries.length === 0 && (
+                <div className="text-sm text-muted-foreground">No evaluation history yet.</div>
+              )}
+              {!ragEvalLoading && ragEvalSeries.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                  <Badge className={latestRagEval?.faithfulness < ragWarn ? "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30" : "bg-green-500/15 text-green-400 border border-green-500/30"}>
+                    Faithfulness {latestRagEval?.faithfulness?.toFixed?.(3) ?? "—"}
+                  </Badge>
+                  <Badge className={latestRagEval?.relevancy < relWarn ? "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30" : "bg-green-500/15 text-green-400 border border-green-500/30"}>
+                    Relevancy {latestRagEval?.relevancy?.toFixed?.(3) ?? "—"}
+                  </Badge>
+                </div>
+              )}
+              {!ragEvalLoading && ragEvalSeries.length > 0 && (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={ragEvalSeries}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                    <XAxis dataKey="name" stroke="#71717A" fontSize={12} />
+                    <YAxis stroke="#71717A" fontSize={12} domain={[0, 1]} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#18181B', border: '1px solid #27272A', borderRadius: '8px' }}
+                      labelStyle={{ color: '#FAFAFA' }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="faithfulness"
+                      stroke="#22C55E"
+                      strokeWidth={2}
+                      dot={{ fill: '#22C55E', strokeWidth: 2 }}
+                      name="Faithfulness"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="relevancy"
+                      stroke="#3B82F6"
+                      strokeWidth={2}
+                      dot={{ fill: '#3B82F6', strokeWidth: 2 }}
+                      name="Relevancy"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
