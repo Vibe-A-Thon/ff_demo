@@ -20,6 +20,15 @@ See [docs/Architecture.md](docs/Architecture.md) for the full system overview.
 	- `npm install`
 	- `npm start`
 
+## Repository Structure
+- backend/app: FastAPI application code (routes, core, models, services).
+- frontend/src: React UI components and views.
+- tests: Pytest suites and fixtures for backend.
+- docs: Architecture, deployment, RSB format, testing guide.
+
+## Documentation Notes
+Some planning/requirements documents in the repo root describe future architecture (e.g., src/, api/, ui/ layouts). For the current implementation, use the layout described above and the files under docs/.
+
 ## Testing
 - Unit and integration tests: `pytest -v`
 - Coverage: `pytest --cov=backend/app --cov-report=term-missing --cov-fail-under=85`

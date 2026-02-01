@@ -10,6 +10,12 @@
 4. Frontend:
    - http://localhost:3000
 
+### Compose Services
+- backend: FastAPI API service.
+- frontend: React UI.
+- mongo: Primary document store.
+- db, redis, chromadb, neo4j: Optional expansion services for Phase 1.
+
 ## Manual Backend Run
 1. `cd backend`
 2. `pip install -r requirements.txt`
@@ -17,7 +23,7 @@
 
 ## CI/CD
 - GitHub Actions runs lint, type checks, security scan, and pytest with coverage gating.
-- Coverage threshold: 85% (see .coveragerc).
+- Coverage threshold: 40% (see .coveragerc).
 
 ## Environment Variables
 - `MONGO_URL`

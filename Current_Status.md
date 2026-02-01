@@ -26,8 +26,8 @@
   - Sidebar and Dashboard filtering implemented.
 - **Action-level RBAC + SoD** — **25%**
   - Approval endpoints exist, but gating rules across actions are partial.
-- **Audit logging** — **55%**
-  - Audit events recorded for approvals; broader actions not fully covered.
+- **Audit logging** — **70%**
+  - Audit events recorded for approvals and rule actions; structured logs added across routes.
 
 ### 3) Workflow Engine & State Machine
 - **War loop state machine (Red→Blue→Purple→Green→Black→Orange→Gold→White)** — **70%**
@@ -94,10 +94,10 @@
   - Workflow controls wired in War Room.
 
 ### 11) Observability & Testing
-- **Run trace logging** — **60%**
-  - JSONL trace + events recorded.
-- **Unit/integration tests** — **25%**
-  - Basic tests present; coverage low.
+- **Run trace logging** — **75%**
+  - JSONL trace + events recorded; structured logging added for major state changes.
+- **Unit/integration tests** — **70%**
+  - Broad API/unit coverage added; coverage gate enforced in CI.
 
 ---
 

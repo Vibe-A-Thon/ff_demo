@@ -1,0 +1,488 @@
+Docstring/Type Hint Scan Report
+========================================
+Scanned dirs: backend, tests
+Total findings: 483
+
+backend\server.py :: module <module> :: missing module docstring
+backend\app\agents.py :: class BaseAgent :: docstring not Google-style
+backend\app\agents.py :: class BaseOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class RedOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class BlueOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class PurpleOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class GreenOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class BlackOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class OrangeOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class GoldOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class WhiteOrchestrator :: docstring not Google-style
+backend\app\agents.py :: class RedAgent :: docstring not Google-style
+backend\app\agents.py :: class BlueAgent :: docstring not Google-style
+backend\app\agents.py :: class GoldAgent :: docstring not Google-style
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agents.py :: function __init__ :: missing return type hint
+backend\app\agent_registry.py :: class AgentRegistry :: docstring not Google-style
+backend\app\agent_registry.py :: function register_agent :: missing docstring
+backend\app\agent_registry.py :: function update_agent_status :: missing docstring
+backend\app\agent_registry.py :: function build_delegation_plan :: missing docstring
+backend\app\graph_utils.py :: function add_node :: missing docstring
+backend\app\main.py :: class CorrelationIdMiddleware :: missing docstring
+backend\app\main.py :: function startup_db_client :: missing docstring
+backend\app\main.py :: function startup_db_client :: missing return type hint
+backend\app\main.py :: function shutdown_db_client :: missing docstring
+backend\app\main.py :: function shutdown_db_client :: missing return type hint
+backend\app\main.py :: function dispatch :: missing docstring
+backend\app\main.py :: function dispatch :: missing param type hints: call_next
+backend\app\main.py :: function dispatch :: missing return type hint
+backend\app\models.py :: module <module> :: missing module docstring
+backend\app\models.py :: class UserCreate :: missing docstring
+backend\app\models.py :: class UserLogin :: missing docstring
+backend\app\models.py :: class User :: missing docstring
+backend\app\models.py :: class BattleCreate :: missing docstring
+backend\app\models.py :: class Battle :: missing docstring
+backend\app\models.py :: class RuleCreate :: missing docstring
+backend\app\models.py :: class Rule :: missing docstring
+backend\app\models.py :: class RuleProposalCreate :: missing docstring
+backend\app\models.py :: class RuleApprovalDecision :: missing docstring
+backend\app\models.py :: class RuleActionRequest :: missing docstring
+backend\app\models.py :: class EvidenceExportApprovalRequest :: missing docstring
+backend\app\models.py :: class RSBPackage :: missing docstring
+backend\app\models.py :: class RSBPackageCreate :: missing docstring
+backend\app\models.py :: class EvidencePack :: missing docstring
+backend\app\models.py :: class ApprovalRequest :: missing docstring
+backend\app\models.py :: class ApprovalCreate :: missing docstring
+backend\app\models.py :: class AuditLogEntry :: missing docstring
+backend\app\models.py :: class QualityCheckResult :: missing docstring
+backend\app\models.py :: class EvaluationReport :: missing docstring
+backend\app\models.py :: class KnowledgeNode :: missing docstring
+backend\app\models.py :: class KnowledgeNodeCreate :: missing docstring
+backend\app\models.py :: class RunStartRequest :: missing docstring
+backend\app\models.py :: class RunSession :: missing docstring
+backend\app\models.py :: class RunEvent :: missing docstring
+backend\app\models.py :: class WorkflowAdvanceRequest :: missing docstring
+backend\app\models.py :: class WorkflowDecisionRequest :: missing docstring
+backend\app\models.py :: class WorkflowAutoRunRequest :: missing docstring
+backend\app\models.py :: class AgentTask :: missing docstring
+backend\app\models.py :: class AgentResult :: missing docstring
+backend\app\models.py :: class EvidenceItem :: missing docstring
+backend\app\models.py :: class Decision :: missing docstring
+backend\app\models.py :: class ExplanationBundle :: missing docstring
+backend\app\models.py :: class EvidenceGraphNode :: missing docstring
+backend\app\models.py :: class EvidenceGraphEdge :: missing docstring
+backend\app\models.py :: class EvidenceGraph :: missing docstring
+backend\app\models.py :: class Counterfactual :: missing docstring
+backend\app\models.py :: class SimilarCase :: missing docstring
+backend\app\models.py :: class ToolSpec :: missing docstring
+backend\app\models.py :: class ToolCall :: missing docstring
+backend\app\models.py :: class ToolResult :: missing docstring
+backend\app\models.py :: class AgentTrace :: missing docstring
+backend\app\models.py :: class TeamProfile :: missing docstring
+backend\app\models.py :: class TeamProfileCreate :: missing docstring
+backend\app\models.py :: class AgentProfile :: missing docstring
+backend\app\models.py :: class AgentProfileCreate :: missing docstring
+backend\app\models.py :: class AgentRequest :: missing docstring
+backend\app\models.py :: class AgentRequestCreate :: missing docstring
+backend\app\models.py :: class AgentRequestDecision :: missing docstring
+backend\app\models.py :: class RAGDocument :: missing docstring
+backend\app\models.py :: class RAGDocumentCreate :: missing docstring
+backend\app\models.py :: class RAGQueryRequest :: missing docstring
+backend\app\models.py :: class RAGHit :: missing docstring
+backend\app\models.py :: class RAGResponse :: missing docstring
+backend\app\rsb_utils.py :: module <module> :: missing module docstring
+backend\app\rsb_utils.py :: function build_rsb_tree :: missing docstring
+backend\app\rsb_utils.py :: function read_zip_text :: missing docstring
+backend\app\rsb_utils.py :: function read_zip_json :: missing docstring
+backend\app\rsb_utils.py :: function find_first_match :: missing docstring
+backend\app\rsb_utils.py :: function validate_rsb_payload :: missing docstring
+backend\app\rsb_utils.py :: function build_test_results :: missing docstring
+backend\app\rsb_utils.py :: function bump_patch_version :: missing docstring
+backend\app\rsb_utils.py :: function build_rsb_archive :: missing docstring
+backend\app\rsb_utils.py :: function to_tree :: missing docstring
+backend\app\run_helpers.py :: class EventBus :: docstring not Google-style
+backend\app\run_helpers.py :: function __init__ :: missing return type hint
+backend\app\run_helpers.py :: function publish :: missing return type hint
+backend\app\security.py :: function _require :: missing docstring
+backend\app\teams_data.py :: module <module> :: missing module docstring
+backend\app\teams_data.py :: function default_team_payloads :: missing docstring
+backend\app\teams_data.py :: function _agent_payload :: missing docstring
+backend\app\teams_data.py :: function default_agent_payloads :: missing docstring
+backend\app\workflow_service.py :: module <module> :: missing module docstring
+backend\app\workflow_service.py :: function next_war_loop_stage :: missing docstring
+backend\app\workflow_service.py :: function _synthetic_rulespec :: missing docstring
+backend\app\workflow_service.py :: function _synthetic_patch :: missing docstring
+backend\app\workflow_service.py :: function _synthetic_test_report :: missing docstring
+backend\app\workflow_service.py :: function _synthetic_compliance :: missing docstring
+backend\app\workflow_service.py :: function _stage_payload :: missing docstring
+backend\app\workflow_service.py :: function stage_is_approved :: missing docstring
+backend\app\workflow_service.py :: function ensure_stage_approval :: missing docstring
+backend\app\workflow_service.py :: function execute_war_loop_stage :: missing docstring
+backend\app\workflow_service.py :: function can_transition_from :: missing docstring
+backend\app\workflow_service.py :: function next_workflow_state :: missing docstring
+backend\app\workflow_service.py :: function build_workflow_entry :: missing docstring
+backend\app\workflow_service.py :: function advance_workflow :: missing docstring
+backend\app\workflow_service.py :: function decide_workflow :: missing docstring
+backend\app\workflow_service.py :: function get_workflow_approvals :: missing docstring
+backend\app\workflow_service.py :: function compute_governance_status :: missing docstring
+backend\app\xai_utils.py :: module <module> :: missing module docstring
+backend\app\xai_utils.py :: function build_evidence_items :: missing docstring
+backend\app\xai_utils.py :: function build_explanation_bundle :: missing docstring
+backend\app\xai_utils.py :: function build_evidence_graph :: missing docstring
+backend\app\xai_utils.py :: function build_counterfactuals :: missing docstring
+backend\app\__init__.py :: module <module> :: missing module docstring
+backend\app\core\exceptions.py :: class RuleValidationError :: docstring not Google-style
+backend\app\core\exceptions.py :: class RSBParseError :: docstring not Google-style
+backend\app\core\exceptions.py :: class AgentExecutionError :: docstring not Google-style
+backend\app\core\exceptions.py :: function __init__ :: missing docstring
+backend\app\core\exceptions.py :: function __init__ :: missing docstring
+backend\app\core\exceptions.py :: function __init__ :: missing docstring
+backend\app\core\exceptions.py :: function __init__ :: missing docstring
+backend\app\core\exception_handlers.py :: function app_error_handler :: missing docstring
+backend\app\core\exception_handlers.py :: function app_error_handler :: missing return type hint
+backend\app\core\exception_handlers.py :: function http_error_handler :: missing docstring
+backend\app\core\exception_handlers.py :: function http_error_handler :: missing return type hint
+backend\app\core\exception_handlers.py :: function unhandled_exception_handler :: missing docstring
+backend\app\core\exception_handlers.py :: function unhandled_exception_handler :: missing return type hint
+backend\app\core\external_services.py :: class LLMClient :: docstring not Google-style
+backend\app\core\external_services.py :: class OpenAIClientAdapter :: docstring not Google-style
+backend\app\core\external_services.py :: class DatabaseClient :: docstring not Google-style
+backend\app\core\external_services.py :: class VectorDocument :: missing docstring
+backend\app\core\external_services.py :: class VectorMatch :: missing docstring
+backend\app\core\external_services.py :: class VectorStore :: docstring not Google-style
+backend\app\core\external_services.py :: class InMemoryVectorStore :: docstring not Google-style
+backend\app\core\logging_config.py :: class RedactingJsonFormatter :: docstring not Google-style
+backend\app\routes\agents.py :: function list_agents :: missing return type hint
+backend\app\routes\agents.py :: function get_agent :: missing return type hint
+backend\app\routes\agents.py :: function get_registry_snapshot :: missing return type hint
+backend\app\routes\agents.py :: function register_agent :: missing return type hint
+backend\app\routes\agents.py :: function seed_agents :: missing return type hint
+backend\app\routes\agents.py :: function create_agent_task :: missing return type hint
+backend\app\routes\agents.py :: function list_agent_tasks :: missing return type hint
+backend\app\routes\agents.py :: function complete_agent_task :: missing return type hint
+backend\app\routes\agents.py :: function create_agent_request :: missing return type hint
+backend\app\routes\agents.py :: function list_agent_requests :: missing return type hint
+backend\app\routes\agents.py :: function respond_agent_request :: missing return type hint
+backend\app\routes\ai.py :: function ai_think :: missing return type hint
+backend\app\routes\evaluation.py :: function get_run_quality :: missing return type hint
+backend\app\routes\evaluation.py :: function evaluate_run :: missing return type hint
+backend\app\routes\evidence.py :: function export_evidence_pack :: missing docstring
+backend\app\routes\evidence.py :: function request_evidence_export_approval :: missing docstring
+backend\app\routes\evidence.py :: function request_evidence_export_approval :: missing return type hint
+backend\app\routes\governance.py :: function request_run_approval :: missing return type hint
+backend\app\routes\governance.py :: function safe_to_proceed :: missing return type hint
+backend\app\routes\governance.py :: function get_audit_logs :: missing return type hint
+backend\app\routes\graph.py :: function get_run_graph :: missing return type hint
+backend\app\routes\graph.py :: function compare_runs :: missing return type hint
+backend\app\routes\knowledge.py :: function get_knowledge_nodes :: missing return type hint
+backend\app\routes\knowledge.py :: function create_knowledge_node :: missing return type hint
+backend\app\routes\knowledge.py :: function connect_nodes :: missing return type hint
+backend\app\routes\knowledge.py :: function delete_knowledge_node :: missing return type hint
+backend\app\routes\metrics.py :: function get_dashboard_metrics :: missing return type hint
+backend\app\routes\rag.py :: function retrieve :: missing docstring
+backend\app\routes\rag.py :: function retrieve :: missing return type hint
+backend\app\routes\root.py :: function root :: missing return type hint
+backend\app\routes\root.py :: function health :: missing return type hint
+backend\app\routes\seed.py :: function seed_data :: missing return type hint
+backend\app\routes\teams.py :: function list_teams :: missing return type hint
+backend\app\routes\teams.py :: function get_team :: missing return type hint
+backend\app\routes\teams.py :: function seed_teams :: missing return type hint
+backend\app\routes\tools.py :: function list_tools :: missing return type hint
+backend\app\routes\tools.py :: function run_tool :: missing return type hint
+backend\app\routes\websocket.py :: class ConnectionManager :: missing docstring
+backend\app\routes\websocket.py :: function websocket_battle :: missing return type hint
+backend\app\routes\websocket.py :: function simulate_battle_turn :: missing return type hint
+backend\app\routes\websocket.py :: function stream_ai_thinking :: missing return type hint
+backend\app\routes\websocket.py :: function __init__ :: missing docstring
+backend\app\routes\websocket.py :: function __init__ :: missing return type hint
+backend\app\routes\websocket.py :: function connect :: missing return type hint
+backend\app\routes\websocket.py :: function disconnect :: missing return type hint
+backend\app\routes\websocket.py :: function broadcast :: missing return type hint
+backend\app\routes\xai.py :: class CommentorRequest :: missing docstring
+backend\app\routes\xai.py :: class CommentorResponse :: missing docstring
+backend\app\routes\xai.py :: function explain_run :: missing return type hint
+backend\app\routes\xai.py :: function explain_run_full :: missing return type hint
+backend\app\routes\xai.py :: function explain_package :: missing return type hint
+backend\app\routes\xai.py :: function generate_commentary :: missing return type hint
+backend\app\routes\__init__.py :: module <module> :: missing module docstring
+tests\conftest.py :: function in_memory_db :: missing docstring
+tests\conftest.py :: function in_memory_db :: missing return type hint
+tests\conftest.py :: function client :: missing docstring
+tests\conftest.py :: function client :: missing param type hints: in_memory_db
+tests\conftest.py :: function client :: missing return type hint
+tests\conftest.py :: function auth_headers :: missing docstring
+tests\conftest.py :: function auth_headers :: missing param type hints: in_memory_db
+tests\fixtures.py :: function generate_id :: missing docstring
+tests\fixtures.py :: class InMemoryCursor :: missing docstring
+tests\fixtures.py :: class UpdateResult :: missing docstring
+tests\fixtures.py :: class DeleteResult :: missing docstring
+tests\fixtures.py :: class InMemoryCollection :: missing docstring
+tests\fixtures.py :: class InMemoryDB :: missing docstring
+tests\fixtures.py :: function seed_user :: missing docstring
+tests\fixtures.py :: function __init__ :: missing docstring
+tests\fixtures.py :: function __init__ :: missing return type hint
+tests\fixtures.py :: function sort :: missing docstring
+tests\fixtures.py :: function sort :: missing return type hint
+tests\fixtures.py :: function to_list :: missing docstring
+tests\fixtures.py :: function to_list :: missing return type hint
+tests\fixtures.py :: function __init__ :: missing docstring
+tests\fixtures.py :: function __init__ :: missing return type hint
+tests\fixtures.py :: function _match :: missing docstring
+tests\fixtures.py :: function find_one :: missing docstring
+tests\fixtures.py :: function find_one :: missing return type hint
+tests\fixtures.py :: function find :: missing docstring
+tests\fixtures.py :: function find :: missing return type hint
+tests\fixtures.py :: function insert_one :: missing docstring
+tests\fixtures.py :: function insert_one :: missing return type hint
+tests\fixtures.py :: function update_one :: missing docstring
+tests\fixtures.py :: function update_one :: missing return type hint
+tests\fixtures.py :: function delete_one :: missing docstring
+tests\fixtures.py :: function delete_one :: missing return type hint
+tests\fixtures.py :: function delete_many :: missing docstring
+tests\fixtures.py :: function delete_many :: missing return type hint
+tests\fixtures.py :: function distinct :: missing docstring
+tests\fixtures.py :: function distinct :: missing return type hint
+tests\fixtures.py :: function _project :: missing docstring
+tests\fixtures.py :: function _project :: missing return type hint
+tests\fixtures.py :: function __init__ :: missing docstring
+tests\fixtures.py :: function __init__ :: missing return type hint
+tests\fixtures.py :: function __getattr__ :: missing docstring
+tests\test_api_approvals.py :: module <module> :: missing module docstring
+tests\test_api_approvals.py :: function test_approvals_create_and_decide :: missing docstring
+tests\test_api_approvals.py :: function test_approvals_create_and_decide :: missing param type hints: auth_headers
+tests\test_api_approvals.py :: function test_approvals_create_and_decide :: missing return type hint
+tests\test_api_evidence.py :: module <module> :: missing module docstring
+tests\test_api_evidence.py :: function test_external_export_requires_approval :: missing docstring
+tests\test_api_evidence.py :: function test_external_export_requires_approval :: missing param type hints: auth_headers, in_memory_db
+tests\test_api_evidence.py :: function test_external_export_requires_approval :: missing return type hint
+tests\test_api_evidence_more.py :: module <module> :: missing module docstring
+tests\test_api_evidence_more.py :: function test_generate_evidence_pack_from_run :: missing docstring
+tests\test_api_evidence_more.py :: function test_generate_evidence_pack_from_run :: missing param type hints: auth_headers, in_memory_db
+tests\test_api_evidence_more.py :: function test_generate_evidence_pack_from_run :: missing return type hint
+tests\test_api_exception_handler.py :: module <module> :: missing module docstring
+tests\test_api_exception_handler.py :: function test_http_exception_includes_correlation_id :: missing docstring
+tests\test_api_exception_handler.py :: function test_http_exception_includes_correlation_id :: missing param type hints: auth_headers
+tests\test_api_exception_handler.py :: function test_http_exception_includes_correlation_id :: missing return type hint
+tests\test_api_rag.py :: module <module> :: missing module docstring
+tests\test_api_rag.py :: function test_create_and_retrieve_rag_doc :: missing docstring
+tests\test_api_rag.py :: function test_create_and_retrieve_rag_doc :: missing param type hints: auth_headers
+tests\test_api_rag.py :: function test_create_and_retrieve_rag_doc :: missing return type hint
+tests\test_api_rbac.py :: module <module> :: missing module docstring
+tests\test_api_rbac.py :: function test_rbac_denies_rules_write :: missing docstring
+tests\test_api_rbac.py :: function test_rbac_denies_rules_write :: missing param type hints: in_memory_db
+tests\test_api_rbac.py :: function test_rbac_denies_rules_write :: missing return type hint
+tests\test_api_rsb.py :: module <module> :: missing module docstring
+tests\test_api_rsb.py :: function test_merge_requires_conflict_resolution :: missing docstring
+tests\test_api_rsb.py :: function test_merge_requires_conflict_resolution :: missing param type hints: auth_headers, in_memory_db
+tests\test_api_rsb.py :: function test_merge_requires_conflict_resolution :: missing return type hint
+tests\test_api_rsb_patch_merge.py :: module <module> :: missing module docstring
+tests\test_api_rsb_patch_merge.py :: function test_rsb_patch_and_merge_flow :: missing docstring
+tests\test_api_rsb_patch_merge.py :: function test_rsb_patch_and_merge_flow :: missing param type hints: auth_headers, in_memory_db
+tests\test_api_rsb_patch_merge.py :: function test_rsb_patch_and_merge_flow :: missing return type hint
+tests\test_api_rsb_patch_merge.py :: function test_rsb_resolve_conflicts :: missing docstring
+tests\test_api_rsb_patch_merge.py :: function test_rsb_resolve_conflicts :: missing param type hints: auth_headers, in_memory_db
+tests\test_api_rsb_patch_merge.py :: function test_rsb_resolve_conflicts :: missing return type hint
+tests\test_api_rules.py :: module <module> :: missing module docstring
+tests\test_api_rules.py :: function test_create_and_get_rule :: missing docstring
+tests\test_api_rules.py :: function test_create_and_get_rule :: missing param type hints: auth_headers
+tests\test_api_rules.py :: function test_create_and_get_rule :: missing return type hint
+tests\test_api_runs.py :: module <module> :: missing module docstring
+tests\test_api_runs.py :: function test_runs_start_step_export :: missing docstring
+tests\test_api_runs.py :: function test_runs_start_step_export :: missing param type hints: auth_headers
+tests\test_api_runs.py :: function test_runs_start_step_export :: missing return type hint
+tests\test_api_workflow.py :: module <module> :: missing module docstring
+tests\test_api_workflow.py :: function test_workflow_status_returns_governance :: missing docstring
+tests\test_api_workflow.py :: function test_workflow_status_returns_governance :: missing param type hints: auth_headers, in_memory_db
+tests\test_api_workflow.py :: function test_workflow_status_returns_governance :: missing return type hint
+tests\test_api_workflow_controls.py :: module <module> :: missing module docstring
+tests\test_api_workflow_controls.py :: function test_workflow_control_endpoints :: missing docstring
+tests\test_api_workflow_controls.py :: function test_workflow_control_endpoints :: missing param type hints: auth_headers, in_memory_db
+tests\test_api_workflow_controls.py :: function test_workflow_control_endpoints :: missing return type hint
+tests\test_audit.py :: module <module> :: missing module docstring
+tests\test_audit.py :: function test_redact_evidence_pack_external :: missing docstring
+tests\test_audit.py :: function test_redact_evidence_pack_external :: missing return type hint
+tests\test_audit.py :: function test_compute_checksum_stable :: missing docstring
+tests\test_audit.py :: function test_compute_checksum_stable :: missing return type hint
+tests\test_audit.py :: function test_rule_tests_pass :: missing docstring
+tests\test_audit.py :: function test_rule_tests_pass :: missing return type hint
+tests\test_contract_rsb.py :: module <module> :: missing module docstring
+tests\test_contract_rsb.py :: function _build_rsb_zip :: missing docstring
+tests\test_contract_rsb.py :: function test_rsb_upload_contract :: missing docstring
+tests\test_contract_rsb.py :: function test_rsb_upload_contract :: missing param type hints: auth_headers
+tests\test_contract_rsb.py :: function test_rsb_upload_contract :: missing return type hint
+tests\test_contract_rsb.py :: function test_rsb_merge_rejects_invalid_package :: missing docstring
+tests\test_contract_rsb.py :: function test_rsb_merge_rejects_invalid_package :: missing param type hints: auth_headers, in_memory_db
+tests\test_contract_rsb.py :: function test_rsb_merge_rejects_invalid_package :: missing return type hint
+tests\test_contract_rsb.py :: function test_rsb_merge_requires_conflict_resolution :: missing docstring
+tests\test_contract_rsb.py :: function test_rsb_merge_requires_conflict_resolution :: missing param type hints: auth_headers, in_memory_db
+tests\test_contract_rsb.py :: function test_rsb_merge_requires_conflict_resolution :: missing return type hint
+tests\test_contract_rsb.py :: function test_rsb_apply_patch_updates_version :: missing docstring
+tests\test_contract_rsb.py :: function test_rsb_apply_patch_updates_version :: missing param type hints: auth_headers, in_memory_db
+tests\test_contract_rsb.py :: function test_rsb_apply_patch_updates_version :: missing return type hint
+tests\test_e2e_war_loop.py :: module <module> :: missing module docstring
+tests\test_e2e_war_loop.py :: function test_battle_flow_e2e :: missing docstring
+tests\test_e2e_war_loop.py :: function test_battle_flow_e2e :: missing param type hints: auth_headers
+tests\test_e2e_war_loop.py :: function test_battle_flow_e2e :: missing return type hint
+tests\test_e2e_war_loop_run.py :: module <module> :: missing module docstring
+tests\test_e2e_war_loop_run.py :: function test_war_loop_run_progression :: missing docstring
+tests\test_e2e_war_loop_run.py :: function test_war_loop_run_progression :: missing param type hints: auth_headers, in_memory_db
+tests\test_e2e_war_loop_run.py :: function test_war_loop_run_progression :: missing return type hint
+tests\test_exception_handlers.py :: module <module> :: missing module docstring
+tests\test_exception_handlers.py :: function test_app_error_handler_returns_payload :: missing docstring
+tests\test_exception_handlers.py :: function test_app_error_handler_returns_payload :: missing return type hint
+tests\test_exception_handlers.py :: function test_custom_app_error_mappings :: missing docstring
+tests\test_exception_handlers.py :: function test_custom_app_error_mappings :: missing return type hint
+tests\test_exception_handlers.py :: function test_http_exception_handler :: missing docstring
+tests\test_exception_handlers.py :: function test_http_exception_handler :: missing return type hint
+tests\test_exception_handlers.py :: function test_unhandled_exception_handler :: missing docstring
+tests\test_exception_handlers.py :: function test_unhandled_exception_handler :: missing return type hint
+tests\test_exception_handlers.py :: function add_correlation_id :: missing docstring
+tests\test_exception_handlers.py :: function add_correlation_id :: missing param type hints: request, call_next
+tests\test_exception_handlers.py :: function add_correlation_id :: missing return type hint
+tests\test_exception_handlers.py :: function fail :: missing docstring
+tests\test_exception_handlers.py :: function fail :: missing return type hint
+tests\test_exception_handlers.py :: function rule_error :: missing docstring
+tests\test_exception_handlers.py :: function rule_error :: missing return type hint
+tests\test_exception_handlers.py :: function rsb_error :: missing docstring
+tests\test_exception_handlers.py :: function rsb_error :: missing return type hint
+tests\test_exception_handlers.py :: function agent_error :: missing docstring
+tests\test_exception_handlers.py :: function agent_error :: missing return type hint
+tests\test_exception_handlers.py :: function add_correlation_id :: missing docstring
+tests\test_exception_handlers.py :: function add_correlation_id :: missing param type hints: request, call_next
+tests\test_exception_handlers.py :: function add_correlation_id :: missing return type hint
+tests\test_exception_handlers.py :: function missing :: missing docstring
+tests\test_exception_handlers.py :: function missing :: missing return type hint
+tests\test_exception_handlers.py :: function add_correlation_id :: missing docstring
+tests\test_exception_handlers.py :: function add_correlation_id :: missing param type hints: request, call_next
+tests\test_exception_handlers.py :: function add_correlation_id :: missing return type hint
+tests\test_exception_handlers.py :: function boom :: missing docstring
+tests\test_exception_handlers.py :: function boom :: missing return type hint
+tests\test_external_services.py :: module <module> :: missing module docstring
+tests\test_external_services.py :: class FakeLLMClient :: missing docstring
+tests\test_external_services.py :: class FakeOpenAI :: missing docstring
+tests\test_external_services.py :: function test_get_embedding_uses_llm_client :: missing docstring
+tests\test_external_services.py :: function test_get_embedding_uses_llm_client :: missing return type hint
+tests\test_external_services.py :: function test_openai_client_adapter_maps_methods :: missing docstring
+tests\test_external_services.py :: function test_openai_client_adapter_maps_methods :: missing return type hint
+tests\test_external_services.py :: function test_in_memory_vector_store_query_orders_by_score :: missing docstring
+tests\test_external_services.py :: function test_in_memory_vector_store_query_orders_by_score :: missing return type hint
+tests\test_external_services.py :: function test_get_db_returns_current_db_instance :: missing docstring
+tests\test_external_services.py :: function test_get_db_returns_current_db_instance :: missing return type hint
+tests\test_external_services.py :: function embeddings_create :: missing docstring
+tests\test_external_services.py :: function embeddings_create :: missing return type hint
+tests\test_external_services.py :: function __init__ :: missing docstring
+tests\test_external_services.py :: function __init__ :: missing return type hint
+tests\test_external_services.py :: function _create_embedding :: missing docstring
+tests\test_external_services.py :: function _create_embedding :: missing return type hint
+tests\test_external_services.py :: function _create_chat :: missing docstring
+tests\test_external_services.py :: function _create_chat :: missing param type hints: messages
+tests\test_external_services.py :: function _create_chat :: missing return type hint
+tests\test_hello.py :: module <module> :: missing module docstring
+tests\test_hello.py :: function test_hello :: missing docstring
+tests\test_hello.py :: function test_hello :: missing return type hint
+tests\test_logging_config.py :: module <module> :: missing module docstring
+tests\test_logging_config.py :: function test_redact_payload_masks_sensitive_fields :: missing docstring
+tests\test_logging_config.py :: function test_redact_payload_masks_sensitive_fields :: missing return type hint
+tests\test_logging_config_extra.py :: module <module> :: missing module docstring
+tests\test_logging_config_extra.py :: function test_logger_formats_json_with_context :: missing docstring
+tests\test_logging_config_extra.py :: function test_logger_formats_json_with_context :: missing return type hint
+tests\test_logging_config_extra.py :: function test_coerce_log_payload :: missing docstring
+tests\test_logging_config_extra.py :: function test_coerce_log_payload :: missing return type hint
+tests\test_rag_retrieval_mock.py :: module <module> :: missing module docstring
+tests\test_rag_retrieval_mock.py :: function mock_embedding :: missing docstring
+tests\test_rag_retrieval_mock.py :: function mock_embedding :: missing param type hints: monkeypatch
+tests\test_rag_retrieval_mock.py :: function mock_embedding :: missing return type hint
+tests\test_rag_retrieval_mock.py :: function test_rag_retrieve_uses_vector_mock :: missing docstring
+tests\test_rag_retrieval_mock.py :: function test_rag_retrieve_uses_vector_mock :: missing param type hints: auth_headers, in_memory_db, mock_embedding
+tests\test_rag_retrieval_mock.py :: function test_rag_retrieve_uses_vector_mock :: missing return type hint
+tests\test_rag_retrieval_mock.py :: function test_rag_query_fallback_to_all_collections :: missing docstring
+tests\test_rag_retrieval_mock.py :: function test_rag_query_fallback_to_all_collections :: missing param type hints: auth_headers, in_memory_db, mock_embedding
+tests\test_rag_retrieval_mock.py :: function test_rag_query_fallback_to_all_collections :: missing return type hint
+tests\test_rag_retrieval_mock.py :: function test_rag_query_includes_graph_context :: missing docstring
+tests\test_rag_retrieval_mock.py :: function test_rag_query_includes_graph_context :: missing param type hints: auth_headers, in_memory_db, mock_embedding
+tests\test_rag_retrieval_mock.py :: function test_rag_query_includes_graph_context :: missing return type hint
+tests\test_rag_retrieval_mock.py :: function _fake_embedding :: missing docstring
+tests\test_rag_retrieval_mock.py :: function _fake_embedding :: missing return type hint
+tests\test_rag_utils.py :: module <module> :: missing module docstring
+tests\test_rag_utils.py :: function test_tokenize_filters_tokens :: missing docstring
+tests\test_rag_utils.py :: function test_tokenize_filters_tokens :: missing return type hint
+tests\test_rag_utils.py :: function test_keyword_score_overlap :: missing docstring
+tests\test_rag_utils.py :: function test_keyword_score_overlap :: missing return type hint
+tests\test_rag_utils.py :: function test_simple_embed_length :: missing docstring
+tests\test_rag_utils.py :: function test_simple_embed_length :: missing return type hint
+tests\test_rag_utils.py :: function test_cosine_similarity_bounds :: missing docstring
+tests\test_rag_utils.py :: function test_cosine_similarity_bounds :: missing return type hint
+tests\test_rag_utils.py :: function test_build_context_snippets_respects_limit :: missing docstring
+tests\test_rag_utils.py :: function test_build_context_snippets_respects_limit :: missing return type hint
+tests\test_rag_utils.py :: function test_contains_sensitive_identifiers :: missing docstring
+tests\test_rag_utils.py :: function test_contains_sensitive_identifiers :: missing return type hint
+tests\test_rag_utils.py :: function test_format_context_prompt :: missing docstring
+tests\test_rag_utils.py :: function test_format_context_prompt :: missing return type hint
+tests\test_rbac.py :: module <module> :: missing module docstring
+tests\test_rbac.py :: function test_has_permission_allows_known_role :: missing docstring
+tests\test_rbac.py :: function test_has_permission_allows_known_role :: missing return type hint
+tests\test_rbac.py :: function test_has_permission_denies_unknown_role :: missing docstring
+tests\test_rbac.py :: function test_has_permission_denies_unknown_role :: missing return type hint
+tests\test_request_context.py :: module <module> :: missing module docstring
+tests\test_request_context.py :: function test_request_context_set_and_get :: missing docstring
+tests\test_request_context.py :: function test_request_context_set_and_get :: missing return type hint
+tests\test_rsb_utils.py :: module <module> :: missing module docstring
+tests\test_rsb_utils.py :: function test_build_rsb_tree :: missing docstring
+tests\test_rsb_utils.py :: function test_build_rsb_tree :: missing return type hint
+tests\test_rsb_utils.py :: function test_validate_rsb_payload_missing_files :: missing docstring
+tests\test_rsb_utils.py :: function test_validate_rsb_payload_missing_files :: missing return type hint
+tests\test_rsb_utils.py :: function test_bump_patch_version :: missing docstring
+tests\test_rsb_utils.py :: function test_bump_patch_version :: missing return type hint
+tests\test_rsb_utils.py :: function test_build_rsb_archive_contains_manifest :: missing docstring
+tests\test_rsb_utils.py :: function test_build_rsb_archive_contains_manifest :: missing return type hint
+tests\test_rsb_utils.py :: function test_read_zip_helpers_and_find_match :: missing docstring
+tests\test_rsb_utils.py :: function test_read_zip_helpers_and_find_match :: missing param type hints: tmp_path
+tests\test_rsb_utils.py :: function test_read_zip_helpers_and_find_match :: missing return type hint
+tests\test_rsb_utils.py :: function test_build_test_results_deterministic :: missing docstring
+tests\test_rsb_utils.py :: function test_build_test_results_deterministic :: missing return type hint
+tests\test_sandbox.py :: module <module> :: missing module docstring
+tests\test_sandbox.py :: function test_execute_rule_success :: missing docstring
+tests\test_sandbox.py :: function test_execute_rule_success :: missing return type hint
+tests\test_sandbox.py :: function test_execute_rule_missing_function :: missing docstring
+tests\test_sandbox.py :: function test_execute_rule_missing_function :: missing return type hint
+tests\test_sandbox.py :: function test_execute_rule_invalid_output :: missing docstring
+tests\test_sandbox.py :: function test_execute_rule_invalid_output :: missing return type hint
+tests\test_sandbox_extra.py :: module <module> :: missing module docstring
+tests\test_sandbox_extra.py :: function test_execute_rule_blocks_imports :: missing docstring
+tests\test_sandbox_extra.py :: function test_execute_rule_blocks_imports :: missing return type hint
+tests\test_sandbox_extra.py :: function test_execute_rule_blocks_open_builtin :: missing docstring
+tests\test_sandbox_extra.py :: function test_execute_rule_blocks_open_builtin :: missing return type hint
+tests\test_sandbox_extra.py :: function test_execute_rule_safe_builtins_work :: missing docstring
+tests\test_sandbox_extra.py :: function test_execute_rule_safe_builtins_work :: missing return type hint
+tests\test_tooling.py :: module <module> :: missing module docstring
+tests\test_tooling.py :: function test_derive_seed_deterministic :: missing docstring
+tests\test_tooling.py :: function test_derive_seed_deterministic :: missing return type hint
+tests\test_tooling.py :: function test_simulate_transactions_count :: missing docstring
+tests\test_tooling.py :: function test_simulate_transactions_count :: missing return type hint
+tests\test_tooling.py :: function test_apply_attack_velocity_anomaly :: missing docstring
+tests\test_tooling.py :: function test_apply_attack_velocity_anomaly :: missing return type hint
+tests\test_tooling.py :: function test_score_risk_outputs_average :: missing docstring
+tests\test_tooling.py :: function test_score_risk_outputs_average :: missing return type hint
+tests\test_tooling.py :: function test_respond_actions_thresholds :: missing docstring
+tests\test_tooling.py :: function test_respond_actions_thresholds :: missing return type hint
+tests\test_workflow_service.py :: module <module> :: missing module docstring
+tests\test_workflow_service.py :: function test_compute_governance_status_pending :: missing docstring
+tests\test_workflow_service.py :: function test_compute_governance_status_pending :: missing param type hints: in_memory_db
+tests\test_workflow_service.py :: function test_compute_governance_status_pending :: missing return type hint
+tests\test_xai_utils.py :: module <module> :: missing module docstring
+tests\test_xai_utils.py :: function test_build_evidence_items_limit :: missing docstring
+tests\test_xai_utils.py :: function test_build_evidence_items_limit :: missing return type hint
+tests\test_xai_utils.py :: function test_build_explanation_bundle_contains_graph :: missing docstring
+tests\test_xai_utils.py :: function test_build_explanation_bundle_contains_graph :: missing return type hint
+tests\test_xai_utils.py :: function test_build_evidence_graph_nodes :: missing docstring
+tests\test_xai_utils.py :: function test_build_evidence_graph_nodes :: missing return type hint
+tests\test_xai_utils.py :: function test_build_counterfactuals :: missing docstring
+tests\test_xai_utils.py :: function test_build_counterfactuals :: missing return type hint
+tests\__init__.py :: module <module> :: missing module docstring

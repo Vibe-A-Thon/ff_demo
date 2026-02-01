@@ -1,43 +1,37 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# IDE and editors
+# IDE and editor settings
 .idea/
 .vscode/
 
-# Dependencies
+# Node.js dependencies
 node_modules/
-/node_modules
-/.pnp
-# Mobile development
+.pnp/
+
+# Mobile development SDKs
 android-sdk/
 
-# Environment files
+# Python virtual environments
+.venv/
+.venv311/
+
+# Python bytecode
+*.pyc
+__pycache__/
+
+# Environment files (never commit secrets)
 *.env
 *.env.*
+
+# Archives
 **/*.zip
-android-sdk/
-<<<<<<< HEAD
-android-sdk/ frontend/node_modules/.cache/default-development/2.pack
-frontend/node_modules/.cache/default-development/3.pack
 
-# Dependency caches
+# Frontend build caches
 frontend/node_modules/.cache/
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
-frontend/node_modules/.cache/default-development/8.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
-frontend/node_modules/.cache/default-development/2.pack_
-=======
->>>>>>> 10ad573c7dd777d4a9d849c3dd5ad224c9602a6f
+
+# Logs
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
