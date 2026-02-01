@@ -35,6 +35,24 @@ const DifferenceVisualizer = () => {
   const [conflictDecisions, setConflictDecisions] = useState({});
   const location = useLocation();
   const mergedPreview = selectedDiff?.newCode || "";
+  const linkedArtifacts = (() => {
+    const artifacts = selectedDiff?.artifacts || selectedPackage?.artifacts || [];
+    if (Array.isArray(artifacts) && artifacts.length > 0) {
+      return artifacts.map((artifact, idx) => ({
+        id: artifact.artifact_id || artifact.id || `${idx}`,
+        type: artifact.artifact_type || artifact.event_type || "artifact",
+        label: artifact.artifact_type || artifact.event_type || "artifact",
+        meta: artifact.artifact_id || artifact.id || "",
+      }));
+    }
+    const derived = [];
+    if (selectedPackage?.rule_spec) derived.push({ id: "rulespec", label: "RuleSpec" });
+    if (selectedPackage?.rule_definition || selectedPackage?.code) derived.push({ id: "codepatch", label: "CodePatch" });
+    if (selectedPackage?.test_results) derived.push({ id: "testplan", label: "TestPlan" });
+    if (selectedPackage?.compliance_docs?.length) derived.push({ id: "compliance", label: "CompliancePack" });
+    if (selectedPackage?.conflicts?.length) derived.push({ id: "review", label: "CodeReviewReport" });
+    return derived;
+  })();
   const conflictBlocks = [
     { id: "conflict-1", label: "Threshold change conflict", recommendation: "Use patch" },
     { id: "conflict-2", label: "Action severity mismatch", recommendation: "Manual merge" },
@@ -641,11 +659,26 @@ Reviewed and validated via sandbox testing.`;
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="text-xs">RuleSpec</Badge>
-                    <Badge variant="outline" className="text-xs">Tests</Badge>
-                    <Badge variant="outline" className="text-xs">Evidence Pack</Badge>
+                    {linkedArtifacts.length > 0 ? (
+                      linkedArtifacts.map((artifact) => (
+                        <div key={artifact.id} className="flex flex-col gap-1">
+                          <Badge variant="outline" className="text-xs">
+                            {artifact.label}
+                          </Badge>
+                          {artifact.meta && (
+                            <span className="text-[11px] text-muted-foreground font-mono">
+                              {artifact.meta}
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <Badge variant="outline" className="text-xs">No linked artifacts</Badge>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">Artifacts are attached to this diff for audit and review.</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Artifacts are attached to this diff for audit and review.
+                  </p>
                 </CardContent>
               </Card>
             </div>

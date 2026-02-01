@@ -846,7 +846,11 @@ const BrainSurgery = () => {
                     </div>
                     {(lineagePayload.parents || []).slice(0, 4).map((item) => (
                       <div key={item.artifact_id} className="text-xs">
-                        {item.artifact_type} • {item.artifact_id}
+                        <div>{item.artifact_type} • {item.artifact_id}</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {(item.team_id || item.team || "team").toUpperCase()} · {item.agent_id || item.agent || "agent"}
+                          {item.trace_id ? ` · ${item.trace_id}` : ""}
+                        </div>
                       </div>
                     ))}
                     <div className="flex items-center justify-between pt-2">
@@ -855,7 +859,11 @@ const BrainSurgery = () => {
                     </div>
                     {(lineagePayload.children || []).slice(0, 4).map((item) => (
                       <div key={item.artifact_id} className="text-xs">
-                        {item.artifact_type} • {item.artifact_id}
+                        <div>{item.artifact_type} • {item.artifact_id}</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {(item.team_id || item.team || "team").toUpperCase()} · {item.agent_id || item.agent || "agent"}
+                          {item.trace_id ? ` · ${item.trace_id}` : ""}
+                        </div>
                       </div>
                     ))}
                     <div className="pt-2">

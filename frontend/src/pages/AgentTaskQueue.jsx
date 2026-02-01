@@ -473,8 +473,22 @@ const AgentTaskQueue = () => {
                 <div key={artifact.artifact_id} className="border border-border rounded-md p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">{artifact.artifact_type}</p>
+                      <p className="text-sm font-medium">
+                        {artifact.artifact_type || artifact.event_type || "artifact"}
+                      </p>
                       <p className="text-xs text-muted-foreground">{artifact.artifact_id}</p>
+                      <div className="text-[11px] text-muted-foreground">
+                        {(artifact.team_id || artifact.team || "team").toUpperCase()} · {artifact.agent_id || artifact.agent || "agent"}
+                      </div>
+                      {artifact.schema_version && (
+                        <div className="text-[11px] text-muted-foreground">Schema {artifact.schema_version}</div>
+                      )}
+                      {artifact.trace_id && (
+                        <div className="text-[11px] text-muted-foreground">Trace {artifact.trace_id}</div>
+                      )}
+                      {artifact.payload?.summary && (
+                        <div className="text-xs text-muted-foreground mt-1">{artifact.payload.summary}</div>
+                      )}
                     </div>
                     <Button
                       size="sm"
