@@ -536,7 +536,7 @@ const WarRoom = () => {
       console.error("WebSocket connection failed:", error);
       setWsConnected(false);
     }
-  }, [selectedBattle]);
+  }, [selectedBattle, triggerBlockedEffect]);
 
   const triggerBlockedEffect = useCallback((turnNumber) => {
     const burstId = `${Date.now()}-${turnNumber}`;
