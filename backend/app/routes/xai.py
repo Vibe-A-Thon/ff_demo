@@ -1,3 +1,5 @@
+"""Explainability (XAI) routes."""
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
@@ -26,6 +28,18 @@ class CommentorResponse(BaseModel):
 
 @router.get("/xai/explain/{run_id}")
 async def explain_run(run_id: str, db: DatabaseClient = Depends(get_db)):
+    """Generate an explanation bundle for a run.
+
+    Args:
+        run_id: Run identifier.
+        db: Database client.
+
+    Returns:
+        Any: Explanation bundle.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -68,6 +82,18 @@ async def explain_run(run_id: str, db: DatabaseClient = Depends(get_db)):
 
 @router.get("/xai/explain/{run_id}/full")
 async def explain_run_full(run_id: str, db: DatabaseClient = Depends(get_db)):
+    """Return explanation bundle with extended details.
+
+    Args:
+        run_id: Run identifier.
+        db: Database client.
+
+    Returns:
+        dict: Full explanation payload.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     bundle = await explain_run(run_id, db=db)
     return {
         "bundle": bundle,
@@ -80,6 +106,18 @@ async def explain_run_full(run_id: str, db: DatabaseClient = Depends(get_db)):
 
 @router.get("/xai/package/{package_id}")
 async def explain_package(package_id: str, db: DatabaseClient = Depends(get_db)):
+    """Get or derive XAI bundle for a package.
+
+    Args:
+        package_id: Package identifier.
+        db: Database client.
+
+    Returns:
+        dict: Bundle payload.
+
+    Raises:
+        HTTPException: If package is not found.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB package not found")
@@ -100,6 +138,18 @@ async def generate_commentary(
     payload: CommentorRequest,
     llm_client: LLMClient | None = Depends(get_llm_client),
 ):
+    """Generate UI commentary text.
+
+    Args:
+        payload: Commentary payload.
+        llm_client: Optional LLM client.
+
+    Returns:
+        CommentorResponse: Generated commentary.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     now = datetime.now(timezone.utc).isoformat()
     highlights = ", ".join(payload.highlights[:6]) if payload.highlights else "key activity updates"
     prompt = (

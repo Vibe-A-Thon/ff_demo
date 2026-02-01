@@ -1,4 +1,7 @@
-"""RSB package routes."""
+"""RSB package routes.
+
+Upload, validate, patch, and export RSB packages.
+"""
 
 import io
 import json
@@ -33,6 +36,18 @@ async def get_rsb_packages(
     current_user: dict = Depends(require_permission("rsb:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> List[Dict[str, Any]]:
+    """List RSB packages.
+
+    Args:
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        List[Dict[str, Any]]: Package list.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     packages = await db.rsb_packages.find({}, {"_id": 0}).to_list(100)
     return packages
 
@@ -42,6 +57,19 @@ async def get_rsb_package(
     current_user: dict = Depends(require_permission("rsb:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Get an RSB package by ID.
+
+    Args:
+        package_id: Package identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Package document.
+
+    Raises:
+        HTTPException: If package is not found.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -53,6 +81,19 @@ async def create_rsb_package(
     current_user: dict = Depends(require_permission("rsb:write")),
     db: DatabaseClient = Depends(get_db),
 ) -> RSBPackage:
+    """Create an RSB package record.
+
+    Args:
+        package_data: Package payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        RSBPackage: Created package.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     package = RSBPackage(**package_data.model_dump())
     rule_id = package.rule_id or package.manifest.get("rule_id")
     if rule_id:
@@ -81,6 +122,23 @@ async def upload_rsb_package(
     current_user: dict = Depends(require_permission("rsb:write")),
     db: DatabaseClient = Depends(get_db),
 ) -> RSBPackage:
+    """Upload and parse an RSB package archive.
+
+    Args:
+        file: Uploaded archive.
+        name: Optional override name.
+        version: Optional override version.
+        description: Optional override description.
+        compliance_badges: Optional badge list.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        RSBPackage: Parsed package.
+
+    Raises:
+        HTTPException: For invalid files or parsing errors.
+    """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
     if not file.filename.lower().endswith((".rsb", ".zip")):
@@ -206,6 +264,19 @@ async def test_rsb_package(
     current_user: dict = Depends(require_permission("rsb:write")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Generate or return RSB test results.
+
+    Args:
+        package_id: Package identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Test results.
+
+    Raises:
+        HTTPException: If package is not found.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -226,6 +297,19 @@ async def get_rsb_diffs(
     current_user: dict = Depends(require_permission("rsb:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Compute diffs for an RSB package.
+
+    Args:
+        package_id: Package identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Diffs payload.
+
+    Raises:
+        HTTPException: If package is not found.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -275,6 +359,20 @@ async def apply_rsb_patch(
     current_user: dict = Depends(require_permission("rsb:approve")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Apply or reject an RSB patch.
+
+    Args:
+        package_id: Package identifier.
+        payload: Patch decision payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Updated package.
+
+    Raises:
+        HTTPException: If package is not found.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -332,6 +430,19 @@ async def merge_rsb_package(
     current_user: dict = Depends(require_permission("rsb:approve")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Merge an RSB package after validations.
+
+    Args:
+        package_id: Package identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Merge result.
+
+    Raises:
+        HTTPException: If package invalid or conflicts unresolved.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -352,6 +463,20 @@ async def resolve_rsb_conflicts(
     current_user: dict = Depends(require_permission("rsb:approve")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Resolve RSB merge conflicts.
+
+    Args:
+        package_id: Package identifier.
+        decisions: Conflict resolution payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Updated package.
+
+    Raises:
+        HTTPException: If package is not found.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -369,6 +494,19 @@ async def stage_rsb_package(
     current_user: dict = Depends(require_permission("rsb:approve")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Stage an RSB package.
+
+    Args:
+        package_id: Package identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Updated package.
+
+    Raises:
+        HTTPException: If package is not found.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -382,6 +520,19 @@ async def export_rsb_package(
     current_user: dict = Depends(require_permission("rsb:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> StreamingResponse:
+    """Export an RSB package archive.
+
+    Args:
+        package_id: Package identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        StreamingResponse: Archive stream.
+
+    Raises:
+        HTTPException: If package or archive is missing.
+    """
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -400,6 +551,19 @@ async def delete_rsb_package(
     current_user: dict = Depends(require_permission("rsb:approve")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, str]:
+    """Delete an RSB package.
+
+    Args:
+        package_id: Package identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, str]: Deletion result.
+
+    Raises:
+        HTTPException: If package is not found.
+    """
     result = await db.rsb_packages.delete_one({"id": package_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="RSB Package not found")

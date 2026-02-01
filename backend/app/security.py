@@ -16,10 +16,33 @@ security = HTTPBearer()
 logger = get_logger(__name__)
 
 def create_token(user_id: str, role: str) -> str:
+    """Create a JWT token for a user.
+
+    Args:
+        user_id: User identifier.
+        role: User role.
+
+    Returns:
+        str: Encoded JWT token.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     payload = {"sub": user_id, "role": role, "exp": datetime.now(timezone.utc).timestamp() + 86400}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+    """Resolve current user from JWT token.
+
+    Args:
+        credentials: Authorization credentials.
+
+    Returns:
+        Dict[str, Any]: User document.
+
+    Raises:
+        HTTPException: If token is invalid or user not found.
+    """
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("sub")
@@ -35,6 +58,17 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 
 def require_permission(permission: str) -> Callable[..., Any]:
+    """Create a dependency that enforces permissions.
+
+    Args:
+        permission: Permission string.
+
+    Returns:
+        Callable[..., Any]: Dependency callable.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     async def _require(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
         role = current_user.get("role", "")
         if not has_permission(role, permission):

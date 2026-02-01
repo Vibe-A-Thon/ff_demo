@@ -19,6 +19,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     Args:
         app: FastAPI application instance.
+
+    Returns:
+        None: This function returns no value.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
 
     @app.exception_handler(AppError)

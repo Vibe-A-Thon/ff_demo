@@ -1,4 +1,7 @@
-"""RAG document and retrieval routes."""
+"""RAG document and retrieval routes.
+
+Manage RAG documents and query/retrieval endpoints.
+"""
 
 import json
 from typing import Any, Dict, List
@@ -28,6 +31,18 @@ async def list_rag_collections(
     current_user: dict = Depends(require_permission("rag:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, List[str]]:
+    """List distinct RAG collections.
+
+    Args:
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, List[str]]: Sorted collection names.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     collections = await db.rag_documents.distinct("collection")
     return {"collections": sorted(collections)}
 
@@ -38,6 +53,20 @@ async def list_rag_documents(
     current_user: dict = Depends(require_permission("rag:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> List[Dict[str, Any]]:
+    """List RAG documents.
+
+    Args:
+        collection: Optional collection filter.
+        limit: Maximum documents to return.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        List[Dict[str, Any]]: Document list.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     query = {}
     if collection:
         query["collection"] = collection
@@ -52,6 +81,21 @@ async def create_rag_document(
     llm_client: LLMClient | None = Depends(get_llm_client),
     vector_store: VectorStore = Depends(get_vector_store),
 ) -> RAGDocument:
+    """Create a RAG document with embedding.
+
+    Args:
+        doc_data: Document payload.
+        current_user: Authorized user context.
+        db: Database client.
+        llm_client: Optional LLM client.
+        vector_store: Vector store client.
+
+    Returns:
+        RAGDocument: Created document.
+
+    Raises:
+        HTTPException: If sensitive identifiers are detected.
+    """
     if doc_data.synthetic_only and contains_sensitive_identifiers(doc_data.content):
         raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
     embedding = await get_embedding(doc_data.content, llm_client=llm_client)
@@ -72,6 +116,21 @@ async def seed_rag_data(
     llm_client: LLMClient | None = Depends(get_llm_client),
     vector_store: VectorStore = Depends(get_vector_store),
 ) -> Dict[str, Any]:
+    """Seed RAG collections with taxonomy and defaults.
+
+    Args:
+        reset: Whether to clear existing documents.
+        current_user: Authorized user context.
+        db: Database client.
+        llm_client: Optional LLM client.
+        vector_store: Vector store client.
+
+    Returns:
+        Dict[str, Any]: Seed result.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     if reset:
         await db.rag_documents.delete_many({})
 
@@ -124,6 +183,20 @@ async def rag_retrieve(
     db: DatabaseClient = Depends(get_db),
     llm_client: LLMClient | None = Depends(get_llm_client),
 ) -> List[RAGHit]:
+    """Retrieve RAG hits for a query.
+
+    Args:
+        request: Retrieval request.
+        current_user: Authorized user context.
+        db: Database client.
+        llm_client: Optional LLM client.
+
+    Returns:
+        List[RAGHit]: Ranked hits.
+
+    Raises:
+        HTTPException: If sensitive identifiers are detected.
+    """
     if request.synthetic_only and contains_sensitive_identifiers(request.query):
         raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
     query = {}
@@ -172,6 +245,20 @@ async def rag_query(
     db: DatabaseClient = Depends(get_db),
     llm_client: LLMClient | None = Depends(get_llm_client),
 ) -> RAGResponse:
+    """Run RAG query and generate a response.
+
+    Args:
+        request: Query request.
+        current_user: Authorized user context.
+        db: Database client.
+        llm_client: Optional LLM client.
+
+    Returns:
+        RAGResponse: Query response.
+
+    Raises:
+        HTTPException: If sensitive identifiers are detected.
+    """
     if request.synthetic_only and contains_sensitive_identifiers(request.query):
         raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
 

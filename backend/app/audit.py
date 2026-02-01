@@ -14,6 +14,22 @@ async def record_audit(
     decision: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> AuditLogEntry:
+    """Record an audit entry.
+
+    Args:
+        actor_id: Actor identifier.
+        action: Action name.
+        target_type: Target type.
+        target_id: Target identifier.
+        decision: Optional decision.
+        metadata: Optional metadata.
+
+    Returns:
+        AuditLogEntry: Created audit entry.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     entry = AuditLogEntry(
         actor_id=actor_id,
         action=action,
@@ -27,6 +43,17 @@ async def record_audit(
 
 
 def rule_tests_pass(test_results: Optional[Dict[str, Any]]) -> bool:
+    """Determine whether rule tests pass.
+
+    Args:
+        test_results: Test results payload.
+
+    Returns:
+        bool: True if tests pass.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     if not test_results:
         return False
     failed = test_results.get("failed", 1)
@@ -35,6 +62,18 @@ def rule_tests_pass(test_results: Optional[Dict[str, Any]]) -> bool:
 
 
 def redact_evidence_pack(pack: Dict[str, Any], mode: str) -> Dict[str, Any]:
+    """Redact evidence pack for external sharing.
+
+    Args:
+        pack: Evidence pack payload.
+        mode: Redaction mode.
+
+    Returns:
+        Dict[str, Any]: Redacted payload.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     if mode == "internal":
         return pack
 
@@ -54,4 +93,15 @@ def redact_evidence_pack(pack: Dict[str, Any], mode: str) -> Dict[str, Any]:
 
 
 def compute_checksum(payload: Dict[str, Any]) -> str:
+    """Compute a checksum for a payload.
+
+    Args:
+        payload: Payload to checksum.
+
+    Returns:
+        str: SHA-256 checksum.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()

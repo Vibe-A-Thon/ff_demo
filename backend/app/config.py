@@ -1,3 +1,8 @@
+"""Application configuration loading.
+
+Loads environment variables and integration configs.
+"""
+
 import json
 import os
 from pathlib import Path

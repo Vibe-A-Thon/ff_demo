@@ -1,3 +1,8 @@
+"""Metrics API routes.
+
+Provides aggregated dashboard metrics for battles and rules.
+"""
+
 from fastapi import APIRouter
 from app.db import db
 from app.core.logging_config import get_logger
@@ -7,6 +12,17 @@ logger = get_logger(__name__)
 
 @router.get("/metrics/dashboard")
 async def get_dashboard_metrics():
+    """Return summary metrics for the dashboard.
+
+    Args:
+        None: This endpoint takes no parameters.
+
+    Returns:
+        dict: Aggregated metrics for battles and rules.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     battles = await db.battles.find({}, {"_id": 0}).to_list(100)
     rules = await db.rules.find({}, {"_id": 0}).to_list(100)
 

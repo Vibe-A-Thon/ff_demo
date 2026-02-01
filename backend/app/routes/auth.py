@@ -1,4 +1,7 @@
-"""Authentication routes."""
+"""Authentication routes.
+
+Handles user registration and login.
+"""
 
 from typing import Dict
 from fastapi import APIRouter, HTTPException
@@ -13,6 +16,17 @@ logger = get_logger(__name__)
 
 @router.post("/auth/register")
 async def register(user_data: UserCreate) -> Dict[str, Dict[str, str]]:
+    """Register a new user and issue a token.
+
+    Args:
+        user_data: User registration payload.
+
+    Returns:
+        Dict[str, Dict[str, str]]: Token and user summary.
+
+    Raises:
+        HTTPException: If role is unsupported or email exists.
+    """
     if user_data.role not in PERMISSIONS:
         raise HTTPException(status_code=400, detail="Unsupported role")
     existing = await db.users.find_one({"email": user_data.email})
@@ -34,6 +48,17 @@ async def register(user_data: UserCreate) -> Dict[str, Dict[str, str]]:
 
 @router.post("/auth/login")
 async def login(login_data: UserLogin) -> Dict[str, Dict[str, str]]:
+    """Authenticate a user and issue a token.
+
+    Args:
+        login_data: Login payload.
+
+    Returns:
+        Dict[str, Dict[str, str]]: Token and user summary.
+
+    Raises:
+        HTTPException: If credentials are invalid.
+    """
     user = await db.users.find_one({"email": login_data.email}, {"_id": 0})
     if not user or not pwd_context.verify(login_data.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Invalid credentials")

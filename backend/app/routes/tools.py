@@ -1,3 +1,8 @@
+"""Tool execution routes.
+
+Provides listing and execution for synthetic tool registry.
+"""
+
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from app.models import ToolCall, ToolResult
@@ -9,10 +14,33 @@ logger = get_logger(__name__)
 
 @router.get("/tools")
 async def list_tools():
+    """List available tools.
+
+    Args:
+        None: This endpoint takes no parameters.
+
+    Returns:
+        list: Tool specifications.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     return list(TOOL_REGISTRY.values())
 
 @router.post("/tools/{tool_name}/run")
 async def run_tool(tool_name: str, payload: ToolCall):
+    """Run a tool with parameters.
+
+    Args:
+        tool_name: Tool identifier.
+        payload: Tool invocation payload.
+
+    Returns:
+        ToolResult: Execution result.
+
+    Raises:
+        HTTPException: If tool is missing or access is denied.
+    """
     tool = TOOL_REGISTRY.get(tool_name)
     if not tool:
         raise HTTPException(status_code=404, detail="Tool not found")

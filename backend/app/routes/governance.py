@@ -1,3 +1,5 @@
+"""Governance routes for approvals and audit."""
+
 from fastapi import APIRouter, HTTPException
 from app.db import db
 from app.models import ApprovalRequest
@@ -11,6 +13,19 @@ REQUIRED_APPROVAL_STAGES = ["orange_review_approve", "white_compliance_audit"]
 
 @router.post("/runs/{run_id}/request-approval")
 async def request_run_approval(run_id: str, stage: str, requestor_id: str):
+    """Request approval for a run stage.
+
+    Args:
+        run_id: Run identifier.
+        stage: Approval stage.
+        requestor_id: Requestor identifier.
+
+    Returns:
+        ApprovalRequest: Created approval.
+
+    Raises:
+        HTTPException: If the stage does not require approval.
+    """
     if stage not in REQUIRED_APPROVAL_STAGES:
         raise HTTPException(status_code=400, detail="Stage does not require approval")
 
@@ -31,6 +46,17 @@ async def request_run_approval(run_id: str, stage: str, requestor_id: str):
 
 @router.get("/runs/{run_id}/safe-to-proceed")
 async def safe_to_proceed(run_id: str):
+    """Check whether a run is safe to proceed.
+
+    Args:
+        run_id: Run identifier.
+
+    Returns:
+        dict: Safety status and missing approvals.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     approvals = await db.approvals.find({"resource_id": run_id, "resource_type": "run"}, {"_id": 0}).to_list(50)
     approved_actions = {a.get("action") for a in approvals if a.get("status") == "approved"}
     missing = [stage for stage in REQUIRED_APPROVAL_STAGES if stage not in approved_actions]
@@ -42,5 +68,16 @@ async def safe_to_proceed(run_id: str):
 
 @router.get("/audit/logs")
 async def get_audit_logs():
+    """List audit log entries.
+
+    Args:
+        None: This endpoint takes no parameters.
+
+    Returns:
+        list[dict]: Audit log entries.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     logs = await db.audit_logs.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return logs

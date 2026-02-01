@@ -1,3 +1,5 @@
+"""AI helper routes."""
+
 import logging
 from fastapi import APIRouter, Depends
 from app.core.external_services import LLMClient
@@ -8,6 +10,18 @@ logger = logging.getLogger(__name__)
 
 @router.post("/ai/think")
 async def ai_think(prompt: dict, llm_client: LLMClient | None = Depends(get_llm_client)):
+    """Generate team thinking output.
+
+    Args:
+        prompt: Prompt payload with stage, context, and team.
+        llm_client: Optional LLM client.
+
+    Returns:
+        dict: Thinking response.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     stage = prompt.get("stage", "analysis")
     context = prompt.get("context", "")
     team = prompt.get("team", "blue")

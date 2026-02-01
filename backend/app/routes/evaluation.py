@@ -1,3 +1,5 @@
+"""Run evaluation and quality routes."""
+
 from fastapi import APIRouter, HTTPException
 from app.db import db
 from app.graph_utils import run_quality_checks, build_evaluation_report
@@ -9,6 +11,17 @@ logger = get_logger(__name__)
 
 @router.get("/runs/{run_id}/quality")
 async def get_run_quality(run_id: str):
+    """Compute and persist quality checks for a run.
+
+    Args:
+        run_id: Run identifier.
+
+    Returns:
+        QualityCheckResult: Computed quality checks.
+
+    Raises:
+        HTTPException: If the run does not exist.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -24,6 +37,17 @@ async def get_run_quality(run_id: str):
 
 @router.get("/runs/{run_id}/evaluate")
 async def evaluate_run(run_id: str):
+    """Generate and persist an evaluation report for a run.
+
+    Args:
+        run_id: Run identifier.
+
+    Returns:
+        EvaluationReport: Evaluation report payload.
+
+    Raises:
+        HTTPException: If the run does not exist.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")

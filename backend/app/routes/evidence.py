@@ -1,4 +1,7 @@
-"""Evidence pack routes."""
+"""Evidence pack routes.
+
+Generate and retrieve evidence packs for battles and runs.
+"""
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -15,6 +18,17 @@ logger = get_logger(__name__)
 
 
 def _normalize_approval_chain(approvals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize approval chain entries.
+
+    Args:
+        approvals: Raw approval documents.
+
+    Returns:
+        List[Dict[str, Any]]: Normalized approval chain.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     chain = []
     for approval in approvals or []:
         approvers = approval.get("approvers") or []
@@ -43,6 +57,18 @@ def _normalize_approval_chain(approvals: List[Dict[str, Any]]) -> List[Dict[str,
 
 
 async def _fetch_approvals(run_id: str | None, pack_id: str | None) -> List[Dict[str, Any]]:
+    """Fetch approvals for run and/or evidence pack.
+
+    Args:
+        run_id: Optional run identifier.
+        pack_id: Optional evidence pack identifier.
+
+    Returns:
+        List[Dict[str, Any]]: Normalized approvals.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     approvals = []
     if run_id:
         approvals.extend(
@@ -62,6 +88,17 @@ async def _fetch_approvals(run_id: str | None, pack_id: str | None) -> List[Dict
 
 
 def _extract_triggered_rules(events: List[Dict[str, Any]]) -> List[str]:
+    """Extract triggered rule IDs from events.
+
+    Args:
+        events: Event payloads.
+
+    Returns:
+        List[str]: Unique rule identifiers.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     rules = set()
     for event in events:
         payload = event.get("payload", {})
@@ -83,6 +120,17 @@ def _extract_triggered_rules(events: List[Dict[str, Any]]) -> List[str]:
 
 
 def _build_artifacts_from_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Build artifact summaries from events.
+
+    Args:
+        events: Event payloads.
+
+    Returns:
+        List[Dict[str, Any]]: Artifact summaries.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     artifacts = []
     for event in events:
         if event.get("event_type") not in {"agent.output", "orchestrator.output"}:
@@ -102,6 +150,17 @@ def _build_artifacts_from_events(events: List[Dict[str, Any]]) -> List[Dict[str,
 
 
 def _build_stage_summaries(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Summarize workflow stage events.
+
+    Args:
+        events: Event payloads.
+
+    Returns:
+        List[Dict[str, Any]]: Stage summaries.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     summaries = []
     for event in events:
         if event.get("event_type") != "stage.changed":
@@ -118,6 +177,17 @@ def _build_stage_summaries(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 
 @router.get("/evidence-packs")
 async def get_evidence_packs(current_user: dict = Depends(require_permission("evidence:read"))) -> List[Dict[str, Any]]:
+    """List evidence packs.
+
+    Args:
+        current_user: Authorized user context.
+
+    Returns:
+        List[Dict[str, Any]]: Evidence packs.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     packs = await db.evidence_packs.find({}, {"_id": 0}).to_list(100)
     hydrated = []
     for pack in packs:
@@ -128,6 +198,18 @@ async def get_evidence_packs(current_user: dict = Depends(require_permission("ev
 
 @router.get("/evidence-packs/{pack_id}")
 async def get_evidence_pack(pack_id: str, current_user: dict = Depends(require_permission("evidence:read"))) -> Dict[str, Any]:
+    """Get an evidence pack by ID.
+
+    Args:
+        pack_id: Evidence pack identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Evidence pack.
+
+    Raises:
+        HTTPException: If pack is not found.
+    """
     pack = await db.evidence_packs.find_one({"id": pack_id}, {"_id": 0})
     if not pack:
         raise HTTPException(status_code=404, detail="Evidence pack not found")
@@ -136,6 +218,18 @@ async def get_evidence_pack(pack_id: str, current_user: dict = Depends(require_p
 
 @router.post("/evidence-packs/generate/{battle_id}")
 async def generate_evidence_pack(battle_id: str, current_user: dict = Depends(require_permission("evidence:write"))) -> Dict[str, Any]:
+    """Generate an evidence pack from a battle.
+
+    Args:
+        battle_id: Battle identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Evidence pack payload.
+
+    Raises:
+        HTTPException: If battle is not found.
+    """
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
@@ -179,6 +273,18 @@ async def generate_evidence_pack(battle_id: str, current_user: dict = Depends(re
 
 @router.post("/evidence-packs/generate/run/{run_id}")
 async def generate_evidence_pack_from_run(run_id: str, current_user: dict = Depends(require_permission("evidence:write"))) -> Dict[str, Any]:
+    """Generate an evidence pack from a run.
+
+    Args:
+        run_id: Run identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Evidence pack payload.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")

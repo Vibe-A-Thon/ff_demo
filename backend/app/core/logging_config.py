@@ -31,6 +31,9 @@ def redact_payload(payload: Any) -> Any:
 
     Returns:
         Redacted payload.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
     if isinstance(payload, dict):
         redacted: Dict[str, Any] = {}
@@ -49,6 +52,17 @@ class RedactingJsonFormatter(logging.Formatter):
     """JSON formatter that injects request context and redacts payloads."""
 
     def format(self, record: logging.LogRecord) -> str:
+        """Format a log record into JSON.
+
+        Args:
+            record: Log record instance.
+
+        Returns:
+            str: JSON-formatted log record.
+
+        Raises:
+            None: No explicit exceptions are raised.
+        """
         message = record.getMessage()
         payload = getattr(record, "payload", None)
         log_record: Dict[str, Any] = {
@@ -70,6 +84,12 @@ def setup_logging(service_name: str = "fraud-forge") -> None:
 
     Args:
         service_name: Service name for log records.
+
+    Returns:
+        None: This function returns no value.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
     handler = logging.StreamHandler()
     formatter = RedactingJsonFormatter()
@@ -90,6 +110,9 @@ def get_logger(name: str, service_name: str = "fraud-forge") -> logging.LoggerAd
 
     Returns:
         Logger adapter instance.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
     logger = logging.getLogger(name)
     if not logger.handlers:
@@ -110,5 +133,8 @@ def coerce_log_payload(extra: Dict[str, Any], allowed_keys: Iterable[str] = ("pa
 
     Returns:
         Filtered dictionary.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
     return {key: value for key, value in extra.items() if key in allowed_keys}

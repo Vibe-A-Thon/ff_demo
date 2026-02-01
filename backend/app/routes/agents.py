@@ -1,3 +1,5 @@
+"""Agent registry and task routes."""
+
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from app.db import db
@@ -13,6 +15,17 @@ DEFAULT_REGISTRY = AgentRegistry.from_defaults()
 
 @router.get("/agents")
 async def list_agents(team_id: str | None = None):
+    """List agents, optionally filtered by team.
+
+    Args:
+        team_id: Optional team identifier.
+
+    Returns:
+        list[dict]: Agent profiles.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     query = {}
     if team_id:
         query["team_id"] = team_id
@@ -23,6 +36,17 @@ async def list_agents(team_id: str | None = None):
 
 @router.get("/agents/{agent_id}")
 async def get_agent(agent_id: str):
+    """Get a single agent profile.
+
+    Args:
+        agent_id: Agent identifier.
+
+    Returns:
+        dict: Agent profile.
+
+    Raises:
+        HTTPException: If the agent does not exist.
+    """
     agent = await db.agents.find_one({"agent_id": agent_id}, {"_id": 0})
     if not agent:
         fallback = DEFAULT_REGISTRY.get_agent(agent_id)
@@ -33,6 +57,17 @@ async def get_agent(agent_id: str):
 
 @router.get("/agents/registry")
 async def get_registry_snapshot(team_id: str | None = None):
+    """Return registry snapshot and delegation preview.
+
+    Args:
+        team_id: Optional team identifier.
+
+    Returns:
+        dict: Teams, agents, and delegation preview.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     teams = [team.model_dump() for team in DEFAULT_REGISTRY.list_teams()]
     agents = [agent.model_dump() for agent in DEFAULT_REGISTRY.list_agents(team_id)]
     preview_team = team_id or (teams[0]["team_id"] if teams else None)
@@ -43,6 +78,17 @@ async def get_registry_snapshot(team_id: str | None = None):
 
 @router.post("/agents/register")
 async def register_agent(agent_data: AgentProfileCreate):
+    """Register a new agent profile.
+
+    Args:
+        agent_data: Agent profile payload.
+
+    Returns:
+        AgentProfile: Created agent profile.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     profile = AgentProfile(**agent_data.model_dump())
     await db.agents.insert_one(profile.model_dump())
     logger.info("agent.registered", extra={"payload": {"agent_id": profile.agent_id, "team_id": profile.team_id}})
@@ -50,6 +96,17 @@ async def register_agent(agent_data: AgentProfileCreate):
 
 @router.post("/agents/seed")
 async def seed_agents():
+    """Seed default agents into storage.
+
+    Args:
+        None: This endpoint takes no parameters.
+
+    Returns:
+        dict: Seeding result.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     payloads = default_agent_payloads()
     inserted = 0
     for payload in payloads:
@@ -67,6 +124,17 @@ async def seed_agents():
 
 @router.post("/agents/tasks")
 async def create_agent_task(task_data: AgentTask):
+    """Create an agent task.
+
+    Args:
+        task_data: Task payload.
+
+    Returns:
+        AgentTask: Created task.
+
+    Raises:
+        HTTPException: If synthetic-only validation fails.
+    """
     if task_data.inputs:
         joined = __import__("json").dumps(task_data.inputs, default=str)
         if contains_sensitive_identifiers(joined):
@@ -80,6 +148,19 @@ async def create_agent_task(task_data: AgentTask):
 
 @router.get("/agents/tasks")
 async def list_agent_tasks(run_id: str | None = None, team_id: str | None = None, status_filter: str | None = None):
+    """List agent tasks.
+
+    Args:
+        run_id: Optional run identifier.
+        team_id: Optional team identifier.
+        status_filter: Optional status filter.
+
+    Returns:
+        list[dict]: Agent tasks.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     query = {}
     if run_id:
         query["run_id"] = run_id
@@ -92,6 +173,18 @@ async def list_agent_tasks(run_id: str | None = None, team_id: str | None = None
 
 @router.post("/agents/tasks/{task_id}/complete")
 async def complete_agent_task(task_id: str, result: AgentResult):
+    """Complete an agent task.
+
+    Args:
+        task_id: Task identifier.
+        result: Task result payload.
+
+    Returns:
+        AgentResult: Persisted result.
+
+    Raises:
+        HTTPException: If the task does not exist.
+    """
     task = await db.agent_tasks.find_one({"task_id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -107,6 +200,17 @@ async def complete_agent_task(task_id: str, result: AgentResult):
 
 @router.post("/agents/requests")
 async def create_agent_request(request_data: AgentRequestCreate):
+    """Create an inter-team agent request.
+
+    Args:
+        request_data: Request payload.
+
+    Returns:
+        AgentRequest: Created request.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     req = AgentRequest(**request_data.model_dump())
     await db.agent_requests.insert_one(req.model_dump())
     logger.info(
@@ -117,6 +221,18 @@ async def create_agent_request(request_data: AgentRequestCreate):
 
 @router.get("/agents/requests")
 async def list_agent_requests(team_id: str | None = None, status_filter: str | None = None):
+    """List agent requests.
+
+    Args:
+        team_id: Optional team identifier.
+        status_filter: Optional status filter.
+
+    Returns:
+        list[dict]: Agent requests.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     query = {}
     if team_id:
         query["$or"] = [{"from_team": team_id}, {"to_team": team_id}]
@@ -127,6 +243,18 @@ async def list_agent_requests(team_id: str | None = None, status_filter: str | N
 
 @router.post("/agents/requests/{request_id}/respond")
 async def respond_agent_request(request_id: str, decision: AgentRequestDecision):
+    """Respond to an agent request.
+
+    Args:
+        request_id: Request identifier.
+        decision: Decision payload.
+
+    Returns:
+        dict: Updated request.
+
+    Raises:
+        HTTPException: If the request does not exist.
+    """
     request_doc = await db.agent_requests.find_one({"request_id": request_id}, {"_id": 0})
     if not request_doc:
         raise HTTPException(status_code=404, detail="Request not found")

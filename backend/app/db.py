@@ -8,6 +8,17 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
 async def init_database() -> None:
+    """Initialize database connections and indexes.
+
+    Args:
+        None: This function takes no parameters.
+
+    Returns:
+        None: This function returns no value.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     await db.command("ping")
     await db.users.create_index([("email", ASCENDING)], unique=True)
     await db.rules.create_index([("id", ASCENDING)], unique=True)
@@ -31,4 +42,15 @@ async def init_database() -> None:
     await db.approvals.create_index([("resource_type", ASCENDING), ("resource_id", ASCENDING)])
 
 async def close_database() -> None:
+    """Close the database connection.
+
+    Args:
+        None: This function takes no parameters.
+
+    Returns:
+        None: This function returns no value.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     client.close()

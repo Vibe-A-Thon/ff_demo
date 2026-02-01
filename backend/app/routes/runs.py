@@ -1,4 +1,7 @@
-"""War loop run routes."""
+"""War loop run routes.
+
+Start, step, and export war loop runs.
+"""
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -31,6 +34,18 @@ async def list_runs(
     current_user: dict = Depends(require_permission("workflow:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> List[Dict]:
+    """List run sessions.
+
+    Args:
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        List[Dict]: Run sessions.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     runs = await db.runs.find({}, {"_id": 0}).sort("started_at", -1).to_list(200)
     return runs
 
@@ -40,6 +55,19 @@ async def start_run(
     current_user: dict = Depends(require_permission("workflow:control")),
     db: DatabaseClient = Depends(get_db),
 ) -> RunSession:
+    """Start a war loop run.
+
+    Args:
+        payload: Run start payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        RunSession: Created run.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     seed_value = payload.seed if payload.seed is not None else int(datetime.now(timezone.utc).timestamp())
     run = RunSession(scenario_id=payload.scenario_id, seed=seed_value, mode=payload.mode)
     await db.runs.insert_one(run.model_dump())
@@ -56,6 +84,19 @@ async def get_run(
     current_user: dict = Depends(require_permission("workflow:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Get a run and its events.
+
+    Args:
+        run_id: Run identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Run and events.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -68,6 +109,19 @@ async def step_run(
     current_user: dict = Depends(require_permission("workflow:control")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, Any]:
+    """Advance the run by one stage.
+
+    Args:
+        run_id: Run identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Stage result.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -200,6 +254,19 @@ async def export_brc(
     current_user: dict = Depends(require_permission("workflow:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> Response:
+    """Export a run as a BRC archive.
+
+    Args:
+        run_id: Run identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Response: Archive payload.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")

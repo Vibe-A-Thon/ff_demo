@@ -1,3 +1,8 @@
+"""Run graph routes.
+
+Provides graph and comparison views for war loop runs.
+"""
+
 from fastapi import APIRouter, HTTPException
 from app.db import db
 from app.graph_utils import build_run_graph, summarize_run_metrics
@@ -8,6 +13,17 @@ logger = get_logger(__name__)
 
 @router.get("/runs/{run_id}/graph")
 async def get_run_graph(run_id: str):
+    """Build a graph for a run.
+
+    Args:
+        run_id: Run identifier.
+
+    Returns:
+        dict: Graph payload containing nodes and edges.
+
+    Raises:
+        HTTPException: If the run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -22,6 +38,18 @@ async def get_run_graph(run_id: str):
 
 @router.get("/runs/compare")
 async def compare_runs(run_a: str, run_b: str):
+    """Compare two runs and return metric deltas.
+
+    Args:
+        run_a: First run identifier.
+        run_b: Second run identifier.
+
+    Returns:
+        dict: Metrics for both runs and computed delta.
+
+    Raises:
+        HTTPException: If either run is not found.
+    """
     run_a_doc = await db.runs.find_one({"id": run_a}, {"_id": 0})
     run_b_doc = await db.runs.find_one({"id": run_b}, {"_id": 0})
 

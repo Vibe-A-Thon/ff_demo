@@ -16,6 +16,12 @@ def set_correlation_id(value: Optional[str]) -> None:
 
     Args:
         value: Correlation ID value to set.
+
+    Returns:
+        None: This function returns no value.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
     correlation_id_var.set(value)
 
@@ -25,6 +31,12 @@ def set_request_id(value: Optional[str]) -> None:
 
     Args:
         value: Request ID value to set.
+
+    Returns:
+        None: This function returns no value.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
     request_id_var.set(value)
 
@@ -34,6 +46,9 @@ def get_correlation_id() -> Optional[str]:
 
     Returns:
         Current correlation ID if set; otherwise None.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
     return correlation_id_var.get()
 
@@ -43,5 +58,8 @@ def get_request_id() -> Optional[str]:
 
     Returns:
         Current request ID if set; otherwise None.
+
+    Raises:
+        None: No explicit exceptions are raised.
     """
     return request_id_var.get()

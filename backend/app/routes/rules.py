@@ -1,4 +1,7 @@
-"""Rule management routes."""
+"""Rule management routes.
+
+Create, update, test, and deploy rules.
+"""
 
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -18,6 +21,18 @@ async def get_rules(
     current_user: dict = Depends(require_permission("rules:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> List[Dict]:
+    """List rules.
+
+    Args:
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        List[Dict]: Rule list.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     rules = await db.rules.find({}, {"_id": 0}).to_list(100)
     return rules
 
@@ -27,6 +42,19 @@ async def get_rule(
     current_user: dict = Depends(require_permission("rules:read")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict:
+    """Get a rule by ID.
+
+    Args:
+        rule_id: Rule identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict: Rule document.
+
+    Raises:
+        HTTPException: If rule is not found.
+    """
     rule = await db.rules.find_one({"id": rule_id}, {"_id": 0})
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -38,6 +66,19 @@ async def create_rule(
     current_user: dict = Depends(require_permission("rules:write")),
     db: DatabaseClient = Depends(get_db),
 ) -> Rule:
+    """Create a rule.
+
+    Args:
+        rule_data: Rule payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Rule: Created rule.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     rule = Rule(**rule_data.model_dump())
     await db.rules.insert_one(rule.model_dump())
     logger.info("rule.created", extra={"payload": {"rule_id": rule.id, "name": rule.name}})
@@ -50,6 +91,20 @@ async def update_rule(
     current_user: dict = Depends(require_permission("rules:write")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict:
+    """Update a rule.
+
+    Args:
+        rule_id: Rule identifier.
+        rule_data: Rule payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict: Updated rule.
+
+    Raises:
+        HTTPException: If rule is not found.
+    """
     existing = await db.rules.find_one({"id": rule_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -69,6 +124,19 @@ async def delete_rule(
     current_user: dict = Depends(require_permission("rules:write")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict[str, str]:
+    """Delete a rule.
+
+    Args:
+        rule_id: Rule identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, str]: Deletion result.
+
+    Raises:
+        HTTPException: If rule is not found.
+    """
     result = await db.rules.delete_one({"id": rule_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -81,6 +149,19 @@ async def test_rule(
     current_user: dict = Depends(require_permission("rules:write")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict:
+    """Run synthetic tests for a rule.
+
+    Args:
+        rule_id: Rule identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict: Test results.
+
+    Raises:
+        HTTPException: If rule is not found.
+    """
     rule = await db.rules.find_one({"id": rule_id}, {"_id": 0})
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -108,6 +189,19 @@ async def propose_rule(
     current_user: dict = Depends(require_permission("rules:write")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict:
+    """Propose a rule and create approval.
+
+    Args:
+        rule_data: Proposal payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict: Proposal and approval request.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     rule = Rule(
         name=rule_data.name,
         description=rule_data.description,
@@ -145,6 +239,20 @@ async def approve_rule(
     current_user: dict = Depends(require_permission("rules:approve")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict:
+    """Approve or reject a proposed rule.
+
+    Args:
+        rule_id: Rule identifier.
+        decision: Decision payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict: Updated rule.
+
+    Raises:
+        HTTPException: If rule is not found or decision invalid.
+    """
     rule = await db.rules.find_one({"id": rule_id}, {"_id": 0})
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -187,6 +295,20 @@ async def stage_rule(
     current_user: dict = Depends(require_permission("rules:deploy")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict:
+    """Stage a rule for deployment.
+
+    Args:
+        rule_id: Rule identifier.
+        request: Action request payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict: Updated rule.
+
+    Raises:
+        HTTPException: If rule not found or preconditions fail.
+    """
     rule = await db.rules.find_one({"id": rule_id}, {"_id": 0})
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -215,6 +337,20 @@ async def deploy_rule(
     current_user: dict = Depends(require_permission("rules:deploy")),
     db: DatabaseClient = Depends(get_db),
 ) -> Dict:
+    """Deploy a staged rule.
+
+    Args:
+        rule_id: Rule identifier.
+        request: Action request payload.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict: Updated rule.
+
+    Raises:
+        HTTPException: If rule not found or not staged.
+    """
     rule = await db.rules.find_one({"id": rule_id}, {"_id": 0})
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")

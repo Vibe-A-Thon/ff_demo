@@ -1,3 +1,8 @@
+"""Seed data routes.
+
+Populate the database with demo data.
+"""
+
 import random
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
@@ -15,6 +20,18 @@ async def seed_data(
     db: DatabaseClient = Depends(get_db),
     llm_client: LLMClient | None = Depends(get_llm_client),
 ):
+    """Seed demo data across collections.
+
+    Args:
+        db: Database client.
+        llm_client: Optional LLM client.
+
+    Returns:
+        dict: Seeding summary.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     await db.battles.delete_many({})
     await db.rules.delete_many({})
     await db.knowledge_nodes.delete_many({})

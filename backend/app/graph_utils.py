@@ -1,9 +1,23 @@
+"""Graph utilities for runs and evaluations."""
+
 import uuid
 from typing import Any, Dict, List
 from app.models import EvaluationReport, QualityCheckResult
 
 
 def build_run_graph(run_id: str, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build a graph representation of a run.
+
+    Args:
+        run_id: Run identifier.
+        events: Run events.
+
+    Returns:
+        Dict[str, Any]: Graph payload with nodes and edges.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     nodes: Dict[str, Dict[str, Any]] = {}
     edges: List[Dict[str, Any]] = []
 
@@ -38,6 +52,17 @@ def build_run_graph(run_id: str, events: List[Dict[str, Any]]) -> Dict[str, Any]
 
 
 def summarize_run_metrics(run: Dict[str, Any]) -> Dict[str, Any]:
+    """Summarize run metrics into a compact payload.
+
+    Args:
+        run: Run document.
+
+    Returns:
+        Dict[str, Any]: Summary metrics.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     last_metrics = run.get("last_metrics", {})
     return {
         "avg_score": last_metrics.get("avg_score", 0),
@@ -48,6 +73,18 @@ def summarize_run_metrics(run: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def run_quality_checks(run: Dict[str, Any], events: List[Dict[str, Any]]) -> QualityCheckResult:
+    """Run synthetic quality checks.
+
+    Args:
+        run: Run document.
+        events: Run events.
+
+    Returns:
+        QualityCheckResult: Quality check result.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     issues: List[Dict[str, Any]] = []
     last_decision = run.get("last_decision")
     if not last_decision:
@@ -66,6 +103,17 @@ def run_quality_checks(run: Dict[str, Any], events: List[Dict[str, Any]]) -> Qua
 
 
 def build_evaluation_report(run: Dict[str, Any]) -> EvaluationReport:
+    """Build an evaluation report for a run.
+
+    Args:
+        run: Run document.
+
+    Returns:
+        EvaluationReport: Evaluation report.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     metrics = summarize_run_metrics(run)
     summary = "Run evaluation completed with synthetic checks."
     return EvaluationReport(run_id=run.get("id", "unknown"), summary=summary, metrics=metrics)

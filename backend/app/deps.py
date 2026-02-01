@@ -19,10 +19,32 @@ _vector_store: Optional[VectorStore] = None
 
 
 def get_db() -> DatabaseClient:
+    """Return the current database client.
+
+    Args:
+        None: This function takes no parameters.
+
+    Returns:
+        DatabaseClient: Database client instance.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     return db_module.db
 
 
 def get_llm_client() -> Optional[LLMClient]:
+    """Return the configured LLM client if available.
+
+    Args:
+        None: This function takes no parameters.
+
+    Returns:
+        Optional[LLMClient]: LLM client instance.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     global _llm_client
     if _llm_client is not None:
         return _llm_client
@@ -35,6 +57,17 @@ def get_llm_client() -> Optional[LLMClient]:
 
 
 def get_vector_store() -> VectorStore:
+    """Return the vector store instance.
+
+    Args:
+        None: This function takes no parameters.
+
+    Returns:
+        VectorStore: Vector store instance.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     global _vector_store
     if _vector_store is None:
         _vector_store = InMemoryVectorStore()

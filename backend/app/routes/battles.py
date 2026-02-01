@@ -1,4 +1,7 @@
-"""Battle lifecycle routes."""
+"""Battle lifecycle routes.
+
+Provides CRUD and import operations for battles.
+"""
 
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -16,11 +19,34 @@ logger = get_logger(__name__)
 
 @router.get("/battles")
 async def get_battles(current_user: dict = Depends(require_permission("battle:read"))) -> List[Dict]:
+    """List battles.
+
+    Args:
+        current_user: Authorized user context.
+
+    Returns:
+        List[Dict]: Battles list.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     battles = await db.battles.find({}, {"_id": 0}).to_list(100)
     return battles
 
 @router.get("/battles/{battle_id}")
 async def get_battle(battle_id: str, current_user: dict = Depends(require_permission("battle:read"))) -> Dict:
+    """Get a battle by ID.
+
+    Args:
+        battle_id: Battle identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict: Battle document.
+
+    Raises:
+        HTTPException: If battle is not found.
+    """
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
@@ -28,6 +54,18 @@ async def get_battle(battle_id: str, current_user: dict = Depends(require_permis
 
 @router.post("/battles")
 async def create_battle(battle_data: BattleCreate, current_user: dict = Depends(require_permission("battle:write"))) -> Battle:
+    """Create a battle.
+
+    Args:
+        battle_data: Battle creation payload.
+        current_user: Authorized user context.
+
+    Returns:
+        Battle: Created battle.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     battle = Battle(scenario_name=battle_data.scenario_name, parameters=battle_data.parameters)
     await db.battles.insert_one(battle.model_dump())
     logger.info("battle.created", extra={"payload": {"battle_id": battle.id, "scenario": battle.scenario_name}})
@@ -35,6 +73,18 @@ async def create_battle(battle_data: BattleCreate, current_user: dict = Depends(
 
 @router.post("/battles/{battle_id}/start")
 async def start_battle(battle_id: str, current_user: dict = Depends(require_permission("battle:write"))) -> Dict:
+    """Start a battle.
+
+    Args:
+        battle_id: Battle identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict: Updated battle.
+
+    Raises:
+        HTTPException: If battle is not found.
+    """
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
@@ -46,6 +96,18 @@ async def start_battle(battle_id: str, current_user: dict = Depends(require_perm
 
 @router.post("/battles/{battle_id}/stop")
 async def stop_battle(battle_id: str, current_user: dict = Depends(require_permission("battle:write"))) -> Dict:
+    """Stop a battle.
+
+    Args:
+        battle_id: Battle identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict: Updated battle.
+
+    Raises:
+        HTTPException: If battle is not found.
+    """
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
@@ -59,6 +121,18 @@ async def stop_battle(battle_id: str, current_user: dict = Depends(require_permi
 
 @router.delete("/battles/{battle_id}")
 async def delete_battle(battle_id: str, current_user: dict = Depends(require_permission("battle:write"))) -> Dict[str, str]:
+    """Delete a battle.
+
+    Args:
+        battle_id: Battle identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, str]: Deletion result.
+
+    Raises:
+        HTTPException: If battle is not found.
+    """
     result = await db.battles.delete_one({"id": battle_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Battle not found")
@@ -67,6 +141,18 @@ async def delete_battle(battle_id: str, current_user: dict = Depends(require_per
 
 @router.post("/battles/import-brc")
 async def import_brc(file: UploadFile = File(...), current_user: dict = Depends(require_permission("battle:write"))) -> Battle:
+    """Import a BRC archive into a battle.
+
+    Args:
+        file: Uploaded BRC archive.
+        current_user: Authorized user context.
+
+    Returns:
+        Battle: Imported battle.
+
+    Raises:
+        HTTPException: If archive is invalid.
+    """
     content = await file.read()
     try:
         archive = zipfile.ZipFile(io.BytesIO(content))

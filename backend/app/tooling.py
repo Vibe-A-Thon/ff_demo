@@ -8,15 +8,50 @@ from app.models import ToolSpec
 
 
 def derive_seed(base_seed: int, salt: str) -> int:
+    """Derive a deterministic seed from a base and salt.
+
+    Args:
+        base_seed: Base seed value.
+        salt: Salt string.
+
+    Returns:
+        int: Derived seed.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     seed_input = f"{base_seed}:{salt}".encode("utf-8")
     return int(hashlib.sha256(seed_input).hexdigest()[:12], 16)
 
 
 def rng(seed: int) -> random.Random:
+    """Create a seeded random generator.
+
+    Args:
+        seed: Seed value.
+
+    Returns:
+        random.Random: Random generator.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     return random.Random(seed)
 
 
 def simulate_transactions(params: Dict[str, Any], seed: int) -> Dict[str, Any]:
+    """Simulate synthetic transaction events.
+
+    Args:
+        params: Simulation parameters.
+        seed: Seed value.
+
+    Returns:
+        Dict[str, Any]: Simulated events payload.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     randomizer = rng(seed)
     count = int(params.get("count", 25))
     scenario = params.get("scenario", "demo")
@@ -37,6 +72,18 @@ def simulate_transactions(params: Dict[str, Any], seed: int) -> Dict[str, Any]:
 
 
 def apply_attack(params: Dict[str, Any], seed: int) -> Dict[str, Any]:
+    """Apply a synthetic attack to events.
+
+    Args:
+        params: Attack parameters.
+        seed: Seed value.
+
+    Returns:
+        Dict[str, Any]: Mutated events payload.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     randomizer = rng(seed)
     events = params.get("events", [])
     attack_type = params.get("attack_type", "velocity_anomaly")
@@ -55,6 +102,18 @@ def apply_attack(params: Dict[str, Any], seed: int) -> Dict[str, Any]:
 
 
 def score_risk(params: Dict[str, Any], seed: int) -> Dict[str, Any]:
+    """Score risk for events.
+
+    Args:
+        params: Scoring parameters.
+        seed: Seed value.
+
+    Returns:
+        Dict[str, Any]: Risk scores payload.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     randomizer = rng(seed)
     events = params.get("events", [])
     scores = []
@@ -69,6 +128,18 @@ def score_risk(params: Dict[str, Any], seed: int) -> Dict[str, Any]:
 
 
 def respond_actions(params: Dict[str, Any], seed: int) -> Dict[str, Any]:
+    """Generate response actions based on risk scores.
+
+    Args:
+        params: Response parameters.
+        seed: Seed value.
+
+    Returns:
+        Dict[str, Any]: Actions payload.
+
+    Raises:
+        None: No explicit exceptions are raised.
+    """
     randomizer = rng(seed)
     scores = params.get("scores", [])
     actions = []

@@ -1,4 +1,7 @@
-"""Workflow governance routes."""
+"""Workflow governance routes.
+
+Manage workflow state transitions and approvals.
+"""
 
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -23,6 +26,18 @@ logger = get_logger(__name__)
 
 @router.get("/workflow/{run_id}")
 async def get_workflow(run_id: str, current_user: dict = Depends(require_permission("workflow:read"))) -> Dict[str, Any]:
+    """Get workflow state for a run.
+
+    Args:
+        run_id: Run identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Workflow summary.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -39,6 +54,18 @@ async def get_workflow(run_id: str, current_user: dict = Depends(require_permiss
 
 @router.get("/workflow/{run_id}/approvals")
 async def get_workflow_approvals_endpoint(run_id: str, current_user: dict = Depends(require_permission("workflow:read"))) -> Dict[str, Any]:
+    """Get approvals for a run workflow.
+
+    Args:
+        run_id: Run identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Approval list.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -48,6 +75,18 @@ async def get_workflow_approvals_endpoint(run_id: str, current_user: dict = Depe
 
 @router.get("/workflow/{run_id}/status")
 async def get_workflow_status(run_id: str, current_user: dict = Depends(require_permission("workflow:read"))) -> Dict[str, Any]:
+    """Get governance status for a run.
+
+    Args:
+        run_id: Run identifier.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Governance status summary.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -62,6 +101,19 @@ async def get_workflow_status(run_id: str, current_user: dict = Depends(require_
 
 @router.post("/workflow/{run_id}/advance")
 async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
+    """Advance a workflow state for a run.
+
+    Args:
+        run_id: Run identifier.
+        payload: Advance request payload.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Workflow transition result.
+
+    Raises:
+        HTTPException: If run is not found or state invalid.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -115,6 +167,19 @@ async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest, c
 
 @router.post("/workflow/{run_id}/decision")
 async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
+    """Record a workflow approval decision.
+
+    Args:
+        run_id: Run identifier.
+        payload: Decision payload.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Decision result.
+
+    Raises:
+        HTTPException: If run is not found or not awaiting approval.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -156,6 +221,19 @@ async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest, c
 
 @router.post("/workflow/{run_id}/auto-run")
 async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
+    """Auto-run workflow transitions until approval or terminal state.
+
+    Args:
+        run_id: Run identifier.
+        payload: Auto-run payload.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Auto-run result.
+
+    Raises:
+        HTTPException: If run is not found or state invalid.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -218,6 +296,19 @@ async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest, curren
 
 @router.post("/workflow/{run_id}/freeze")
 async def freeze_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
+    """Freeze a workflow.
+
+    Args:
+        run_id: Run identifier.
+        payload: Freeze payload.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Freeze result.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -245,6 +336,19 @@ async def freeze_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_
 
 @router.post("/workflow/{run_id}/rollback")
 async def rollback_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
+    """Rollback a workflow.
+
+    Args:
+        run_id: Run identifier.
+        payload: Rollback payload.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Rollback result.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -272,6 +376,19 @@ async def rollback_workflow(run_id: str, payload: WorkflowAdvanceRequest, curren
 
 @router.post("/workflow/{run_id}/reset")
 async def reset_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
+    """Reset a workflow to initial state.
+
+    Args:
+        run_id: Run identifier.
+        payload: Reset payload.
+        current_user: Authorized user context.
+
+    Returns:
+        Dict[str, Any]: Reset result.
+
+    Raises:
+        HTTPException: If run is not found.
+    """
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
