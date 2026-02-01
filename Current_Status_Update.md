@@ -43,11 +43,11 @@
 ---
 
 ## Overall Progress
-- **Estimated completion:** **55%**
-- **Completed:** **55%**
-- **Pending:** **45%**
+- **Estimated completion:** **70%**
+- **Completed:** **70%**
+- **Pending:** **30%**
 
-> Notes: UI coverage is broad but many flows are still mock or synthetic. Core pipelines (APMC, full multi-agent runtime, and production-grade governance) are incomplete. RAG systems are now complete.
+> Notes: UI coverage is broad but many flows are still mock or synthetic. Core pipelines (APMC and production-grade governance) are incomplete. RAG systems are complete.
 
 ---
 
@@ -80,14 +80,14 @@
   - API/UX present; gating logic exists in run steps and workflow flow.
 
 ### 4) Agent System & Orchestration
-- **Team registry (8 teams)** — **85%**
+- **Team registry (8 teams)** — **90%**
   - Team metadata and registry in place.
-- **Agent registry (multi-agent roster)** — **60%**
-  - Registry includes many agents, but not full 56 with full contracts/artifact types.
-- **Task routing & inter-team requests** — **50%**
-  - Agent task/request APIs exist; orchestration logic is limited.
-- **Full sub-agent runtime + artifact lineage** — **25%**
-  - No full BaseAgent runtime, deterministic replay, or lineage persistence.
+- **Agent registry (multi-agent roster)** — **100%**
+  - Full 56-agent roster with canonical artifact types and contracts.
+- **Task routing & inter-team requests** — **85%**
+  - Routing APIs and multi-team orchestration engine implemented with lineage chaining.
+- **Full sub-agent runtime + artifact lineage** — **90%**
+  - BaseAgent runtime, deterministic task IDs, artifact persistence, and lineage graph end-to-end.
 
 ### 5) Battle Engine & War Room
 - **War Room UI (timeline, controls, thinking streams)** — **80%**
@@ -138,12 +138,12 @@
   - API implemented with synthetic fallback.
 
 ### 11) Evidence Packs
-- **Evidence pack generation (battle + run)** — **65%**
+- **Evidence pack generation (battle + run)** — **70%**
   - Packs include narrative, artifacts, approvals, checksum.
 - **Export + redaction controls** — **60%**
   - JSON export and UI redaction implemented; external approval enforced.
-- **Full provenance chain + evidence lineage graph** — **30%**
-  - Partial lineage captured via events; no persistent lineage graph.
+- **Full provenance chain + evidence lineage graph** — **85%**
+  - Persistent artifacts and lineage graph across war-loop stages and evidence packs.
 
 ### 12) Governance & Approvals
 - **Approval queue UI + decisions** — **70%**
@@ -160,8 +160,8 @@
   - Pytest and lint gates present; not full system coverage.
 
 ### 14) Demo & Hackathon Readiness
-- **Demo mode (wow factor + replay)** — **70%**
-  - Demo controls present; deterministic replay partial.
+- **Demo mode (wow factor + replay)** — **85%**
+  - Demo controls present; deterministic replay wired with seeded outputs.
 - **Story mode report + evidence export** — **45%**
   - Evidence packs exist; story-mode narrative not fully automated.
 
@@ -176,6 +176,9 @@
 - Knowledge graph CRUD + Brain Surgery UI (non-APMC).
 - RAG endpoints with hybrid scoring and seeded taxonomy.
 - Approval queue UI with SoD warnings and audit trail display.
+- Full 56-agent roster with BaseAgent runtime and deterministic replay.
+- Persistent agent artifacts with lineage graph across runs and evidence packs.
+- UI artifact badges/panels normalized across Evidence Viewer, Brain Surgery, Agent Task Queue, and Difference Visualizer.
 
 ---
 
@@ -183,16 +186,15 @@
 
 ### P0 — Must for 100% Completion
 1. **APMC/AMC import + validation + merge + export**, and wire into Brain Surgery 3-frame view.
-2. **Full multi-agent runtime**: BaseAgent contracts, deterministic replay, artifact lineage, 56 agents.
-3. **End-to-end artifact lineage graph** across war loop stages and evidence packs.
-4. **Complete SoD enforcement** for actions (visual patch, brain surgery, exports).
-5. **Operational KPI wiring** from real run telemetry (not mock).
+2. **Complete SoD enforcement** for actions (visual patch, brain surgery, exports).
+3. **Operational KPI wiring** from real run telemetry (not mock).
+4. **Regression tests** for deterministic replay + lineage integrity.
 
 ### P1 — Major Demo Enhancements
 1. **GraphRAG / CRAG / Self-RAG / CAG** integrations with evaluation hooks. — **Complete**
 2. **Counterfactuals + similar-case retrieval** linked to real evidence, not templates.
 3. **Story-mode report export** with stage timeline + diffs + approvals.
-4. **Deterministic replay button** for full war loop (seeded outputs).
+4. **Evidence pack polish** (PDF export + signed checksum chain).
 
 ### P2 — Hardening & Scale
 1. **API key vault UI** with rotate/revoke and role restrictions.
@@ -202,10 +204,10 @@
 ---
 
 ## Pending % by Area
-- **Agents + orchestration:** 65% pending
+- **Agents + orchestration:** 10% pending
 - **APMC / Brain Surgery integration:** 70% pending
 - **Advanced RAG modes:** 0% pending
-- **Evidence lineage + provenance:** 70% pending
+- **Evidence lineage + provenance:** 15% pending
 - **Governance SoD enforcement:** 60% pending
 - **Live data wiring (metrics + battle outputs):** 45% pending
 - **Demo story-mode automation:** 55% pending
@@ -214,7 +216,7 @@
 
 ## Next Best Actions (Recommended Sequence)
 1. Implement **APMC import/export + Brain Surgery 3-frame binding**.
-2. Build **BaseAgent runtime** and wire 56 agents with artifacts + deterministic replay.
-3. Harden **evidence lineage** and approvals (SoD enforcement end-to-end).
-4. Upgrade **RAG** to GraphRAG/CRAG and add evaluation harness.
-5. Convert **War Room / Metrics** from mock data to real run telemetry.
+2. Harden **evidence lineage** and approvals (SoD enforcement end-to-end).
+3. Convert **War Room / Metrics** from mock data to real run telemetry.
+4. Add **deterministic replay + lineage regression tests**.
+5. Complete **story-mode report export** and PDF-ready evidence packs.
