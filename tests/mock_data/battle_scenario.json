@@ -1,0 +1,8 @@
+{
+  "scenario_name": "Mock Scenario",
+  "parameters": {
+    "attack_complexity": 5,
+    "velocity": 40,
+    "stealth": 50
+  }
+}

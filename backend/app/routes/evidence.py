@@ -1,14 +1,20 @@
+"""Evidence pack routes."""
+
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+from typing import Any, Dict, List
+from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
+from app.core.logging_config import get_logger
 from app.models import EvidencePack, EvidenceExportApprovalRequest, ApprovalRequest
 from app.xai_utils import build_evidence_items, build_explanation_bundle
 from app.audit import record_audit, redact_evidence_pack, compute_checksum
+from app.security import require_permission
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
-def _normalize_approval_chain(approvals):
+def _normalize_approval_chain(approvals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     chain = []
     for approval in approvals or []:
         approvers = approval.get("approvers") or []
@@ -36,7 +42,7 @@ def _normalize_approval_chain(approvals):
     return chain
 
 
-async def _fetch_approvals(run_id: str | None, pack_id: str | None):
+async def _fetch_approvals(run_id: str | None, pack_id: str | None) -> List[Dict[str, Any]]:
     approvals = []
     if run_id:
         approvals.extend(
@@ -55,7 +61,7 @@ async def _fetch_approvals(run_id: str | None, pack_id: str | None):
     return _normalize_approval_chain(approvals)
 
 
-def _extract_triggered_rules(events):
+def _extract_triggered_rules(events: List[Dict[str, Any]]) -> List[str]:
     rules = set()
     for event in events:
         payload = event.get("payload", {})
@@ -76,7 +82,7 @@ def _extract_triggered_rules(events):
     return list(rules)
 
 
-def _build_artifacts_from_events(events):
+def _build_artifacts_from_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     artifacts = []
     for event in events:
         if event.get("event_type") not in {"agent.output", "orchestrator.output"}:
@@ -95,7 +101,7 @@ def _build_artifacts_from_events(events):
     return artifacts
 
 
-def _build_stage_summaries(events):
+def _build_stage_summaries(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     summaries = []
     for event in events:
         if event.get("event_type") != "stage.changed":
@@ -111,7 +117,7 @@ def _build_stage_summaries(events):
     return summaries
 
 @router.get("/evidence-packs")
-async def get_evidence_packs():
+async def get_evidence_packs(current_user: dict = Depends(require_permission("evidence:read"))) -> List[Dict[str, Any]]:
     packs = await db.evidence_packs.find({}, {"_id": 0}).to_list(100)
     hydrated = []
     for pack in packs:
@@ -121,7 +127,7 @@ async def get_evidence_packs():
     return hydrated
 
 @router.get("/evidence-packs/{pack_id}")
-async def get_evidence_pack(pack_id: str):
+async def get_evidence_pack(pack_id: str, current_user: dict = Depends(require_permission("evidence:read"))) -> Dict[str, Any]:
     pack = await db.evidence_packs.find_one({"id": pack_id}, {"_id": 0})
     if not pack:
         raise HTTPException(status_code=404, detail="Evidence pack not found")
@@ -129,7 +135,7 @@ async def get_evidence_pack(pack_id: str):
     return pack
 
 @router.post("/evidence-packs/generate/{battle_id}")
-async def generate_evidence_pack(battle_id: str):
+async def generate_evidence_pack(battle_id: str, current_user: dict = Depends(require_permission("evidence:write"))) -> Dict[str, Any]:
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
@@ -164,11 +170,15 @@ async def generate_evidence_pack(battle_id: str):
     pack_dict["checksum"] = compute_checksum(pack_dict)
 
     await db.evidence_packs.insert_one(pack_dict)
+    logger.info(
+        "evidence.pack.generated",
+        extra={"payload": {"pack_id": pack_dict.get("id"), "battle_id": battle_id, "source": "battle"}},
+    )
     return pack_dict
 
 
 @router.post("/evidence-packs/generate/run/{run_id}")
-async def generate_evidence_pack_from_run(run_id: str):
+async def generate_evidence_pack_from_run(run_id: str, current_user: dict = Depends(require_permission("evidence:write"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -213,10 +223,14 @@ async def generate_evidence_pack_from_run(run_id: str):
     pack_dict["checksum"] = compute_checksum(pack_dict)
 
     await db.evidence_packs.insert_one(pack_dict)
+    logger.info(
+        "evidence.pack.generated",
+        extra={"payload": {"pack_id": pack_dict.get("id"), "run_id": run_id, "source": "run"}},
+    )
     return pack_dict
 
 @router.get("/evidence-packs/{pack_id}/export")
-async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_id: str | None = None):
+async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_id: str | None = None, current_user: dict = Depends(require_permission("evidence:read"))) -> Dict[str, Any]:
     pack = await db.evidence_packs.find_one({"id": pack_id}, {"_id": 0})
     if not pack:
         raise HTTPException(status_code=404, detail="Evidence pack not found")

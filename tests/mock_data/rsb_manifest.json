@@ -1,0 +1,6 @@
+{
+  "rule_id": "RULE-TEST-001",
+  "name": "Velocity Spike",
+  "rule_version": "1.0.0",
+  "attack_type": "velocity"
+}

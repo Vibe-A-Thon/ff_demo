@@ -1,3 +1,5 @@
+"""Synthetic tooling helpers for war loop simulations."""
+
 import hashlib
 import random
 from datetime import datetime, timezone

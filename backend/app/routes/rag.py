@@ -1,6 +1,11 @@
+"""RAG document and retrieval routes."""
+
 import json
-from fastapi import APIRouter, HTTPException
-from app.db import db
+from typing import Any, Dict, List
+from fastapi import APIRouter, HTTPException, Depends
+from app.core.external_services import DatabaseClient, LLMClient, VectorDocument, VectorStore
+from app.core.logging_config import get_logger
+from app.deps import get_db, get_llm_client, get_vector_store
 from app.models import RAGDocument, RAGDocumentCreate, RAGHit, RAGQueryRequest, RAGResponse
 from app.rag_utils import (
     build_context_snippets,
@@ -9,21 +14,30 @@ from app.rag_utils import (
     format_context_prompt,
     get_embedding,
     keyword_score,
-    openai_client,
     simple_embed,
     tokenize,
 )
 from app.run_helpers import record_run_event
+from app.security import require_permission
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 @router.get("/rag/collections")
-async def list_rag_collections():
+async def list_rag_collections(
+    current_user: dict = Depends(require_permission("rag:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, List[str]]:
     collections = await db.rag_documents.distinct("collection")
     return {"collections": sorted(collections)}
 
 @router.get("/rag/documents")
-async def list_rag_documents(collection: str | None = None, limit: int = 50):
+async def list_rag_documents(
+    collection: str | None = None,
+    limit: int = 50,
+    current_user: dict = Depends(require_permission("rag:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> List[Dict[str, Any]]:
     query = {}
     if collection:
         query["collection"] = collection
@@ -31,16 +45,33 @@ async def list_rag_documents(collection: str | None = None, limit: int = 50):
     return docs
 
 @router.post("/rag/documents")
-async def create_rag_document(doc_data: RAGDocumentCreate):
+async def create_rag_document(
+    doc_data: RAGDocumentCreate,
+    current_user: dict = Depends(require_permission("rag:write")),
+    db: DatabaseClient = Depends(get_db),
+    llm_client: LLMClient | None = Depends(get_llm_client),
+    vector_store: VectorStore = Depends(get_vector_store),
+) -> RAGDocument:
     if doc_data.synthetic_only and contains_sensitive_identifiers(doc_data.content):
         raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
-    embedding = await get_embedding(doc_data.content)
+    embedding = await get_embedding(doc_data.content, llm_client=llm_client)
     doc = RAGDocument(**doc_data.model_dump(), embedding=embedding)
     await db.rag_documents.insert_one(doc.model_dump())
+    await vector_store.upsert(
+        "rag_documents",
+        [VectorDocument(id=doc.id, vector=embedding, metadata={"collection": doc.collection, "title": doc.title})],
+    )
+    logger.info("rag.document.created", extra={"payload": {"doc_id": doc.id, "collection": doc.collection}})
     return doc
 
 @router.post("/rag/seed")
-async def seed_rag_data(reset: bool = False):
+async def seed_rag_data(
+    reset: bool = False,
+    current_user: dict = Depends(require_permission("rag:write")),
+    db: DatabaseClient = Depends(get_db),
+    llm_client: LLMClient | None = Depends(get_llm_client),
+    vector_store: VectorStore = Depends(get_vector_store),
+) -> Dict[str, Any]:
     if reset:
         await db.rag_documents.delete_many({})
 
@@ -52,7 +83,7 @@ async def seed_rag_data(reset: bool = False):
             for item in taxonomy:
                 title = item.get("name") or item.get("id") or "Taxonomy"
                 content = item.get("description") or json.dumps(item, ensure_ascii=False)
-                embedding = await get_embedding(content)
+                embedding = await get_embedding(content, llm_client=llm_client)
                 doc = RAGDocument(
                     collection="taxonomy",
                     title=title,
@@ -61,6 +92,10 @@ async def seed_rag_data(reset: bool = False):
                     embedding=embedding,
                 )
                 await db.rag_documents.insert_one(doc.model_dump())
+                await vector_store.upsert(
+                    "rag_documents",
+                    [VectorDocument(id=doc.id, vector=embedding, metadata={"collection": doc.collection, "title": doc.title})],
+                )
                 seeded += 1
 
     defaults = [
@@ -70,15 +105,25 @@ async def seed_rag_data(reset: bool = False):
         {"collection": "explanations", "title": "Decision Template", "content": "Explain outcomes using top signals, rule hits, and confidence statement.", "metadata": {"team": "gold"}},
     ]
     for entry in defaults:
-        embedding = await get_embedding(entry["content"])
+        embedding = await get_embedding(entry["content"], llm_client=llm_client)
         doc = RAGDocument(**entry, embedding=embedding)
         await db.rag_documents.insert_one(doc.model_dump())
+        await vector_store.upsert(
+            "rag_documents",
+            [VectorDocument(id=doc.id, vector=embedding, metadata={"collection": doc.collection, "title": doc.title})],
+        )
         seeded += 1
 
+    logger.info("rag.seed.completed", extra={"payload": {"count": seeded, "reset": reset}})
     return {"message": "RAG data seeded", "count": seeded}
 
 @router.post("/rag/retrieve")
-async def rag_retrieve(request: RAGQueryRequest):
+async def rag_retrieve(
+    request: RAGQueryRequest,
+    current_user: dict = Depends(require_permission("rag:read")),
+    db: DatabaseClient = Depends(get_db),
+    llm_client: LLMClient | None = Depends(get_llm_client),
+) -> List[RAGHit]:
     if request.synthetic_only and contains_sensitive_identifiers(request.query):
         raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
     query = {}
@@ -90,7 +135,7 @@ async def rag_retrieve(request: RAGQueryRequest):
     if not docs:
         return []
 
-    query_embedding = await get_embedding(request.query)
+    query_embedding = await get_embedding(request.query, llm_client=llm_client)
     query_tokens = tokenize(request.query)
     scored = []
     for doc in docs:
@@ -114,10 +159,19 @@ async def rag_retrieve(request: RAGQueryRequest):
                 metadata=doc.get("metadata", {}),
             )
         )
+    logger.info(
+        "rag.retrieve.completed",
+        extra={"payload": {"query": request.query, "collections": request.collections, "hits": len(hits)}},
+    )
     return hits
 
 @router.post("/rag/query")
-async def rag_query(request: RAGQueryRequest):
+async def rag_query(
+    request: RAGQueryRequest,
+    current_user: dict = Depends(require_permission("rag:read")),
+    db: DatabaseClient = Depends(get_db),
+    llm_client: LLMClient | None = Depends(get_llm_client),
+) -> RAGResponse:
     if request.synthetic_only and contains_sensitive_identifiers(request.query):
         raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
 
@@ -130,7 +184,7 @@ async def rag_query(request: RAGQueryRequest):
         docs = await db.rag_documents.find(query, {"_id": 0}).to_list(500)
         if not docs:
             return []
-        query_embedding = await get_embedding(request.query)
+        query_embedding = await get_embedding(request.query, llm_client=llm_client)
         query_tokens = tokenize(request.query)
         scored_docs = []
         for doc in docs:
@@ -166,11 +220,11 @@ async def rag_query(request: RAGQueryRequest):
 
     answer = ""
     generated_by = "synthetic"
-    if openai_client and context_snippets:
+    if llm_client and context_snippets:
         try:
             system_prompt = "You are a fraud defense assistant. Use only the provided context. If context is insufficient, say so. Keep responses synthetic-only and avoid real identifiers."
             prompt = format_context_prompt(context_snippets, request.query)
-            response = await openai_client.chat.completions.create(
+            answer = await llm_client.chat_completions_create(
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -178,7 +232,6 @@ async def rag_query(request: RAGQueryRequest):
                 ],
                 max_tokens=400,
             )
-            answer = response.choices[0].message.content
             generated_by = "openai"
         except Exception as exc:
             __import__("logging").getLogger(__name__).error(f"RAG generation error: {exc}")
@@ -220,4 +273,16 @@ async def rag_query(request: RAGQueryRequest):
             {"team_id": request.team_id, "query": request.query, "score": response.retrieval_score},
         )
 
+    logger.info(
+        "rag.query.completed",
+        extra={
+            "payload": {
+                "query": request.query,
+                "hits": len(response.hits),
+                "score": response.retrieval_score,
+                "used_fallback": response.used_fallback,
+                "generated_by": response.generated_by,
+            }
+        },
+    )
     return response

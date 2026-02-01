@@ -1,14 +1,18 @@
+"""RSB package routes."""
+
 import io
 import json
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse
 from app.config import RSB_STORAGE_DIR
-from app.db import db
+from app.core.external_services import DatabaseClient
+from app.deps import get_db
 from app.models import RSBPackage, RSBPackageCreate
+from app.security import require_permission
 from app.rsb_utils import (
     build_rsb_tree,
     read_zip_json,
@@ -19,23 +23,36 @@ from app.rsb_utils import (
     bump_patch_version,
     build_rsb_archive,
 )
+from app.core.logging_config import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 @router.get("/rsb-packages")
-async def get_rsb_packages():
+async def get_rsb_packages(
+    current_user: dict = Depends(require_permission("rsb:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> List[Dict[str, Any]]:
     packages = await db.rsb_packages.find({}, {"_id": 0}).to_list(100)
     return packages
 
 @router.get("/rsb-packages/{package_id}")
-async def get_rsb_package(package_id: str):
+async def get_rsb_package(
+    package_id: str,
+    current_user: dict = Depends(require_permission("rsb:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
     return package
 
 @router.post("/rsb-packages")
-async def create_rsb_package(package_data: RSBPackageCreate):
+async def create_rsb_package(
+    package_data: RSBPackageCreate,
+    current_user: dict = Depends(require_permission("rsb:write")),
+    db: DatabaseClient = Depends(get_db),
+) -> RSBPackage:
     package = RSBPackage(**package_data.model_dump())
     rule_id = package.rule_id or package.manifest.get("rule_id")
     if rule_id:
@@ -51,6 +68,7 @@ async def create_rsb_package(package_data: RSBPackageCreate):
             for conflict in conflicts
         ]
     await db.rsb_packages.insert_one(package.model_dump())
+    logger.info("rsb.package.created", extra={"payload": {"package_id": package.id, "rule_id": package.rule_id}})
     return package
 
 @router.post("/rsb-packages/upload")
@@ -60,7 +78,9 @@ async def upload_rsb_package(
     version: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     compliance_badges: Optional[str] = Form(None),
-):
+    current_user: dict = Depends(require_permission("rsb:write")),
+    db: DatabaseClient = Depends(get_db),
+) -> RSBPackage:
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
     if not file.filename.lower().endswith((".rsb", ".zip")):
@@ -171,12 +191,21 @@ async def upload_rsb_package(
             package.storage_path = str(storage_path)
 
             await db.rsb_packages.insert_one(package.model_dump())
+            logger.info(
+                "rsb.package.uploaded",
+                extra={"payload": {"package_id": package.id, "status": package.status, "file": file.filename}},
+            )
             return package
     except zipfile.BadZipFile as exc:
+        logger.exception("Invalid RSB archive", extra={"payload": {"filename": file.filename}})
         raise HTTPException(status_code=400, detail="Invalid ZIP archive") from exc
 
 @router.post("/rsb-packages/{package_id}/test")
-async def test_rsb_package(package_id: str):
+async def test_rsb_package(
+    package_id: str,
+    current_user: dict = Depends(require_permission("rsb:write")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -187,11 +216,16 @@ async def test_rsb_package(package_id: str):
         test_results = build_test_results(package_id, file_names)
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": {"test_results": test_results, "status": "tested"}})
+    logger.info("rsb.package.tested", extra={"payload": {"package_id": package_id, "status": "tested"}})
     return test_results
 
 
 @router.get("/rsb-packages/{package_id}/diffs")
-async def get_rsb_diffs(package_id: str):
+async def get_rsb_diffs(
+    package_id: str,
+    current_user: dict = Depends(require_permission("rsb:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -235,7 +269,12 @@ async def get_rsb_diffs(package_id: str):
 
 
 @router.post("/rsb-packages/{package_id}/apply-patch")
-async def apply_rsb_patch(package_id: str, payload: Dict[str, Any]):
+async def apply_rsb_patch(
+    package_id: str,
+    payload: Dict[str, Any],
+    current_user: dict = Depends(require_permission("rsb:approve")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -281,10 +320,18 @@ async def apply_rsb_patch(package_id: str, payload: Dict[str, Any]):
     }
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": updates})
+    logger.info(
+        "rsb.package.patched",
+        extra={"payload": {"package_id": package_id, "decision": decision, "status": updates.get("status")}},
+    )
     return await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
 
 @router.post("/rsb-packages/{package_id}/merge")
-async def merge_rsb_package(package_id: str):
+async def merge_rsb_package(
+    package_id: str,
+    current_user: dict = Depends(require_permission("rsb:approve")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -295,10 +342,16 @@ async def merge_rsb_package(package_id: str):
         raise HTTPException(status_code=400, detail="Package validation failed; fix errors before merge")
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": {"status": "merged"}})
+    logger.info("rsb.package.merged", extra={"payload": {"package_id": package_id}})
     return {"message": "Package merged successfully", "status": "merged"}
 
 @router.post("/rsb-packages/{package_id}/resolve-conflicts")
-async def resolve_rsb_conflicts(package_id: str, decisions: Dict[str, Any]):
+async def resolve_rsb_conflicts(
+    package_id: str,
+    decisions: Dict[str, Any],
+    current_user: dict = Depends(require_permission("rsb:approve")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -307,18 +360,28 @@ async def resolve_rsb_conflicts(package_id: str, decisions: Dict[str, Any]):
         {"id": package_id},
         {"$set": {"conflict_resolutions": decisions}},
     )
+    logger.info("rsb.package.conflicts_resolved", extra={"payload": {"package_id": package_id}})
     return await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
 
 @router.post("/rsb-packages/{package_id}/stage")
-async def stage_rsb_package(package_id: str):
+async def stage_rsb_package(
+    package_id: str,
+    current_user: dict = Depends(require_permission("rsb:approve")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
     await db.rsb_packages.update_one({"id": package_id}, {"$set": {"status": "staged"}})
+    logger.info("rsb.package.staged", extra={"payload": {"package_id": package_id}})
     return await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
 
 @router.get("/rsb-packages/{package_id}/export")
-async def export_rsb_package(package_id: str):
+async def export_rsb_package(
+    package_id: str,
+    current_user: dict = Depends(require_permission("rsb:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> StreamingResponse:
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
@@ -332,8 +395,13 @@ async def export_rsb_package(package_id: str):
     raise HTTPException(status_code=404, detail="RSB archive not available")
 
 @router.delete("/rsb-packages/{package_id}")
-async def delete_rsb_package(package_id: str):
+async def delete_rsb_package(
+    package_id: str,
+    current_user: dict = Depends(require_permission("rsb:approve")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, str]:
     result = await db.rsb_packages.delete_one({"id": package_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="RSB Package not found")
+    logger.info("rsb.package.deleted", extra={"payload": {"package_id": package_id}})
     return {"message": "RSB Package deleted"}

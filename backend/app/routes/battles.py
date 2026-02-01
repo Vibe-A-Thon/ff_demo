@@ -1,43 +1,51 @@
+"""Battle lifecycle routes."""
+
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from typing import Dict, List
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 import io
 import json
 import zipfile
 from app.db import db
+from app.core.logging_config import get_logger
 from app.models import Battle, BattleCreate
+from app.security import require_permission
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 @router.get("/battles")
-async def get_battles():
+async def get_battles(current_user: dict = Depends(require_permission("battle:read"))) -> List[Dict]:
     battles = await db.battles.find({}, {"_id": 0}).to_list(100)
     return battles
 
 @router.get("/battles/{battle_id}")
-async def get_battle(battle_id: str):
+async def get_battle(battle_id: str, current_user: dict = Depends(require_permission("battle:read"))) -> Dict:
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
     return battle
 
 @router.post("/battles")
-async def create_battle(battle_data: BattleCreate):
+async def create_battle(battle_data: BattleCreate, current_user: dict = Depends(require_permission("battle:write"))) -> Battle:
     battle = Battle(scenario_name=battle_data.scenario_name, parameters=battle_data.parameters)
     await db.battles.insert_one(battle.model_dump())
+    logger.info("battle.created", extra={"payload": {"battle_id": battle.id, "scenario": battle.scenario_name}})
     return battle
 
 @router.post("/battles/{battle_id}/start")
-async def start_battle(battle_id: str):
+async def start_battle(battle_id: str, current_user: dict = Depends(require_permission("battle:write"))) -> Dict:
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
 
     await db.battles.update_one({"id": battle_id}, {"$set": {"status": "running"}})
     battle["status"] = "running"
+    logger.info("battle.started", extra={"payload": {"battle_id": battle_id}})
     return battle
 
 @router.post("/battles/{battle_id}/stop")
-async def stop_battle(battle_id: str):
+async def stop_battle(battle_id: str, current_user: dict = Depends(require_permission("battle:write"))) -> Dict:
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
@@ -46,17 +54,19 @@ async def stop_battle(battle_id: str):
     await db.battles.update_one({"id": battle_id}, {"$set": {"status": "completed", "completed_at": completed_at}})
     battle["status"] = "completed"
     battle["completed_at"] = completed_at
+    logger.info("battle.completed", extra={"payload": {"battle_id": battle_id}})
     return battle
 
 @router.delete("/battles/{battle_id}")
-async def delete_battle(battle_id: str):
+async def delete_battle(battle_id: str, current_user: dict = Depends(require_permission("battle:write"))) -> Dict[str, str]:
     result = await db.battles.delete_one({"id": battle_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Battle not found")
+    logger.info("battle.deleted", extra={"payload": {"battle_id": battle_id}})
     return {"message": "Battle deleted"}
 
 @router.post("/battles/import-brc")
-async def import_brc(file: UploadFile = File(...)):
+async def import_brc(file: UploadFile = File(...), current_user: dict = Depends(require_permission("battle:write"))) -> Battle:
     content = await file.read()
     try:
         archive = zipfile.ZipFile(io.BytesIO(content))
@@ -108,4 +118,8 @@ async def import_brc(file: UploadFile = File(...)):
         completed_at=datetime.now(timezone.utc).isoformat(),
     )
     await db.battles.insert_one(battle.model_dump())
+    logger.info(
+        "battle.imported",
+        extra={"payload": {"battle_id": battle.id, "scenario": battle.scenario_name, "source": "brc"}},
+    )
     return battle

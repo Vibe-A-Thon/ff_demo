@@ -1,12 +1,13 @@
 import logging
-from fastapi import APIRouter
-from app.rag_utils import openai_client
+from fastapi import APIRouter, Depends
+from app.core.external_services import LLMClient
+from app.deps import get_llm_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 @router.post("/ai/think")
-async def ai_think(prompt: dict):
+async def ai_think(prompt: dict, llm_client: LLMClient | None = Depends(get_llm_client)):
     stage = prompt.get("stage", "analysis")
     context = prompt.get("context", "")
     team = prompt.get("team", "blue")
@@ -16,7 +17,11 @@ async def ai_think(prompt: dict):
         "blue": "You are the Blue Team AI, a defensive fraud detector. Think step-by-step about how to detect and prevent fraud.",
     }
 
-    if not openai_client:
+    if not llm_client:
+        logger.info(
+            "ai.think.synthetic",
+            extra={"payload": {"team": team, "stage": stage}},
+        )
         return {
             "thinking": f"[Simulated {team} team thinking for {stage}]: Analyzing patterns... Evaluating risk vectors... Formulating response strategy.",
             "team": team,
@@ -24,7 +29,7 @@ async def ai_think(prompt: dict):
         }
 
     try:
-        response = await openai_client.chat.completions.create(
+        thinking = await llm_client.chat_completions_create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompts.get(team, system_prompts["blue"])},
@@ -32,9 +37,14 @@ async def ai_think(prompt: dict):
             ],
             max_tokens=500,
         )
-        return {"thinking": response.choices[0].message.content, "team": team, "stage": stage}
+        logger.info("ai.think.generated", extra={"payload": {"team": team, "stage": stage}})
+        return {"thinking": thinking, "team": team, "stage": stage}
     except Exception as exc:
         logger.error(f"AI thinking error: {exc}")
+        logger.info(
+            "ai.think.fallback",
+            extra={"payload": {"team": team, "stage": stage}},
+        )
         return {
             "thinking": f"[Simulated {team} team thinking for {stage}]: Analyzing patterns... Evaluating risk vectors... Formulating response strategy.",
             "team": team,

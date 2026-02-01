@@ -84,6 +84,7 @@ PyJWT==2.10.1
 pymongo==4.5.0
 pyparsing==3.3.1
 pytest==9.0.2
+pytest-cov==5.0.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-jose==3.5.0
@@ -121,3 +122,5 @@ watchfiles==1.1.1
 websockets==15.0.1
 yarl==1.22.0
 zipp==3.23.0
+bandit==1.7.10
+pre-commit==3.8.0

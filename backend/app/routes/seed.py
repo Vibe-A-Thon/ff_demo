@@ -1,14 +1,20 @@
 import random
 from datetime import datetime, timezone
-from fastapi import APIRouter
-from app.db import db
+from fastapi import APIRouter, Depends
+from app.core.external_services import DatabaseClient, LLMClient
+from app.core.logging_config import get_logger
+from app.deps import get_db, get_llm_client
 from app.models import Battle, KnowledgeNode, RAGDocument, RSBPackage, Rule
 from app.rag_utils import get_embedding
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 @router.post("/seed-data")
-async def seed_data():
+async def seed_data(
+    db: DatabaseClient = Depends(get_db),
+    llm_client: LLMClient | None = Depends(get_llm_client),
+):
     await db.battles.delete_many({})
     await db.rules.delete_many({})
     await db.knowledge_nodes.delete_many({})
@@ -60,7 +66,7 @@ async def seed_data():
         {"collection": "explanations", "title": "Decision Rationale", "content": "Provide top three signals, rules triggered, and confidence statement.", "metadata": {"team": "gold"}},
     ]
     for entry in rag_entries:
-        embedding = await get_embedding(entry["content"])
+        embedding = await get_embedding(entry["content"], llm_client=llm_client)
         doc = RAGDocument(**entry, embedding=embedding)
         await db.rag_documents.insert_one(doc.model_dump())
 
@@ -90,6 +96,10 @@ async def seed_data():
     )
     await db.rsb_packages.insert_one(rsb.model_dump())
 
+    logger.info(
+        "seed.completed",
+        extra={"payload": {"rules": len(created_rules), "nodes": len(created_nodes), "battles": 3}},
+    )
     return {
         "message": "Demo data seeded successfully",
         "rules": len(created_rules),

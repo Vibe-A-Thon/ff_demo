@@ -1,10 +1,15 @@
+"""War loop run routes."""
+
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+from typing import Any, Dict, List
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 import io
 import json
 import zipfile
-from app.db import db
+from app.core.external_services import DatabaseClient
+from app.core.logging_config import get_logger
+from app.deps import get_db
 from app.models import RunSession, RunStartRequest
 from app.run_helpers import record_run_event
 from app.tooling import derive_seed
@@ -15,25 +20,42 @@ from app.workflow_service import (
     stage_is_approved,
     ensure_stage_approval,
 )
+from app.security import require_permission
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.get("/runs")
-async def list_runs():
+async def list_runs(
+    current_user: dict = Depends(require_permission("workflow:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> List[Dict]:
     runs = await db.runs.find({}, {"_id": 0}).sort("started_at", -1).to_list(200)
     return runs
 
 @router.post("/runs/start")
-async def start_run(payload: RunStartRequest):
+async def start_run(
+    payload: RunStartRequest,
+    current_user: dict = Depends(require_permission("workflow:control")),
+    db: DatabaseClient = Depends(get_db),
+) -> RunSession:
     seed_value = payload.seed if payload.seed is not None else int(datetime.now(timezone.utc).timestamp())
     run = RunSession(scenario_id=payload.scenario_id, seed=seed_value, mode=payload.mode)
     await db.runs.insert_one(run.model_dump())
     await record_run_event(run.id, "run.started", {"scenario_id": run.scenario_id, "seed": run.seed, "mode": run.mode})
+    logger.info(
+        "run.created",
+        extra={"payload": {"run_id": run.id, "scenario_id": run.scenario_id, "mode": run.mode}},
+    )
     return run
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str):
+async def get_run(
+    run_id: str,
+    current_user: dict = Depends(require_permission("workflow:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -41,7 +63,11 @@ async def get_run(run_id: str):
     return {"run": run, "events": events}
 
 @router.post("/runs/{run_id}/step")
-async def step_run(run_id: str):
+async def step_run(
+    run_id: str,
+    current_user: dict = Depends(require_permission("workflow:control")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -76,9 +102,17 @@ async def step_run(run_id: str):
                     }
                 },
             )
+            logger.info(
+                "run.awaiting_approval",
+                extra={"payload": {"run_id": run_id, "stage": current_stage, "step": step_index}},
+            )
             return {"run_id": run_id, "stage": current_stage, "status": "awaiting_approval"}
 
     await record_run_event(run_id, "stage.changed", {"stage": current_stage, "step": step_index})
+    logger.info(
+        "run.stage.started",
+        extra={"payload": {"run_id": run_id, "stage": current_stage, "step": step_index}},
+    )
     stage_payload, next_override = await execute_war_loop_stage(run, current_stage, step_seed)
 
     if stage_payload.get("agent"):
@@ -129,6 +163,10 @@ async def step_run(run_id: str):
         await record_run_event(run_id, "stage.failed", {"stage": current_stage, "next": next_override, "step": step_index})
         update_fields["current_stage"] = next_override
         await db.runs.update_one({"id": run_id}, {"$set": update_fields})
+        logger.info(
+            "run.stage.failed",
+            extra={"payload": {"run_id": run_id, "stage": current_stage, "next": next_override, "step": step_index}},
+        )
         return {
             "run_id": run_id,
             "stage": current_stage,
@@ -143,6 +181,10 @@ async def step_run(run_id: str):
         update_fields["status"] = "completed"
 
     await db.runs.update_one({"id": run_id}, {"$set": update_fields})
+    logger.info(
+        "run.stage.completed",
+        extra={"payload": {"run_id": run_id, "stage": current_stage, "next_stage": next_stage, "status": update_fields.get("status")}},
+    )
     return {
         "run_id": run_id,
         "stage": current_stage,
@@ -153,7 +195,11 @@ async def step_run(run_id: str):
 
 
 @router.get("/runs/{run_id}/export-brc")
-async def export_brc(run_id: str):
+async def export_brc(
+    run_id: str,
+    current_user: dict = Depends(require_permission("workflow:read")),
+    db: DatabaseClient = Depends(get_db),
+) -> Response:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")

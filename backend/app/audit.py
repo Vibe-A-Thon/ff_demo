@@ -1,3 +1,5 @@
+"""Audit logging and evidence redaction helpers."""
+
 import json
 import hashlib
 from typing import Any, Dict, Optional

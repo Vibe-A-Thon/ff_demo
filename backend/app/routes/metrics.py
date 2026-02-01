@@ -1,7 +1,9 @@
 from fastapi import APIRouter
 from app.db import db
+from app.core.logging_config import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 @router.get("/metrics/dashboard")
 async def get_dashboard_metrics():
@@ -12,7 +14,7 @@ async def get_dashboard_metrics():
     total_success = sum(b.get("metrics", {}).get("success_rate", 0) for b in completed_battles)
     avg_success = total_success / len(completed_battles) if completed_battles else 0
 
-    return {
+    payload = {
         "total_battles": len(battles),
         "completed_battles": len(completed_battles),
         "running_battles": len([b for b in battles if b.get("status") == "running"]),
@@ -30,3 +32,8 @@ async def get_dashboard_metrics():
             for b in completed_battles[-20:]
         ],
     }
+    logger.info(
+        "metrics.dashboard.generated",
+        extra={"payload": {"total_battles": payload["total_battles"], "total_rules": payload["total_rules"]}},
+    )
+    return payload

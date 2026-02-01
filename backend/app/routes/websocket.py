@@ -5,8 +5,10 @@ from typing import Dict, List
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.db import db
 from app.rag_utils import openai_client
+from app.core.logging_config import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 class ConnectionManager:
     def __init__(self):
@@ -17,10 +19,18 @@ class ConnectionManager:
         if battle_id not in self.active_connections:
             self.active_connections[battle_id] = []
         self.active_connections[battle_id].append(websocket)
+        logger.info(
+            "ws.connected",
+            extra={"payload": {"battle_id": battle_id, "connections": len(self.active_connections[battle_id])}},
+        )
 
     def disconnect(self, websocket: WebSocket, battle_id: str):
         if battle_id in self.active_connections:
             self.active_connections[battle_id].remove(websocket)
+            logger.info(
+                "ws.disconnected",
+                extra={"payload": {"battle_id": battle_id, "connections": len(self.active_connections[battle_id])}},
+            )
 
     async def broadcast(self, battle_id: str, message: dict):
         if battle_id in self.active_connections:
@@ -75,6 +85,10 @@ async def simulate_battle_turn(battle_id: str, turn_number: int):
     await db.battles.update_one(
         {"id": battle_id},
         {"$push": {"turns": turn_data}, "$set": {"metrics": turn_data["metrics"]}},
+    )
+    logger.info(
+        "ws.turn.simulated",
+        extra={"payload": {"battle_id": battle_id, "turn_number": turn_number}},
     )
 
     return turn_data

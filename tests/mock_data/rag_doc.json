@@ -1,0 +1,7 @@
+{
+  "collection": "tests",
+  "title": "Velocity Signals",
+  "content": "Synthetic velocity signals for fraud detection.",
+  "metadata": {"team": "blue"},
+  "synthetic_only": true
+}

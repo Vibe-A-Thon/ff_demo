@@ -1,3 +1,5 @@
+"""Database connection utilities and indexes."""
+
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ASCENDING
 from app.config import MONGO_URL, DB_NAME

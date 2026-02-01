@@ -1,15 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
-import openai
-from app.config import OPENAI_API_KEY
-from app.db import db
+from app.core.external_services import DatabaseClient, LLMClient
+from app.core.logging_config import get_logger
+from app.deps import get_db, get_llm_client
 from app.xai_utils import build_evidence_items, build_explanation_bundle
 from app.run_helpers import record_run_event
 
 router = APIRouter()
-
-openai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+logger = get_logger(__name__)
 
 
 class CommentorRequest(BaseModel):
@@ -26,7 +25,7 @@ class CommentorResponse(BaseModel):
     timestamp: str
 
 @router.get("/xai/explain/{run_id}")
-async def explain_run(run_id: str):
+async def explain_run(run_id: str, db: DatabaseClient = Depends(get_db)):
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -49,19 +48,27 @@ async def explain_run(run_id: str):
         )
     bundle.similar_cases = similar_cases
 
-    await record_run_event(run_id, "xai.generated", {
-        "decision": decision,
-        "bundle_id": bundle.bundle_id,
-        "evidence_count": len(evidence_items),
-        "similar_cases": len(similar_cases),
-    })
+    await record_run_event(
+        run_id,
+        "xai.generated",
+        {
+            "decision": decision,
+            "bundle_id": bundle.bundle_id,
+            "evidence_count": len(evidence_items),
+            "similar_cases": len(similar_cases),
+        },
+    )
+    logger.info(
+        "xai.bundle.generated",
+        extra={"payload": {"run_id": run_id, "evidence": len(evidence_items), "similar_cases": len(similar_cases)}},
+    )
 
     return bundle
 
 
 @router.get("/xai/explain/{run_id}/full")
-async def explain_run_full(run_id: str):
-    bundle = await explain_run(run_id)
+async def explain_run_full(run_id: str, db: DatabaseClient = Depends(get_db)):
+    bundle = await explain_run(run_id, db=db)
     return {
         "bundle": bundle,
         "evidence_graph": bundle.evidence_graph,
@@ -72,7 +79,7 @@ async def explain_run_full(run_id: str):
 
 
 @router.get("/xai/package/{package_id}")
-async def explain_package(package_id: str):
+async def explain_package(package_id: str, db: DatabaseClient = Depends(get_db)):
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB package not found")
@@ -82,14 +89,17 @@ async def explain_package(package_id: str):
 
     run_id = package.get("run_id") or (package.get("manifest", {}) or {}).get("run_id")
     if run_id:
-        bundle = await explain_run(run_id)
+        bundle = await explain_run(run_id, db=db)
         return {"bundle": bundle, "source": "run"}
 
     return {"bundle": None, "source": "none"}
 
 
 @router.post("/xai/commentary", response_model=CommentorResponse)
-async def generate_commentary(payload: CommentorRequest):
+async def generate_commentary(
+    payload: CommentorRequest,
+    llm_client: LLMClient | None = Depends(get_llm_client),
+):
     now = datetime.now(timezone.utc).isoformat()
     highlights = ", ".join(payload.highlights[:6]) if payload.highlights else "key activity updates"
     prompt = (
@@ -101,9 +111,9 @@ async def generate_commentary(payload: CommentorRequest):
         f"Highlights: {highlights}."
     )
 
-    if openai_client:
+    if llm_client:
         try:
-            response = await openai_client.chat.completions.create(
+            text = await llm_client.chat_completions_create(
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "You provide safe, concise UI commentary."},
@@ -111,7 +121,11 @@ async def generate_commentary(payload: CommentorRequest):
                 ],
                 max_tokens=120,
             )
-            text = response.choices[0].message.content.strip()
+            text = text.strip()
+            logger.info(
+                "xai.commentary.generated",
+                extra={"payload": {"screen": payload.screen, "generated_by": "openai"}},
+            )
             return CommentorResponse(text=text, generated_by="openai", timestamp=now)
         except Exception:
             pass
@@ -119,5 +133,9 @@ async def generate_commentary(payload: CommentorRequest):
     fallback = (
         f"On {payload.screen}, the {payload.role} view highlights {highlights}. "
         "Controls and telemetry are updating in real time as operations progress."
+    )
+    logger.info(
+        "xai.commentary.generated",
+        extra={"payload": {"screen": payload.screen, "generated_by": "synthetic"}},
     )
     return CommentorResponse(text=fallback, generated_by="synthetic", timestamp=now)

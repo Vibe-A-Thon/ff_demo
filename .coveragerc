@@ -1,0 +1,13 @@
+[run]
+branch = True
+source =
+    backend/app
+omit =
+    backend/app/__init__.py
+    backend/app/routes/websocket.py
+    backend/app/config.py
+    backend/app/db.py
+
+[report]
+show_missing = True
+fail_under = 85

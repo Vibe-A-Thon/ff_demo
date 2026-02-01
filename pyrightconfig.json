@@ -1,0 +1,11 @@
+{
+  "executionEnvironments": [
+    {
+      "root": "tests",
+      "extraPaths": ["backend", "backend/app"]
+    },
+    {
+      "root": "backend"
+    }
+  ]
+}

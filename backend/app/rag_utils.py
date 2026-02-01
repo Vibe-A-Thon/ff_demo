@@ -1,11 +1,14 @@
+"""RAG utility functions for embeddings and retrieval scoring."""
+
 import hashlib
 import json
-import logging
 from typing import Any, Dict, List
 import openai
 from app.config import OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL
+from app.core.external_services import LLMClient
+from app.core.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 openai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
@@ -29,7 +32,12 @@ def simple_embed(text: str, dim: int = 128) -> List[float]:
     return [v / norm for v in vector] if norm else vector
 
 
-async def get_embedding(text: str) -> List[float]:
+async def get_embedding(text: str, llm_client: LLMClient | None = None) -> List[float]:
+    if llm_client:
+        try:
+            return await llm_client.embeddings_create(model=OPENAI_EMBEDDING_MODEL, input=text)
+        except Exception as exc:
+            logger.exception("Embedding fallback", extra={"payload": {"error": str(exc)}})
     if openai_client:
         try:
             response = await openai_client.embeddings.create(
@@ -38,7 +46,7 @@ async def get_embedding(text: str) -> List[float]:
             )
             return response.data[0].embedding
         except Exception as exc:
-            logger.warning(f"Embedding fallback: {exc}")
+            logger.exception("Embedding fallback", extra={"payload": {"error": str(exc)}})
     return simple_embed(text)
 
 

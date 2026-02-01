@@ -1,6 +1,10 @@
+"""Workflow governance routes."""
+
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+from typing import Any, Dict
+from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
+from app.core.logging_config import get_logger
 from app.models import WorkflowAdvanceRequest, WorkflowDecisionRequest, WorkflowAutoRunRequest
 from app.run_helpers import record_run_event
 from app.workflow_service import (
@@ -12,11 +16,13 @@ from app.workflow_service import (
     get_workflow_approvals,
     compute_governance_status,
 )
+from app.security import require_permission
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 @router.get("/workflow/{run_id}")
-async def get_workflow(run_id: str):
+async def get_workflow(run_id: str, current_user: dict = Depends(require_permission("workflow:read"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -32,7 +38,7 @@ async def get_workflow(run_id: str):
 
 
 @router.get("/workflow/{run_id}/approvals")
-async def get_workflow_approvals_endpoint(run_id: str):
+async def get_workflow_approvals_endpoint(run_id: str, current_user: dict = Depends(require_permission("workflow:read"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -41,7 +47,7 @@ async def get_workflow_approvals_endpoint(run_id: str):
 
 
 @router.get("/workflow/{run_id}/status")
-async def get_workflow_status(run_id: str):
+async def get_workflow_status(run_id: str, current_user: dict = Depends(require_permission("workflow:read"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -55,7 +61,7 @@ async def get_workflow_status(run_id: str):
     }
 
 @router.post("/workflow/{run_id}/advance")
-async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest):
+async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -85,6 +91,10 @@ async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest):
         )
 
     await record_run_event(run_id, "workflow.state_changed", {"from": current_state, "to": next_state})
+    logger.info(
+        "workflow.state_changed",
+        extra={"payload": {"run_id": run_id, "from": current_state, "to": next_state}},
+    )
     await db.runs.update_one(
         {"id": run_id},
         {
@@ -104,7 +114,7 @@ async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest):
     }
 
 @router.post("/workflow/{run_id}/decision")
-async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest):
+async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -121,6 +131,10 @@ async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest):
         run_id,
         "workflow.approval_decision",
         {"from": current_state, "to": next_state, "decision": payload.decision},
+    )
+    logger.info(
+        "workflow.approval_decision",
+        extra={"payload": {"run_id": run_id, "from": current_state, "to": next_state, "decision": payload.decision}},
     )
     await db.runs.update_one(
         {"id": run_id},
@@ -141,7 +155,7 @@ async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest):
     }
 
 @router.post("/workflow/{run_id}/auto-run")
-async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest):
+async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -159,6 +173,10 @@ async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest):
         if not new_entries:
             break
         await record_run_event(run_id, "workflow.state_changed", {"from": current_state, "to": next_state})
+        logger.info(
+            "workflow.state_changed",
+            extra={"payload": {"run_id": run_id, "from": current_state, "to": next_state}},
+        )
         transitions.extend(new_entries)
         current_state = next_state
         run["workflow_state"] = current_state
@@ -199,7 +217,7 @@ async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest):
 
 
 @router.post("/workflow/{run_id}/freeze")
-async def freeze_workflow(run_id: str, payload: WorkflowAdvanceRequest):
+async def freeze_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -218,11 +236,15 @@ async def freeze_workflow(run_id: str, payload: WorkflowAdvanceRequest):
         },
     )
     await record_run_event(run_id, "workflow.frozen", {"actor": payload.actor_id, "notes": payload.notes})
+    logger.info(
+        "workflow.frozen",
+        extra={"payload": {"run_id": run_id, "actor": payload.actor_id}},
+    )
     return {"run_id": run_id, "workflow_state": "frozen", "workflow_status": "frozen"}
 
 
 @router.post("/workflow/{run_id}/rollback")
-async def rollback_workflow(run_id: str, payload: WorkflowAdvanceRequest):
+async def rollback_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -241,11 +263,15 @@ async def rollback_workflow(run_id: str, payload: WorkflowAdvanceRequest):
         },
     )
     await record_run_event(run_id, "workflow.rolled_back", {"actor": payload.actor_id, "notes": payload.notes})
+    logger.info(
+        "workflow.rolled_back",
+        extra={"payload": {"run_id": run_id, "actor": payload.actor_id}},
+    )
     return {"run_id": run_id, "workflow_state": "rolled_back", "workflow_status": "completed"}
 
 
 @router.post("/workflow/{run_id}/reset")
-async def reset_workflow(run_id: str, payload: WorkflowAdvanceRequest):
+async def reset_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_user: dict = Depends(require_permission("workflow:control"))) -> Dict[str, Any]:
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -262,4 +288,8 @@ async def reset_workflow(run_id: str, payload: WorkflowAdvanceRequest):
         },
     )
     await record_run_event(run_id, "workflow.reset", {"actor": payload.actor_id, "notes": payload.notes})
+    logger.info(
+        "workflow.reset",
+        extra={"payload": {"run_id": run_id, "actor": payload.actor_id}},
+    )
     return {"run_id": run_id, "workflow_state": "incident_created", "workflow_status": "running"}
