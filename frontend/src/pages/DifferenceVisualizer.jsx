@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import ReactDiffViewer, { DiffMethod } from "react-diff-viewer-continued";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -8,6 +9,7 @@ import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { rsbAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   GitCompare,
@@ -22,105 +24,16 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-// Sample diff data for demonstration
-const sampleDiffs = [
-  {
-    id: "1",
-    name: "VEL-001 Rule Update",
-    type: "rule",
-    oldCode: `{
-  "name": "VEL-001",
-  "description": "Velocity check for rapid transactions",
-  "conditions": [
-    {
-      "field": "tx_count",
-      "operator": ">",
-      "value": 10
-    }
-  ],
-  "actions": [
-    {
-      "type": "flag",
-      "severity": "medium"
-    }
-  ],
-  "priority": 1
-}`,
-    newCode: `{
-  "name": "VEL-001",
-  "description": "Enhanced velocity check for rapid transactions",
-  "conditions": [
-    {
-      "field": "tx_count",
-      "operator": ">",
-      "value": 5
-    },
-    {
-      "field": "time_window",
-      "operator": "<",
-      "value": 60
-    }
-  ],
-  "actions": [
-    {
-      "type": "flag",
-      "severity": "high"
-    },
-    {
-      "type": "alert",
-      "channel": "ops"
-    }
-  ],
-  "priority": 1
-}`,
-    status: "pending",
-    comments: [],
-  },
-  {
-    id: "2",
-    name: "Pattern ATO-99 Enhancement",
-    type: "pattern",
-    oldCode: `class ATODetector:
-    def __init__(self):
-        self.threshold = 3
-    
-    def detect(self, events):
-        failed_logins = 0
-        for event in events:
-            if event.type == "login_failed":
-                failed_logins += 1
-        return failed_logins > self.threshold`,
-    newCode: `class ATODetector:
-    def __init__(self):
-        self.threshold = 3
-        self.time_window = 300  # 5 minutes
-        self.ip_threshold = 2
-    
-    def detect(self, events):
-        failed_logins = 0
-        unique_ips = set()
-        for event in events:
-            if event.type == "login_failed":
-                failed_logins += 1
-                unique_ips.add(event.ip)
-        
-        # Multi-factor detection
-        velocity_breach = failed_logins > self.threshold
-        ip_anomaly = len(unique_ips) > self.ip_threshold
-        
-        return velocity_breach or ip_anomaly`,
-    status: "pending",
-    comments: [],
-  },
-];
-
 const DifferenceVisualizer = () => {
-  const [diffs, setDiffs] = useState(sampleDiffs);
-  const [selectedDiff, setSelectedDiff] = useState(sampleDiffs[0]);
+  const [packages, setPackages] = useState([]);
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [diffs, setDiffs] = useState([]);
+  const [selectedDiff, setSelectedDiff] = useState(null);
   const [commitMessage, setCommitMessage] = useState("");
   const [sandboxResult, setSandboxResult] = useState(null);
   const [running, setRunning] = useState(false);
   const [conflictDecisions, setConflictDecisions] = useState({});
+  const location = useLocation();
   const mergedPreview = selectedDiff?.newCode || "";
   const conflictBlocks = [
     { id: "conflict-1", label: "Threshold change conflict", recommendation: "Use patch" },
@@ -197,50 +110,117 @@ const DifferenceVisualizer = () => {
     },
   };
 
-  const handleAccept = () => {
-    const updated = diffs.map(d => 
-      d.id === selectedDiff.id ? { ...d, status: "accepted" } : d
-    );
-    setDiffs(updated);
-    setSelectedDiff({ ...selectedDiff, status: "accepted" });
-    toast.success("Changes accepted!");
+  useEffect(() => {
+    const loadPackages = async () => {
+      try {
+        const response = await rsbAPI.getAll();
+        setPackages(response.data || []);
+        if (response.data?.length) {
+          setSelectedPackage(response.data[0]);
+        }
+      } catch (error) {
+        toast.error("Failed to load RSB packages");
+      }
+    };
+    loadPackages();
+  }, []);
+
+  useEffect(() => {
+    if (!packages.length) return;
+    const searchParams = new URLSearchParams(location.search);
+    const packageId = searchParams.get("package");
+    if (!packageId) return;
+    const matched = packages.find((pkg) => pkg.id === packageId);
+    if (matched) {
+      setSelectedPackage(matched);
+    }
+  }, [location.search, packages]);
+
+  useEffect(() => {
+    const loadDiffs = async () => {
+      if (!selectedPackage) return;
+      try {
+        const response = await rsbAPI.getDiffs(selectedPackage.id);
+        const loadedDiffs = response.data?.diffs || [];
+        setDiffs(loadedDiffs);
+        setSelectedDiff(loadedDiffs[0] || null);
+      } catch (error) {
+        toast.error("Failed to load visual patch diffs");
+      }
+    };
+    loadDiffs();
+  }, [selectedPackage]);
+
+  const handleAccept = async () => {
+    if (!selectedPackage || !selectedDiff) return;
+    try {
+      const response = await rsbAPI.applyPatch(selectedPackage.id, {
+        decision: "accepted",
+        conflict_resolutions: conflictDecisions,
+        commit_message: commitMessage,
+      });
+      const updatedDiffs = diffs.map((diff) =>
+        diff.id === selectedDiff.id ? { ...diff, status: "accepted" } : diff
+      );
+      setDiffs(updatedDiffs);
+      setSelectedDiff({ ...selectedDiff, status: "accepted" });
+      setSelectedPackage(response.data);
+      toast.success("Patch applied and package updated!");
+    } catch (error) {
+      toast.error("Failed to apply patch");
+    }
   };
 
-  const handleReject = () => {
-    const updated = diffs.map(d => 
-      d.id === selectedDiff.id ? { ...d, status: "rejected" } : d
-    );
-    setDiffs(updated);
-    setSelectedDiff({ ...selectedDiff, status: "rejected" });
-    toast.error("Changes rejected");
+  const handleReject = async () => {
+    if (!selectedPackage || !selectedDiff) return;
+    try {
+      const response = await rsbAPI.applyPatch(selectedPackage.id, {
+        decision: "rejected",
+        conflict_resolutions: conflictDecisions,
+        commit_message: commitMessage,
+      });
+      const updatedDiffs = diffs.map((diff) =>
+        diff.id === selectedDiff.id ? { ...diff, status: "rejected" } : diff
+      );
+      setDiffs(updatedDiffs);
+      setSelectedDiff({ ...selectedDiff, status: "rejected" });
+      setSelectedPackage(response.data);
+      toast.error("Patch rejected");
+    } catch (error) {
+      toast.error("Failed to reject patch");
+    }
   };
 
   const handleRequestChanges = () => {
     toast("Changes requested. Assigning back to author.");
   };
 
-  const runSandboxValidation = () => {
+  const runSandboxValidation = async () => {
+    if (!selectedPackage) return;
     setRunning(true);
     setSandboxResult(null);
-    
-    // Simulate sandbox validation
-    setTimeout(() => {
-      const passed = Math.random() > 0.3;
+    try {
+      const response = await rsbAPI.test(selectedPackage.id);
+      const results = response.data || {};
+      const passed = (results.unit_tests?.failed || 0) === 0 && (results.integration_tests?.failed || 0) === 0;
       setSandboxResult({
         passed,
         tests: {
-          syntax: true,
-          logic: passed,
-          performance: passed,
-          security: true,
+          unit: results.unit_tests || {},
+          integration: results.integration_tests || {},
+          compliance: results.compliance_checks || {},
         },
-        message: passed 
-          ? "All validation checks passed. Safe to merge." 
-          : "Logic validation failed. Review required.",
-        timestamp: new Date().toISOString(),
+        message: passed
+          ? "All validation checks passed. Safe to merge."
+          : "Test failures detected. Review required.",
+        timestamp: results.timestamp || new Date().toISOString(),
       });
+      toast.success("Sandbox validation completed");
+    } catch (error) {
+      toast.error("Sandbox validation failed");
+    } finally {
       setRunning(false);
-    }, 2000);
+    }
   };
 
   const generateCommitMessage = () => {
@@ -256,6 +236,7 @@ Reviewed and validated via sandbox testing.`;
   };
 
   const copyDiff = () => {
+    if (!selectedDiff) return;
     const diffText = `--- OLD ---\n${selectedDiff.oldCode}\n\n--- NEW ---\n${selectedDiff.newCode}`;
     navigator.clipboard.writeText(diffText);
     toast.success("Diff copied to clipboard!");
@@ -296,35 +277,58 @@ Reviewed and validated via sandbox testing.`;
     <div className="h-full flex" data-testid="difference-visualizer">
       {/* Diff List */}
       <div className="w-72 border-r border-border flex flex-col">
-        <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-semibold">Pending Changes</h2>
-          <p className="text-sm text-muted-foreground">{diffs.filter(d => d.status === "pending").length} awaiting review</p>
+        <div className="p-4 border-b border-border space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Pending Changes</h2>
+            <p className="text-sm text-muted-foreground">{diffs.filter(d => d.status === "pending").length} awaiting review</p>
+          </div>
+          <Select
+            value={selectedPackage?.id || ""}
+            onValueChange={(value) => setSelectedPackage(packages.find((pkg) => pkg.id === value) || null)}
+          >
+            <SelectTrigger data-testid="patcher-package-select">
+              <SelectValue placeholder="Select RSB package" />
+            </SelectTrigger>
+            <SelectContent>
+              {packages.map((pkg) => (
+                <SelectItem key={pkg.id} value={pkg.id}>
+                  {pkg.name} • v{pkg.version}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-2">
-            {diffs.map((diff) => (
-              <div
-                key={diff.id}
-                onClick={() => setSelectedDiff(diff)}
-                className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                  selectedDiff?.id === diff.id
-                    ? "border-blue-500 bg-blue-500/10"
-                    : "border-border hover:border-zinc-600 bg-card"
-                }`}
-                data-testid={`diff-${diff.id}`}
-              >
-                <div className="flex items-center gap-2">
-                  <FileCode className={`h-4 w-4 ${diff.type === 'rule' ? 'text-blue-400' : 'text-purple-400'}`} />
-                  <span className="font-medium text-sm">{diff.name}</span>
+            {diffs.length > 0 ? (
+              diffs.map((diff) => (
+                <div
+                  key={diff.id}
+                  onClick={() => setSelectedDiff(diff)}
+                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                    selectedDiff?.id === diff.id
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-border hover:border-zinc-600 bg-card"
+                  }`}
+                  data-testid={`diff-${diff.id}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <FileCode className={`h-4 w-4 ${diff.type === 'code' ? 'text-blue-400' : 'text-purple-400'}`} />
+                    <span className="font-medium text-sm">{diff.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <Badge variant="outline" className="text-xs capitalize">{diff.type}</Badge>
+                    {diff.status === "accepted" && <CheckCircle2 className="h-4 w-4 text-green-400" />}
+                    {diff.status === "rejected" && <X className="h-4 w-4 text-red-400" />}
+                    {diff.status === "pending" && <AlertTriangle className="h-4 w-4 text-yellow-400" />}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between mt-2">
-                  <Badge variant="outline" className="text-xs capitalize">{diff.type}</Badge>
-                  {diff.status === "accepted" && <CheckCircle2 className="h-4 w-4 text-green-400" />}
-                  {diff.status === "rejected" && <X className="h-4 w-4 text-red-400" />}
-                  {diff.status === "pending" && <AlertTriangle className="h-4 w-4 text-yellow-400" />}
-                </div>
+              ))
+            ) : (
+              <div className="text-xs text-muted-foreground p-4" data-testid="no-diffs">
+                No diffs available for this package.
               </div>
-            ))}
+            )}
           </div>
         </ScrollArea>
       </div>
@@ -433,16 +437,20 @@ Reviewed and validated via sandbox testing.`;
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground mb-3">{sandboxResult.message}</p>
-                <div className="flex gap-4">
-                  {Object.entries(sandboxResult.tests).map(([test, passed]) => (
-                    <div key={test} className="flex items-center gap-1">
-                      {passed 
-                        ? <Check className="h-3 w-3 text-green-400" />
-                        : <X className="h-3 w-3 text-red-400" />
-                      }
-                      <span className="text-xs capitalize">{test}</span>
-                    </div>
-                  ))}
+                <div className="flex flex-wrap gap-4">
+                  {Object.entries(sandboxResult.tests).map(([test, results]) => {
+                    const failed = results?.failed ?? 0;
+                    const passed = results?.passed ?? 0;
+                    const total = results?.total ?? passed + failed;
+                    const ok = failed === 0;
+                    return (
+                      <div key={test} className="flex items-center gap-1">
+                        {ok ? <Check className="h-3 w-3 text-green-400" /> : <X className="h-3 w-3 text-red-400" />}
+                        <span className="text-xs capitalize">{test}</span>
+                        <span className="text-[10px] text-muted-foreground">{passed}/{total}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

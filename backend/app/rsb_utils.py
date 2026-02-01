@@ -1,3 +1,4 @@
+import io
 import json
 import random
 import zipfile
@@ -134,3 +135,47 @@ def build_test_results(package_id: str, file_names: List[str]) -> Dict[str, Any]
         "compliance_checks": {"passed": compliance_total, "failed": 0, "total": compliance_total},
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def bump_patch_version(version: str) -> str:
+    parts = [int(p) if p.isdigit() else 0 for p in version.split(".")]
+    while len(parts) < 3:
+        parts.append(0)
+    parts[2] += 1
+    return ".".join(str(p) for p in parts[:3])
+
+
+def build_rsb_archive(
+    manifest: Dict[str, Any],
+    rule_spec: Dict[str, Any],
+    rule_def: Dict[str, Any],
+    description_md: str,
+    patch_script: str,
+    code: str,
+    code_patch: Optional[str],
+    test_files: Optional[Dict[str, str]] = None,
+    compliance_docs: Optional[Dict[str, str]] = None,
+    test_results: Optional[Dict[str, Any]] = None,
+) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+        zf.writestr("rule/specification.json", json.dumps(rule_spec, indent=2))
+        zf.writestr("rule/rule.json", json.dumps(rule_def, indent=2))
+        zf.writestr("rule/description.md", description_md or "")
+        zf.writestr("rule/rule_Patch.py", patch_script or "")
+
+        rule_id = manifest.get("rule_id", "RULE")
+        zf.writestr(f"code/ruleC_{rule_id}.py", code or "")
+        if code_patch:
+            zf.writestr(f"code/ruleCP_{rule_id}.py", code_patch)
+
+        for name, content in (test_files or {}).items():
+            zf.writestr(name, content)
+        for name, content in (compliance_docs or {}).items():
+            zf.writestr(name, content)
+        if test_results:
+            zf.writestr("tests/test_results.json", json.dumps(test_results, indent=2))
+
+    buffer.seek(0)
+    return buffer.read()

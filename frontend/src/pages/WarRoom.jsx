@@ -33,6 +33,9 @@ import {
   BellOff,
   FastForward,
   Rewind,
+  Snowflake,
+  Undo2,
+  RefreshCcw,
   Sparkles,
 } from "lucide-react";
 
@@ -288,6 +291,8 @@ const WarRoom = () => {
   const [workflowStatus, setWorkflowStatus] = useState("idle");
   const [workflowHistory, setWorkflowHistory] = useState([]);
   const [workflowApprovalRequired, setWorkflowApprovalRequired] = useState(false);
+  const [governanceStatus, setGovernanceStatus] = useState(null);
+  const [workflowApprovals, setWorkflowApprovals] = useState([]);
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [runEvents, setRunEvents] = useState([]);
   const [blockedBursts, setBlockedBursts] = useState([]);
@@ -734,14 +739,27 @@ const WarRoom = () => {
 
   const syncWorkflow = useCallback(async (runId) => {
     if (!runId) return;
-    const response = await workflowAPI.get(runId);
-    const data = response?.data;
-    if (!data) return;
-    setWorkflowState(data.workflow_state || "incident_created");
-    setWorkflowStatus(data.workflow_status || "running");
-    setWorkflowApprovalRequired(Boolean(data.approval_required));
-    setWorkflowHistory(data.workflow_history || []);
-    await refreshRunEvents(runId);
+    try {
+      const [workflowResponse, statusResponse, approvalsResponse] = await Promise.all([
+        workflowAPI.get(runId),
+        workflowAPI.getStatus(runId),
+        workflowAPI.getApprovals(runId),
+      ]);
+      const data = workflowResponse?.data;
+      if (data) {
+        setWorkflowState(data.workflow_state || "incident_created");
+        setWorkflowStatus(data.workflow_status || "running");
+        setWorkflowApprovalRequired(Boolean(data.approval_required));
+        setWorkflowHistory(data.workflow_history || []);
+      }
+      const statusData = statusResponse?.data;
+      setGovernanceStatus(statusData?.governance || null);
+      const approvalsData = approvalsResponse?.data;
+      setWorkflowApprovals(approvalsData?.approvals || []);
+      await refreshRunEvents(runId);
+    } catch (error) {
+      console.error("Failed to sync workflow:", error);
+    }
   }, [refreshRunEvents]);
 
   const handleLifecycleAutoRun = useCallback(async () => {
@@ -768,7 +786,7 @@ const WarRoom = () => {
       if (data?.transitions?.length) {
         setWorkflowHistory((prev) => [...prev, ...data.transitions]);
       }
-      await refreshRunEvents(runId);
+      await syncWorkflow(runId);
       toast.success("Lifecycle workflow auto-run complete");
     } catch (error) {
       toast.error("Failed to auto-run lifecycle workflow");
@@ -794,7 +812,6 @@ const WarRoom = () => {
         setWorkflowHistory((prev) => [...prev, ...data.transitions]);
       }
       await syncWorkflow(workflowRunId);
-      await refreshRunEvents(workflowRunId);
       toast.success("Workflow advanced");
     } catch (error) {
       toast.error("Failed to advance workflow");
@@ -806,11 +823,79 @@ const WarRoom = () => {
   const handleWorkflowRefresh = useCallback(async () => {
     try {
       await syncWorkflow(workflowRunId);
-      await refreshRunEvents(workflowRunId);
     } catch (error) {
       toast.error("Failed to refresh workflow state");
     }
-  }, [workflowRunId, syncWorkflow, refreshRunEvents]);
+  }, [workflowRunId, syncWorkflow]);
+
+  const handleWorkflowFreeze = useCallback(async () => {
+    if (!workflowRunId) {
+      toast.error("Start a workflow run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      const response = await workflowAPI.freeze(workflowRunId, {
+        actor_id: "current-user",
+        notes: "Freeze issued from War Room",
+      });
+      const data = response?.data;
+      setWorkflowState(data?.workflow_state || "frozen");
+      setWorkflowStatus(data?.workflow_status || "frozen");
+      await syncWorkflow(workflowRunId);
+      toast.success("Workflow frozen");
+    } catch (error) {
+      toast.error("Failed to freeze workflow");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }, [workflowRunId, syncWorkflow]);
+
+  const handleWorkflowRollback = useCallback(async () => {
+    if (!workflowRunId) {
+      toast.error("Start a workflow run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      const response = await workflowAPI.rollback(workflowRunId, {
+        actor_id: "current-user",
+        notes: "Rollback issued from War Room",
+      });
+      const data = response?.data;
+      setWorkflowState(data?.workflow_state || "rolled_back");
+      setWorkflowStatus(data?.workflow_status || "completed");
+      await syncWorkflow(workflowRunId);
+      toast.success("Workflow rolled back");
+    } catch (error) {
+      toast.error("Failed to rollback workflow");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }, [workflowRunId, syncWorkflow]);
+
+  const handleWorkflowReset = useCallback(async () => {
+    if (!workflowRunId) {
+      toast.error("Start a workflow run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      const response = await workflowAPI.reset(workflowRunId, {
+        actor_id: "current-user",
+        notes: "Reset issued from War Room",
+      });
+      const data = response?.data;
+      setWorkflowState(data?.workflow_state || "incident_created");
+      setWorkflowStatus(data?.workflow_status || "running");
+      await syncWorkflow(workflowRunId);
+      toast.success("Workflow reset");
+    } catch (error) {
+      toast.error("Failed to reset workflow");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }, [workflowRunId, syncWorkflow]);
 
   const handleExportBrc = useCallback(async () => {
     if (!workflowRunId) {
@@ -845,9 +930,12 @@ const WarRoom = () => {
 
   useEffect(() => {
     if (workflowRunId) {
-      refreshRunEvents(workflowRunId);
+      syncWorkflow(workflowRunId);
+    } else {
+      setGovernanceStatus(null);
+      setWorkflowApprovals([]);
     }
-  }, [workflowRunId, refreshRunEvents]);
+  }, [workflowRunId, syncWorkflow]);
 
   const metrics = selectedBattle?.metrics || {};
   const animatedMoneySaved = useAnimatedNumber(metrics.money_saved || 0);
@@ -895,6 +983,23 @@ const WarRoom = () => {
     if (Number.isNaN(date.getTime())) return "—";
     return date.toLocaleTimeString();
   };
+
+  const governanceBadgeClass = (status) => {
+    if (status === "SAFE_TO_PROCEED") return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
+    if (status === "PROCEED_WITH_REVIEW") return "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30";
+    if (status === "FREEZE_RELEASES") return "bg-red-500/15 text-red-300 border border-red-500/30";
+    return "bg-slate-500/15 text-slate-200 border border-slate-500/30";
+  };
+
+  const approvalSummary = useMemo(() => {
+    const approvals = workflowApprovals || [];
+    return {
+      pending: approvals.filter((item) => item.status === "pending").length,
+      approved: approvals.filter((item) => item.status === "approved").length,
+      rejected: approvals.filter((item) => item.status === "rejected").length,
+      total: approvals.length,
+    };
+  }, [workflowApprovals]);
 
   return (
     <div className="h-full flex flex-col" data-testid="war-room">
@@ -1093,11 +1198,18 @@ const WarRoom = () => {
         <Card className="border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm">Lifecycle Workflow Controls</CardTitle>
-            {workflowApprovalRequired && (
-              <Badge className="bg-yellow-500/15 text-yellow-300 border border-yellow-500/30">
-                Approval Required
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {workflowApprovalRequired && (
+                <Badge className="bg-yellow-500/15 text-yellow-300 border border-yellow-500/30">
+                  Approval Required
+                </Badge>
+              )}
+              {workflowRunId && (
+                <Badge className={governanceBadgeClass(governanceStatus?.status)}>
+                  {(governanceStatus?.status || "Governance").replace(/_/g, " ")}
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-[1.2fr_1fr]">
             <div className="space-y-2 text-xs text-muted-foreground">
@@ -1119,6 +1231,23 @@ const WarRoom = () => {
                   {workflowStatus}
                 </Badge>
               </div>
+              <div className="flex items-center justify-between">
+                <span>Governance</span>
+                <Badge className={governanceBadgeClass(governanceStatus?.status)}>
+                  {(governanceStatus?.status || "—").replace(/_/g, " ")}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Approvals</span>
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                    Pending {approvalSummary.pending}
+                  </Badge>
+                  <Badge className="bg-red-500/15 text-red-300 border border-red-500/30">
+                    Rejected {approvalSummary.rejected}
+                  </Badge>
+                </div>
+              </div>
               <ScrollArea className="h-16 pr-3">
                 <ul className="mt-2 space-y-1">
                   {(workflowHistory || []).slice(-4).map((item, idx) => (
@@ -1130,7 +1259,7 @@ const WarRoom = () => {
                 </ul>
               </ScrollArea>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               <Button
                 className="gap-2"
                 onClick={handleLifecycleAutoRun}
@@ -1151,6 +1280,36 @@ const WarRoom = () => {
                 Advance
               </Button>
               <Button
+                variant="destructive"
+                className="gap-2"
+                onClick={handleWorkflowFreeze}
+                disabled={!workflowRunId || workflowBusy}
+                data-testid="war-room-workflow-freeze"
+              >
+                <Snowflake className="h-4 w-4" />
+                Freeze
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleWorkflowRollback}
+                disabled={!workflowRunId || workflowBusy}
+                data-testid="war-room-workflow-rollback"
+              >
+                <Undo2 className="h-4 w-4" />
+                Rollback
+              </Button>
+              <Button
+                variant="secondary"
+                className="gap-2"
+                onClick={handleWorkflowReset}
+                disabled={!workflowRunId || workflowBusy}
+                data-testid="war-room-workflow-reset"
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Reset
+              </Button>
+              <Button
                 variant="secondary"
                 className="gap-2"
                 onClick={handleExportBrc}
@@ -1161,7 +1320,7 @@ const WarRoom = () => {
               </Button>
               <Button
                 variant="secondary"
-                className="gap-2 col-span-2"
+                className="gap-2 col-span-2 md:col-span-3"
                 onClick={handleWorkflowRefresh}
                 disabled={!workflowRunId}
                 data-testid="war-room-workflow-refresh"

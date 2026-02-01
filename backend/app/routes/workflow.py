@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from app.db import db
 from app.models import WorkflowAdvanceRequest, WorkflowDecisionRequest, WorkflowAutoRunRequest
@@ -8,6 +9,8 @@ from app.workflow_service import (
     TERMINAL_WORKFLOW_STATES,
     advance_workflow,
     decide_workflow,
+    get_workflow_approvals,
+    compute_governance_status,
 )
 
 router = APIRouter()
@@ -25,6 +28,30 @@ async def get_workflow(run_id: str):
         "pending_approval": run.get("pending_approval"),
         "is_terminal": run.get("workflow_state") in TERMINAL_WORKFLOW_STATES,
         "approval_required": run.get("workflow_state") in APPROVAL_STATES,
+    }
+
+
+@router.get("/workflow/{run_id}/approvals")
+async def get_workflow_approvals_endpoint(run_id: str):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    approvals = await get_workflow_approvals(run_id)
+    return {"run_id": run_id, "approvals": approvals}
+
+
+@router.get("/workflow/{run_id}/status")
+async def get_workflow_status(run_id: str):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    governance = await compute_governance_status(run_id)
+    return {
+        "run_id": run_id,
+        "workflow_state": run.get("workflow_state", "incident_created"),
+        "workflow_status": run.get("workflow_status", "running"),
+        "pending_approval": run.get("pending_approval"),
+        "governance": governance,
     }
 
 @router.post("/workflow/{run_id}/advance")
@@ -48,13 +75,23 @@ async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest):
     if not transitions:
         return {"run_id": run_id, "workflow_state": current_state, "status": "no_transition"}
 
+    pending_approval = None
+    workflow_status = "running"
+    if next_state in APPROVAL_STATES:
+        workflow_status = "awaiting_approval"
+        pending_approval = await db.approvals.find_one(
+            {"resource_type": "run", "resource_id": run_id, "action": next_state, "status": "pending"},
+            {"_id": 0},
+        )
+
     await record_run_event(run_id, "workflow.state_changed", {"from": current_state, "to": next_state})
     await db.runs.update_one(
         {"id": run_id},
         {
             "$set": {
                 "workflow_state": next_state,
-                "workflow_status": "completed" if next_state in TERMINAL_WORKFLOW_STATES else "running",
+                "workflow_status": "completed" if next_state in TERMINAL_WORKFLOW_STATES else workflow_status,
+                "pending_approval": pending_approval,
             },
             "$push": {"workflow_history": {"$each": transitions}},
         },
@@ -91,6 +128,7 @@ async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest):
             "$set": {
                 "workflow_state": next_state,
                 "workflow_status": "completed" if next_state in TERMINAL_WORKFLOW_STATES else "running",
+                "pending_approval": None,
             },
             "$push": {"workflow_history": entry},
         },
@@ -158,3 +196,70 @@ async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest):
         "is_terminal": current_state in TERMINAL_WORKFLOW_STATES,
         "transitions": transitions,
     }
+
+
+@router.post("/workflow/{run_id}/freeze")
+async def freeze_workflow(run_id: str, payload: WorkflowAdvanceRequest):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    entry = {
+        "state": "frozen",
+        "actor_id": payload.actor_id,
+        "notes": payload.notes,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.runs.update_one(
+        {"id": run_id},
+        {
+            "$set": {"workflow_state": "frozen", "workflow_status": "frozen", "pending_approval": None},
+            "$push": {"workflow_history": entry},
+        },
+    )
+    await record_run_event(run_id, "workflow.frozen", {"actor": payload.actor_id, "notes": payload.notes})
+    return {"run_id": run_id, "workflow_state": "frozen", "workflow_status": "frozen"}
+
+
+@router.post("/workflow/{run_id}/rollback")
+async def rollback_workflow(run_id: str, payload: WorkflowAdvanceRequest):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    entry = {
+        "state": "rolled_back",
+        "actor_id": payload.actor_id,
+        "notes": payload.notes,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.runs.update_one(
+        {"id": run_id},
+        {
+            "$set": {"workflow_state": "rolled_back", "workflow_status": "completed", "pending_approval": None},
+            "$push": {"workflow_history": entry},
+        },
+    )
+    await record_run_event(run_id, "workflow.rolled_back", {"actor": payload.actor_id, "notes": payload.notes})
+    return {"run_id": run_id, "workflow_state": "rolled_back", "workflow_status": "completed"}
+
+
+@router.post("/workflow/{run_id}/reset")
+async def reset_workflow(run_id: str, payload: WorkflowAdvanceRequest):
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    await db.runs.update_one(
+        {"id": run_id},
+        {
+            "$set": {
+                "workflow_state": "incident_created",
+                "workflow_status": "running",
+                "pending_approval": None,
+                "workflow_history": [],
+            }
+        },
+    )
+    await record_run_event(run_id, "workflow.reset", {"actor": payload.actor_id, "notes": payload.notes})
+    return {"run_id": run_id, "workflow_state": "incident_created", "workflow_status": "running"}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import ForceGraph2D from "react-force-graph-2d";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -60,6 +61,7 @@ const RSBManager = () => {
   const ruleGraphRef = useRef(null);
   const ruleGraphWrapperRef = useRef(null);
   const [ruleGraphSize, setRuleGraphSize] = useState({ width: 640, height: 220 });
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadPackages();
@@ -711,6 +713,14 @@ const RSBManager = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/diff-viewer?package=${selectedPackage.id}`)}
+                    data-testid="rsb-open-visual-patcher"
+                  >
+                    <GitMerge className="h-4 w-4 mr-2" />
+                    Open Visual Patcher
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={() => handleRunTests(selectedPackage.id)}

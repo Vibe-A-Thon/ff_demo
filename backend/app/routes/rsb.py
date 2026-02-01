@@ -1,6 +1,7 @@
 import io
 import json
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
@@ -15,6 +16,8 @@ from app.rsb_utils import (
     find_first_match,
     validate_rsb_payload,
     build_test_results,
+    bump_patch_version,
+    build_rsb_archive,
 )
 
 router = APIRouter()
@@ -185,6 +188,100 @@ async def test_rsb_package(package_id: str):
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": {"test_results": test_results, "status": "tested"}})
     return test_results
+
+
+@router.get("/rsb-packages/{package_id}/diffs")
+async def get_rsb_diffs(package_id: str):
+    package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
+    if not package:
+        raise HTTPException(status_code=404, detail="RSB Package not found")
+
+    rule_id = package.get("rule_id") or (package.get("manifest") or {}).get("rule_id")
+    diffs = []
+    if package.get("rule_spec"):
+        diffs.append(
+            {
+                "id": f"spec-{package_id}",
+                "package_id": package_id,
+                "name": f"{rule_id or 'RuleSpec'} Specification",
+                "type": "rulespec",
+                "oldCode": json.dumps(package.get("rule_spec"), indent=2),
+                "newCode": json.dumps(package.get("rule_spec_patch") or package.get("rule_spec"), indent=2),
+                "status": package.get("patch_decision", "pending"),
+            }
+        )
+
+    if package.get("code"):
+        diffs.append(
+            {
+                "id": f"code-{package_id}",
+                "package_id": package_id,
+                "name": f"{rule_id or 'Rule'} Code",
+                "type": "code",
+                "oldCode": package.get("code"),
+                "newCode": package.get("code_patch") or package.get("code"),
+                "status": package.get("patch_decision", "pending"),
+            }
+        )
+
+    return {
+        "package_id": package_id,
+        "rule_id": rule_id,
+        "version": package.get("version"),
+        "status": package.get("status"),
+        "conflicts": package.get("conflicts", []),
+        "diffs": diffs,
+    }
+
+
+@router.post("/rsb-packages/{package_id}/apply-patch")
+async def apply_rsb_patch(package_id: str, payload: Dict[str, Any]):
+    package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
+    if not package:
+        raise HTTPException(status_code=404, detail="RSB Package not found")
+
+    decision = payload.get("decision", "accepted")
+    conflict_resolutions = payload.get("conflict_resolutions") or {}
+    commit_message = payload.get("commit_message") or ""
+
+    patched_code = package.get("code_patch") if decision == "accepted" else package.get("code")
+    rule_spec = package.get("rule_spec") or {}
+    patched_spec = dict(rule_spec)
+    if decision == "accepted":
+        patched_spec["patch_notes"] = commit_message or "Patch applied via Visual Patcher"
+
+    manifest = dict(package.get("manifest") or {})
+    manifest["rule_version"] = bump_patch_version(package.get("version") or "1.0.0")
+    manifest["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    archive_bytes = build_rsb_archive(
+        manifest=manifest,
+        rule_spec=patched_spec,
+        rule_def=package.get("rule_definition") or {},
+        description_md=package.get("description_md") or "",
+        patch_script=package.get("patch_script") or "",
+        code=patched_code or "",
+        code_patch=package.get("code_patch"),
+        test_results=package.get("test_results"),
+    )
+
+    patched_path = RSB_STORAGE_DIR / f"{package_id}_patched.rsb"
+    patched_path.write_bytes(archive_bytes)
+
+    updates = {
+        "status": "patched" if decision == "accepted" else "rejected",
+        "patch_decision": decision,
+        "patch_commit_message": commit_message,
+        "patch_applied_at": datetime.now(timezone.utc).isoformat(),
+        "conflict_resolutions": conflict_resolutions,
+        "code": patched_code,
+        "rule_spec_patch": patched_spec,
+        "version": manifest.get("rule_version"),
+        "storage_path": str(patched_path),
+    }
+
+    await db.rsb_packages.update_one({"id": package_id}, {"$set": updates})
+    return await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
 
 @router.post("/rsb-packages/{package_id}/merge")
 async def merge_rsb_package(package_id: str):

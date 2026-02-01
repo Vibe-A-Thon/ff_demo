@@ -49,9 +49,14 @@ export const runAPI = {
 // Workflow APIs
 export const workflowAPI = {
   get: (runId) => api.get(`/workflow/${runId}`),
+  getStatus: (runId) => api.get(`/workflow/${runId}/status`),
+  getApprovals: (runId) => api.get(`/workflow/${runId}/approvals`),
   advance: (runId, data) => api.post(`/workflow/${runId}/advance`, data),
   decide: (runId, data) => api.post(`/workflow/${runId}/decision`, data),
   autoRun: (runId, data) => api.post(`/workflow/${runId}/auto-run`, data),
+  freeze: (runId, data) => api.post(`/workflow/${runId}/freeze`, data),
+  rollback: (runId, data) => api.post(`/workflow/${runId}/rollback`, data),
+  reset: (runId, data) => api.post(`/workflow/${runId}/reset`, data),
 };
 
 // Rule APIs
@@ -78,6 +83,8 @@ export const rsbAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   test: (id) => api.post(`/rsb-packages/${id}/test`),
+  getDiffs: (id) => api.get(`/rsb-packages/${id}/diffs`),
+  applyPatch: (id, data) => api.post(`/rsb-packages/${id}/apply-patch`, data),
   merge: (id) => api.post(`/rsb-packages/${id}/merge`),
   resolveConflicts: (id, data) => api.post(`/rsb-packages/${id}/resolve-conflicts`, data),
   stage: (id) => api.post(`/rsb-packages/${id}/stage`),

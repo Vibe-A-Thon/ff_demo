@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -23,6 +23,9 @@ import {
   RotateCcw,
   FileUp,
   Sliders,
+  Snowflake,
+  Undo2,
+  RefreshCcw,
 } from "lucide-react";
 
 const SCENARIO_PRESETS = [
@@ -62,6 +65,8 @@ const WarPractice = () => {
   const [workflowStatus, setWorkflowStatus] = useState("idle");
   const [workflowHistory, setWorkflowHistory] = useState([]);
   const [workflowApprovalRequired, setWorkflowApprovalRequired] = useState(false);
+  const [governanceStatus, setGovernanceStatus] = useState(null);
+  const [workflowApprovals, setWorkflowApprovals] = useState([]);
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [registrySnapshot, setRegistrySnapshot] = useState(null);
 
@@ -70,6 +75,16 @@ const WarPractice = () => {
     const stealthFactor = 100 - stealth[0];
     return Math.min(98, Math.round(base / 3 + stealthFactor / 4));
   }, [attackComplexity, velocity, muleDensity, stealth]);
+
+  const approvalSummary = useMemo(() => {
+    const approvals = workflowApprovals || [];
+    return {
+      pending: approvals.filter((item) => item.status === "pending").length,
+      approved: approvals.filter((item) => item.status === "approved").length,
+      rejected: approvals.filter((item) => item.status === "rejected").length,
+      total: approvals.length,
+    };
+  }, [workflowApprovals]);
 
   useEffect(() => {
     const loadRegistry = async () => {
@@ -164,16 +179,29 @@ const WarPractice = () => {
     }
   };
 
-  const syncWorkflow = async (runId) => {
+  const syncWorkflow = useCallback(async (runId) => {
     if (!runId) return;
-    const response = await workflowAPI.get(runId);
-    const data = response?.data;
-    if (!data) return;
-    setWorkflowState(data.workflow_state || "incident_created");
-    setWorkflowStatus(data.workflow_status || "running");
-    setWorkflowApprovalRequired(Boolean(data.approval_required));
-    setWorkflowHistory(data.workflow_history || []);
-  };
+    try {
+      const [workflowResponse, statusResponse, approvalsResponse] = await Promise.all([
+        workflowAPI.get(runId),
+        workflowAPI.getStatus(runId),
+        workflowAPI.getApprovals(runId),
+      ]);
+      const data = workflowResponse?.data;
+      if (data) {
+        setWorkflowState(data.workflow_state || "incident_created");
+        setWorkflowStatus(data.workflow_status || "running");
+        setWorkflowApprovalRequired(Boolean(data.approval_required));
+        setWorkflowHistory(data.workflow_history || []);
+      }
+      const statusData = statusResponse?.data;
+      setGovernanceStatus(statusData?.governance || null);
+      const approvalsData = approvalsResponse?.data;
+      setWorkflowApprovals(approvalsData?.approvals || []);
+    } catch (error) {
+      console.error("Failed to sync workflow:", error);
+    }
+  }, []);
 
   const handleLifecycleAutoRun = async () => {
     setWorkflowBusy(true);
@@ -200,6 +228,7 @@ const WarPractice = () => {
       if (data?.transitions?.length) {
         setWorkflowHistory((prev) => [...prev, ...data.transitions]);
       }
+      await syncWorkflow(runId);
       toast.success("Lifecycle workflow auto-run complete");
     } catch (error) {
       toast.error("Failed to auto-run lifecycle workflow");
@@ -239,6 +268,91 @@ const WarPractice = () => {
     } catch (error) {
       toast.error("Failed to refresh workflow state");
     }
+  };
+
+  const handleWorkflowFreeze = async () => {
+    if (!workflowRunId) {
+      toast.error("Start a workflow run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      const response = await workflowAPI.freeze(workflowRunId, {
+        actor_id: "current-user",
+        notes: "Freeze issued from War Practice",
+      });
+      const data = response?.data;
+      setWorkflowState(data?.workflow_state || "frozen");
+      setWorkflowStatus(data?.workflow_status || "frozen");
+      await syncWorkflow(workflowRunId);
+      toast.success("Workflow frozen");
+    } catch (error) {
+      toast.error("Failed to freeze workflow");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const handleWorkflowRollback = async () => {
+    if (!workflowRunId) {
+      toast.error("Start a workflow run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      const response = await workflowAPI.rollback(workflowRunId, {
+        actor_id: "current-user",
+        notes: "Rollback issued from War Practice",
+      });
+      const data = response?.data;
+      setWorkflowState(data?.workflow_state || "rolled_back");
+      setWorkflowStatus(data?.workflow_status || "completed");
+      await syncWorkflow(workflowRunId);
+      toast.success("Workflow rolled back");
+    } catch (error) {
+      toast.error("Failed to rollback workflow");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const handleWorkflowReset = async () => {
+    if (!workflowRunId) {
+      toast.error("Start a workflow run first");
+      return;
+    }
+    setWorkflowBusy(true);
+    try {
+      const response = await workflowAPI.reset(workflowRunId, {
+        actor_id: "current-user",
+        notes: "Reset issued from War Practice",
+      });
+      const data = response?.data;
+      setWorkflowState(data?.workflow_state || "incident_created");
+      setWorkflowStatus(data?.workflow_status || "running");
+      await syncWorkflow(workflowRunId);
+      toast.success("Workflow reset");
+    } catch (error) {
+      toast.error("Failed to reset workflow");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (workflowRunId) {
+      syncWorkflow(workflowRunId);
+    } else {
+      setGovernanceStatus(null);
+      setWorkflowApprovals([]);
+    }
+  }, [workflowRunId, syncWorkflow]);
+
+  const governanceBadgeClass = (status) => {
+    if (status === "SAFE_TO_PROCEED") return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
+    if (status === "PROCEED_WITH_REVIEW") return "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30";
+    if (status === "FREEZE_RELEASES") return "bg-red-500/15 text-red-300 border border-red-500/30";
+    return "bg-slate-500/15 text-slate-200 border border-slate-500/30";
   };
 
   return (
@@ -602,8 +716,20 @@ const WarPractice = () => {
           </Card>
 
           <Card className="border-border" data-testid="lifecycle-workflow-panel">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Lifecycle Workflow</CardTitle>
+              <div className="flex items-center gap-2">
+                {workflowApprovalRequired && (
+                  <Badge className="bg-yellow-500/15 text-yellow-300 border border-yellow-500/30">
+                    Approval Required
+                  </Badge>
+                )}
+                {workflowRunId && (
+                  <Badge className={governanceBadgeClass(governanceStatus?.status)}>
+                    {(governanceStatus?.status || "Governance").replace(/_/g, " ")}
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
@@ -625,11 +751,28 @@ const WarPractice = () => {
                     {workflowStatus}
                   </Badge>
                 </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span>Governance</span>
+                  <Badge className={governanceBadgeClass(governanceStatus?.status)}>
+                    {(governanceStatus?.status || "—").replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span>Approvals</span>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                      Pending {approvalSummary.pending}
+                    </Badge>
+                    <Badge className="bg-red-500/15 text-red-300 border border-red-500/30">
+                      Rejected {approvalSummary.rejected}
+                    </Badge>
+                  </div>
+                </div>
                 {workflowApprovalRequired && (
                   <div className="mt-2 text-yellow-300">Approval required to proceed.</div>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                 <Button
                   className="gap-2"
                   onClick={handleLifecycleAutoRun}
@@ -650,8 +793,38 @@ const WarPractice = () => {
                   Advance
                 </Button>
                 <Button
+                  variant="destructive"
+                  className="gap-2"
+                  onClick={handleWorkflowFreeze}
+                  disabled={!workflowRunId || workflowBusy}
+                  data-testid="workflow-freeze"
+                >
+                  <Snowflake className="h-4 w-4" />
+                  Freeze
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleWorkflowRollback}
+                  disabled={!workflowRunId || workflowBusy}
+                  data-testid="workflow-rollback"
+                >
+                  <Undo2 className="h-4 w-4" />
+                  Rollback
+                </Button>
+                <Button
                   variant="secondary"
-                  className="gap-2 col-span-2"
+                  className="gap-2"
+                  onClick={handleWorkflowReset}
+                  disabled={!workflowRunId || workflowBusy}
+                  data-testid="workflow-reset"
+                >
+                  <RefreshCcw className="h-4 w-4" />
+                  Reset
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="gap-2 col-span-2 md:col-span-3"
                   onClick={handleWorkflowRefresh}
                   disabled={!workflowRunId}
                   data-testid="workflow-refresh"

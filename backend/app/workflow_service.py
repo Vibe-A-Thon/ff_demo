@@ -310,3 +310,38 @@ async def decide_workflow(run: Dict[str, Any], actor_id: str, actor_role: Option
     next_state = approval_rule["approved_state"] if decision == "approved" else approval_rule["rejected_state"]
     entry = build_workflow_entry(next_state, actor_id, notes)
     return next_state, entry
+
+
+async def get_workflow_approvals(run_id: str) -> List[Dict[str, Any]]:
+    return await db.approvals.find(
+        {"resource_type": "run", "resource_id": run_id},
+        {"_id": 0},
+    ).to_list(200)
+
+
+async def compute_governance_status(run_id: str) -> Dict[str, Any]:
+    approvals = await get_workflow_approvals(run_id)
+    decision_by_action = {a.get("action"): a.get("status") for a in approvals}
+    required = [
+        "rulespec_pending_approval",
+        "patch_pending_approval",
+        "release_pending_approval",
+    ]
+
+    rejected = [action for action, status in decision_by_action.items() if status == "rejected"]
+    pending = [action for action in required if decision_by_action.get(action) != "approved"]
+
+    if rejected:
+        status = "FREEZE_RELEASES"
+    elif pending:
+        status = "PROCEED_WITH_REVIEW"
+    else:
+        status = "SAFE_TO_PROCEED"
+
+    return {
+        "run_id": run_id,
+        "status": status,
+        "pending": pending,
+        "rejected": rejected,
+        "required": required,
+    }
