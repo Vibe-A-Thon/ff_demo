@@ -1,0 +1,5 @@
+prompts:
+  task_summary:
+    id: task_summary
+    version: "1.0"
+    description: "Task summary prompt for agent outputs"

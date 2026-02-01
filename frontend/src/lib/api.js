@@ -188,6 +188,13 @@ export const aiAPI = {
   think: (data) => api.post('/ai/think', data),
 };
 
+// LLM APIs
+export const llmAPI = {
+  getConfig: () => api.get('/llm/config'),
+  updateConfig: (data) => api.put('/llm/config', data),
+  getTelemetry: (params) => api.get('/llm/telemetry', { params }),
+};
+
 // XAI APIs
 export const xaiAPI = {
   commentor: (data) => api.post('/xai/commentary', data),

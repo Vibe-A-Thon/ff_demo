@@ -22,11 +22,17 @@ const keyStatusStyles = {
 };
 
 const SettingsConfiguration = () => {
+  const [activeTab, setActiveTab] = useState("platform");
   const [hitlEnabled, setHitlEnabled] = useState(true);
   const [autoReplay, setAutoReplay] = useState(true);
   const [incidentPaging, setIncidentPaging] = useState(false);
   const [bankName, setBankName] = useState("Fraud Forge Bank");
   const [region, setRegion] = useState("US-East");
+  const [llmProvider, setLlmProvider] = useState("openai");
+  const [llmModel, setLlmModel] = useState("gpt-4o-mini");
+  const [llmVersion, setLlmVersion] = useState("");
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [faithfulnessDrop, setFaithfulnessDrop] = useState("0.05");
   const [relevancyDrop, setRelevancyDrop] = useState("0.05");
   const [faithfulnessWarn, setFaithfulnessWarn] = useState("0.75");
@@ -43,6 +49,7 @@ const SettingsConfiguration = () => {
     try {
       const response = await settingsAPI.get();
       const rag = response?.data?.rag || {};
+      const llm = response?.data?.llm || {};
       setFaithfulnessDrop(String(rag.faithfulness_drop ?? "0.05"));
       setRelevancyDrop(String(rag.relevancy_drop ?? "0.05"));
       setFaithfulnessWarn(String(rag.faithfulness_warn ?? "0.75"));
@@ -52,6 +59,11 @@ const SettingsConfiguration = () => {
       setCacheDir(String(rag.cache_dir ?? ""));
       setCacheTtl(String(rag.cache_ttl_seconds ?? "600"));
       setCacheMaxItems(String(rag.cache_max_items ?? "200"));
+      setLlmProvider(String(llm.provider ?? "openai"));
+      setLlmModel(String(llm.model ?? "gpt-4o-mini"));
+      setLlmVersion(String(llm.version_pin ?? ""));
+      setLlmApiKey(String(llm.api_key ?? ""));
+      setLlmBaseUrl(String(llm.base_url ?? ""));
     } catch (error) {
       toast.error("Failed to load settings.");
     } finally {
@@ -72,6 +84,13 @@ const SettingsConfiguration = () => {
           cache_dir: cacheDir,
           cache_ttl_seconds: Number(cacheTtl),
           cache_max_items: Number(cacheMaxItems),
+        },
+        llm: {
+          provider: llmProvider,
+          model: llmModel,
+          version_pin: llmVersion,
+          api_key: llmApiKey,
+          base_url: llmBaseUrl,
         },
       };
       await settingsAPI.update(payload);
@@ -114,6 +133,37 @@ const SettingsConfiguration = () => {
         </p>
       </header>
 
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant={activeTab === "platform" ? "default" : "outline"}
+          onClick={() => setActiveTab("platform")}
+          data-testid="settings-tab-platform"
+        >
+          Platform
+        </Button>
+        <Button
+          variant={activeTab === "rag" ? "default" : "outline"}
+          onClick={() => setActiveTab("rag")}
+          data-testid="settings-tab-rag"
+        >
+          RAG
+        </Button>
+        <Button
+          variant={activeTab === "llm" ? "default" : "outline"}
+          onClick={() => setActiveTab("llm")}
+          data-testid="settings-tab-llm"
+        >
+          LLM Provider
+        </Button>
+        <Button
+          variant={activeTab === "integrations" ? "default" : "outline"}
+          onClick={() => setActiveTab("integrations")}
+          data-testid="settings-tab-integrations"
+        >
+          Integrations
+        </Button>
+      </div>
+      {activeTab === "platform" && (
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <Card className="border-border" data-testid="settings-bank">
           <CardHeader>
@@ -206,7 +256,9 @@ const SettingsConfiguration = () => {
           </CardContent>
         </Card>
       </div>
+      )}
 
+      {activeTab === "rag" && (
       <Card className="border-border" data-testid="settings-rag">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -303,7 +355,66 @@ const SettingsConfiguration = () => {
           </div>
         </CardContent>
       </Card>
+      )}
 
+      {activeTab === "llm" && (
+      <Card className="border-border" data-testid="settings-llm">
+        <CardHeader>
+          <CardTitle className="text-lg">LLM Provider Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="llm-provider">Provider</Label>
+            <Input
+              id="llm-provider"
+              value={llmProvider}
+              onChange={(event) => setLlmProvider(event.target.value)}
+              data-testid="settings-llm-provider"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="llm-model">Model</Label>
+            <Input
+              id="llm-model"
+              value={llmModel}
+              onChange={(event) => setLlmModel(event.target.value)}
+              data-testid="settings-llm-model"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="llm-version">Version Pin</Label>
+            <Input
+              id="llm-version"
+              value={llmVersion}
+              onChange={(event) => setLlmVersion(event.target.value)}
+              data-testid="settings-llm-version"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="llm-api-key">API Key</Label>
+            <Input
+              id="llm-api-key"
+              type="password"
+              value={llmApiKey}
+              onChange={(event) => setLlmApiKey(event.target.value)}
+              data-testid="settings-llm-api-key"
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="llm-base-url">Base URL</Label>
+            <Input
+              id="llm-base-url"
+              value={llmBaseUrl}
+              onChange={(event) => setLlmBaseUrl(event.target.value)}
+              placeholder="https://api.openai.com/v1"
+              data-testid="settings-llm-base-url"
+            />
+          </div>
+        </CardContent>
+      </Card>
+      )}
+
+      {activeTab === "integrations" && (
       <Card className="border-border" data-testid="settings-integrations">
         <CardHeader>
           <CardTitle className="text-lg">Integrations</CardTitle>
@@ -332,6 +443,7 @@ const SettingsConfiguration = () => {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 };

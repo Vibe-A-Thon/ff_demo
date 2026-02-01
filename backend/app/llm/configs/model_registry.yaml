@@ -1,0 +1,42 @@
+models:
+  - id: gpt-4o-mini
+    provider: openai
+    model_name: gpt-4o-mini
+    version_pin: "2025-11-20"
+    context_window: 128000
+    supports_tools: true
+    supports_json_mode: true
+    supports_streaming: true
+    latency_class: fast
+    cost_class: medium
+    reliability_score: 0.92
+    safety_level: standard
+    max_tool_calls: 8
+    max_output_tokens: 2048
+  - id: gpt-4o
+    provider: openai
+    model_name: gpt-4o
+    version_pin: "2025-11-20"
+    context_window: 128000
+    supports_tools: true
+    supports_json_mode: true
+    supports_streaming: true
+    latency_class: medium
+    cost_class: high
+    reliability_score: 0.95
+    safety_level: standard
+    max_tool_calls: 8
+    max_output_tokens: 4096
+  - id: local-fallback
+    provider: local
+    model_name: local-fallback
+    version_pin: "dev"
+    context_window: 4096
+    supports_tools: false
+    supports_json_mode: true
+    supports_streaming: false
+    latency_class: fast
+    cost_class: low
+    reliability_score: 0.5
+    safety_level: synthetic
+    max_output_tokens: 512

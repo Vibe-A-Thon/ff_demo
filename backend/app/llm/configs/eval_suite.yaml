@@ -1,0 +1,10 @@
+tests:
+  - id: tool_call_accuracy
+    description: "Valid tool call with correct schema"
+    expected_schema: ToolCallList
+  - id: schema_validity
+    description: "Plan schema JSON output"
+    expected_schema: Plan
+thresholds:
+  schema_valid_rate: 0.95
+  tool_call_accuracy: 0.9

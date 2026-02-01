@@ -10,7 +10,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
-import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI, agentAPI, ragAPI, settingsAPI } from "../lib/api";
+import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI, agentAPI, ragAPI, settingsAPI, llmAPI } from "../lib/api";
 import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
 import {
@@ -306,6 +306,10 @@ const WarRoom = () => {
   const [registrySnapshot, setRegistrySnapshot] = useState(null);
   const [ragHealth, setRagHealth] = useState(null);
   const [ragSettings, setRagSettings] = useState(null);
+  const [llmConfig, setLlmConfig] = useState(null);
+  const [llmOverrides, setLlmOverrides] = useState({});
+  const [llmTelemetry, setLlmTelemetry] = useState(null);
+  const [llmSaving, setLlmSaving] = useState(false);
   const wsRef = useRef(null);
   const autoPlayRef = useRef(null);
   const demoRef = useRef(null);
@@ -313,6 +317,97 @@ const WarRoom = () => {
   const blueStreamRef = useRef("");
   
   const { checkMetrics, alertsEnabled, setAlertsEnabled } = useAlerts();
+
+  const loadLlmConfig = useCallback(async () => {
+    try {
+      const response = await llmAPI.getConfig();
+      setLlmConfig(response.data);
+      setLlmOverrides(response.data?.overrides || {});
+    } catch (error) {
+      console.error("Failed to load LLM config:", error);
+    }
+  }, []);
+
+  const loadLlmTelemetry = useCallback(async () => {
+    try {
+      const response = await llmAPI.getTelemetry();
+      setLlmTelemetry(response.data);
+    } catch (error) {
+      console.error("Failed to load LLM telemetry:", error);
+    }
+  }, []);
+
+  const saveLlmOverrides = useCallback(
+    async (nextOverrides) => {
+      setLlmSaving(true);
+      try {
+        const response = await llmAPI.updateConfig(nextOverrides);
+        setLlmOverrides(response.data || {});
+        toast.success("LLM routing updated");
+      } catch (error) {
+        toast.error("Failed to update LLM routing");
+      } finally {
+        setLlmSaving(false);
+      }
+    },
+    []
+  );
+
+  const llmModels = useMemo(() => {
+    return (llmConfig?.registry || []).sort((a, b) => a.model_id.localeCompare(b.model_id));
+  }, [llmConfig]);
+
+  const resolveTeamModel = useCallback(
+    (teamId) => {
+      const overrides = llmOverrides || {};
+      const policy = llmConfig?.policy || {};
+      return (
+        overrides?.team_defaults?.[teamId] ||
+        policy?.team_defaults?.[teamId] ||
+        overrides?.global_default ||
+        policy?.global_default ||
+        ""
+      );
+    },
+    [llmConfig, llmOverrides]
+  );
+
+  const resolveModelLabel = useCallback(
+    (modelId) => {
+      if (!modelId) return "";
+      const model = llmModels.find((entry) => entry.model_id === modelId);
+      return model ? `${model.model_id} (${model.provider})` : modelId;
+    },
+    [llmModels]
+  );
+
+  const handleTeamModelChange = useCallback(
+    (teamId, modelId) => {
+      const nextOverrides = {
+        ...llmOverrides,
+        team_defaults: {
+          ...(llmOverrides?.team_defaults || {}),
+          [teamId]: modelId,
+        },
+      };
+      saveLlmOverrides(nextOverrides);
+    },
+    [llmOverrides, saveLlmOverrides]
+  );
+
+  const handleSimulateFailure = useCallback(
+    (enabled, modelId) => {
+      const nextOverrides = {
+        ...llmOverrides,
+        simulate_failure: {
+          enabled: Boolean(enabled),
+          model_ids: modelId ? [modelId] : [],
+        },
+      };
+      saveLlmOverrides(nextOverrides);
+    },
+    [llmOverrides, saveLlmOverrides]
+  );
 
   const loadBattles = useCallback(async () => {
     try {
@@ -331,6 +426,8 @@ const WarRoom = () => {
 
   useEffect(() => {
     loadBattles();
+    loadLlmConfig();
+    loadLlmTelemetry();
     const loadRegistry = async () => {
       try {
         const response = await agentAPI.getRegistry();
@@ -345,7 +442,7 @@ const WarRoom = () => {
       if (autoPlayRef.current) clearInterval(autoPlayRef.current);
       if (demoRef.current) clearTimeout(demoRef.current);
     };
-  }, [loadBattles]);
+  }, [loadBattles, loadLlmConfig, loadLlmTelemetry]);
 
   useEffect(() => {
     let interval;
@@ -536,7 +633,7 @@ const WarRoom = () => {
       console.error("WebSocket connection failed:", error);
       setWsConnected(false);
     }
-  }, [selectedBattle, triggerBlockedEffect]);
+   }, [selectedBattle, triggerBlockedEffect]);
 
   const triggerBlockedEffect = useCallback((turnNumber) => {
     const burstId = `${Date.now()}-${turnNumber}`;
@@ -1117,6 +1214,21 @@ const WarRoom = () => {
     };
   }, [workflowApprovals]);
 
+  const simulateFailure = llmOverrides?.simulate_failure || {};
+  const simulateEnabled = Boolean(simulateFailure?.enabled);
+  const simulateModelId = simulateFailure?.model_ids?.[0] || "";
+
+  const telemetryByTeam = useMemo(() => {
+    const entries = llmTelemetry?.teams || [];
+    return entries.reduce((acc, entry) => {
+      const key = entry.team_id || "unknown";
+      if (!acc[key]) {
+        acc[key] = entry;
+      }
+      return acc;
+    }, {});
+  }, [llmTelemetry]);
+
   return (
     <div className="h-full flex flex-col" data-testid="war-room">
       {/* Metrics Strip */}
@@ -1489,6 +1601,131 @@ const WarRoom = () => {
         </Card>
       </div>
 
+      <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-llm-config">
+        <Card className="border-border">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">LLM Provider Setup</CardTitle>
+            <Badge className="bg-slate-500/15 text-slate-200 border border-slate-500/30">
+              {llmModels.length ? `${llmModels.length} models` : "No models"}
+            </Badge>
+          </CardHeader>
+          <CardContent className="grid gap-6 md:grid-cols-[2fr_1fr]">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground">Global Default</div>
+                <Select
+                  value={llmOverrides?.global_default || llmConfig?.policy?.global_default || ""}
+                  onValueChange={(value) =>
+                    saveLlmOverrides({
+                      ...llmOverrides,
+                      global_default: value,
+                    })
+                  }
+                  disabled={llmSaving || !llmModels.length}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {llmModels.map((model) => (
+                      <SelectItem key={model.model_id} value={model.model_id}>
+                        {model.model_id} • {model.provider}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                {stageDefinitions.map((stage) => (
+                  <div key={stage.team} className="flex items-center justify-between rounded-md border border-border bg-zinc-900/50 p-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <stage.icon className={`h-3 w-3 ${stage.color}`} />
+                      <span className="text-white">{stage.team.toUpperCase()}</span>
+                    </div>
+                    <Select
+                      value={resolveTeamModel(stage.team)}
+                      onValueChange={(value) => handleTeamModelChange(stage.team, value)}
+                      disabled={llmSaving || !llmModels.length}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {llmModels.map((model) => (
+                          <SelectItem key={`${stage.team}-${model.model_id}`} value={model.model_id}>
+                            {model.model_id} • {model.provider}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-md border border-border bg-zinc-900/50 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold">Demo Fallback</div>
+                    <div className="text-xs text-muted-foreground">Force a model failure to show fallback.</div>
+                  </div>
+                  <Switch
+                    checked={simulateEnabled}
+                    onCheckedChange={(checked) => handleSimulateFailure(checked, simulateModelId)}
+                    data-testid="llm-simulate-failure"
+                  />
+                </div>
+                <div className="mt-3">
+                  <Label className="text-xs text-muted-foreground">Fail Model</Label>
+                  <Select
+                    value={simulateModelId}
+                    onValueChange={(value) => handleSimulateFailure(simulateEnabled, value)}
+                    disabled={llmSaving || !llmModels.length}
+                  >
+                    <SelectTrigger className="w-full mt-2">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {llmModels.map((model) => (
+                        <SelectItem key={`fail-${model.model_id}`} value={model.model_id}>
+                          {model.model_id} • {model.provider}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="rounded-md border border-border bg-zinc-900/50 p-4">
+                <div className="text-sm font-semibold">Reliability Snapshot</div>
+                <div className="text-xs text-muted-foreground">Schema validity • Fallbacks • P95 latency</div>
+                <div className="mt-3 space-y-2">
+                  {stageDefinitions.map((stage) => {
+                    const stats = telemetryByTeam[stage.team] || {};
+                    return (
+                      <div key={`reliability-${stage.team}`} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <stage.icon className={`h-3 w-3 ${stage.color}`} />
+                          <span className="text-white">{stage.team.toUpperCase()}</span>
+                        </div>
+                        <div className="text-muted-foreground">
+                          {(stats.schema_valid_rate ? `${Math.round(stats.schema_valid_rate * 100)}%` : "—")}
+                          {" • "}
+                          {stats.fallbacks ?? 0} fb
+                          {" • "}
+                          {stats.p95_latency_ms ? `${Math.round(stats.p95_latency_ms)}ms` : "—"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-orchestrators">
         <Card className="border-border">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -1739,6 +1976,18 @@ const WarRoom = () => {
             <p className="text-xs text-muted-foreground mt-1">
               {selectedBattle?.turns?.length || 0} turns • Turn {currentTurn}
             </p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {resolveTeamModel("red") && (
+                <Badge variant="outline" className="border-red-500/50 text-red-300">
+                  Red • {resolveModelLabel(resolveTeamModel("red"))}
+                </Badge>
+              )}
+              {resolveTeamModel("blue") && (
+                <Badge variant="outline" className="border-blue-500/50 text-blue-300">
+                  Blue • {resolveModelLabel(resolveTeamModel("blue"))}
+                </Badge>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-hidden">
             <BattleTimeline 

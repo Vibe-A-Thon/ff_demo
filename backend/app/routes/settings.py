@@ -30,8 +30,17 @@ class RAGSettings(BaseModel):
     cache_max_items: int = 200
 
 
+class LLMSettings(BaseModel):
+    provider: str = "openai"
+    model: str = "gpt-4o-mini"
+    version_pin: str = ""
+    api_key: str = ""
+    base_url: str = ""
+
+
 class PlatformSettings(BaseModel):
     rag: RAGSettings
+    llm: LLMSettings
 
 
 def _default_settings() -> PlatformSettings:
@@ -46,7 +55,14 @@ def _default_settings() -> PlatformSettings:
             cache_dir=str(get_integration_setting("model_cache", "shared_dir", "") or ""),
             cache_ttl_seconds=600,
             cache_max_items=200,
-        )
+        ),
+        llm=LLMSettings(
+            provider=str(get_integration_setting("llm", "provider", "openai") or "openai"),
+            model=str(get_integration_setting("llm", "model", "gpt-4o-mini") or "gpt-4o-mini"),
+            version_pin=str(get_integration_setting("llm", "version_pin", "") or ""),
+            api_key="",
+            base_url=str(get_integration_setting("llm", "base_url", "") or ""),
+        ),
     )
 
 

@@ -39,6 +39,7 @@ from app.routes import (
     root,
     evaluation,
     settings,
+    llm,
     websocket,
 )
 
@@ -87,6 +88,7 @@ protected_routers = [
     seed.router,
     evaluation.router,
     settings.router,
+    llm.router,
 ]
 
 for router in public_routers:

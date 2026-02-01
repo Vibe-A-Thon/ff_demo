@@ -1,0 +1,13 @@
+global_default: gpt-4o-mini
+team_defaults:
+  red: gpt-4o
+  blue: gpt-4o-mini
+  gold: gpt-4o-mini
+  purple: gpt-4o-mini
+  green: gpt-4o-mini
+  black: gpt-4o-mini
+  orange: gpt-4o-mini
+  white: gpt-4o-mini
+fallback_chains:
+  gpt-4o: [local-fallback]
+  gpt-4o-mini: [local-fallback]

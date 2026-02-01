@@ -13,7 +13,7 @@ from app.models import AgentTrace, AgentTask, AgentResult, AgentProfile
 from app.agent_registry import AgentRegistry
 from app.tooling import TOOL_IMPLEMENTATIONS, derive_seed, rng
 from app.config import get_integration_setting
-from app.deps import get_llm_client
+from app.deps import get_llm_service
 from app.rag_utils import contains_sensitive_identifiers
 
 DEFAULT_REGISTRY = AgentRegistry.from_defaults()
@@ -393,22 +393,26 @@ class BaseAgent:
 
         seed = _derive_task_seed(task, self.agent_id)
         await self.pre_execute(task, seed)
-        llm_client = get_llm_client()
-        llm_summary: str | None = None
-        if llm_client:
+            llm_service = get_llm_service()
+            llm_summary: str | None = None
             try:
                 prompt = (
                     "You are an AI agent in Fraud Forge. Summarize the task output in 1-2 sentences. "
                     "Keep it synthetic and defensive.\n"
                     f"Team: {task.team_id}. Task: {task.task_type}. Objective: {task.params.get('objective', 'N/A')}."
                 )
-                llm_summary = await llm_client.chat_completions_create(
-                    model=_get_llm_model(),
+                llm_summary = await llm_service.generate(
                     messages=[
                         {"role": "system", "content": "You are a defensive fraud simulation assistant."},
                         {"role": "user", "content": prompt},
                     ],
                     max_tokens=120,
+                    requested_model=_get_llm_model(),
+                    team_id=task.team_id,
+                    agent_id=self.agent_id,
+                    actor_id=self.agent_id,
+                    run_id=task.run_id,
+                    trace_id=trace_info["trace_id"],
                 )
                 llm_summary = llm_summary.strip()
             except Exception:
@@ -766,31 +770,33 @@ class BaseOrchestrator(BaseAgent):
                 delegation = step.get("params", {}).get("delegation", [])
                 break
         artifacts = []
-        llm_client = get_llm_client()
+        llm_service = get_llm_service()
         llm_summary: str | None = None
-        if llm_client:
-            try:
-                objective = ""
-                for step in plan_steps:
-                    if step.get("tool") == "synthetic":
-                        objective = step.get("params", {}).get("objective", "")
-                        break
-                prompt = (
-                    "You are an orchestrator for Fraud Forge. Provide a concise summary for the orchestration output. "
-                    "Keep it synthetic and defensive.\n"
-                    f"Team: {self.team_id}. Objective: {objective or 'N/A'}."
-                )
-                llm_summary = await llm_client.chat_completions_create(
-                    model=_get_llm_model(),
-                    messages=[
-                        {"role": "system", "content": "You are a defensive fraud simulation assistant."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=120,
-                )
-                llm_summary = llm_summary.strip()
-            except Exception:
-                llm_summary = None
+        try:
+            objective = ""
+            for step in plan_steps:
+                if step.get("tool") == "synthetic":
+                    objective = step.get("params", {}).get("objective", "")
+                    break
+            prompt = (
+                "You are an orchestrator for Fraud Forge. Provide a concise summary for the orchestration output. "
+                "Keep it synthetic and defensive.\n"
+                f"Team: {self.team_id}. Objective: {objective or 'N/A'}."
+            )
+            llm_summary = await llm_service.generate(
+                messages=[
+                    {"role": "system", "content": "You are a defensive fraud simulation assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=120,
+                requested_model=_get_llm_model(),
+                team_id=self.team_id,
+                agent_id=self.team_id,
+                actor_id=self.team_id,
+            )
+            llm_summary = llm_summary.strip()
+        except Exception:
+            llm_summary = None
         for index, item in enumerate(delegation, start=1):
             artifacts.append(
                 {

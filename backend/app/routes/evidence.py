@@ -323,6 +323,22 @@ async def generate_evidence_pack_from_run(run_id: str, current_user: dict = Depe
     xai_bundle = build_explanation_bundle(run_id, decision, evidence_items)
 
     approvals = await _fetch_approvals(run_id, None)
+    llm_events = await db.audit_logs.find(
+        {"target_type": "llm", "metadata.run_id": run_id},
+        {"_id": 0},
+    ).sort("created_at", 1).to_list(200)
+    model_pins = {}
+    for entry in llm_events:
+        meta = entry.get("metadata", {})
+        model_id = entry.get("target_id")
+        if not model_id:
+            continue
+        model_pins[model_id] = {
+            "model_id": model_id,
+            "provider": meta.get("provider"),
+            "model_name": meta.get("model_name"),
+            "version_pin": meta.get("version_pin"),
+        }
 
     pack_data = {
         "run_id": run_id,
@@ -341,6 +357,8 @@ async def generate_evidence_pack_from_run(run_id: str, current_user: dict = Depe
         "approvals": approvals,
         "xai_bundle": xai_bundle.model_dump(),
         "stage_summaries": stage_summaries,
+        "llm_events": llm_events,
+        "llm_model_pins": list(model_pins.values()),
     }
 
     pack = EvidencePack(**pack_data)
