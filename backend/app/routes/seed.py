@@ -11,12 +11,15 @@ from app.core.logging_config import get_logger
 from app.deps import get_db, get_llm_client
 from app.models import Battle, KnowledgeNode, RAGDocument, RSBPackage, Rule
 from app.rag_utils import get_embedding
+from app.audit import record_audit
+from app.security import require_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 @router.post("/seed-data")
 async def seed_data(
+    current_user: dict = Depends(require_permission("seed:write")),
     db: DatabaseClient = Depends(get_db),
     llm_client: LLMClient | None = Depends(get_llm_client),
 ):
@@ -116,6 +119,18 @@ async def seed_data(
     logger.info(
         "seed.completed",
         extra={"payload": {"rules": len(created_rules), "nodes": len(created_nodes), "battles": 3}},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "seed.completed",
+        "seed",
+        "demo",
+        metadata={
+            "rules": len(created_rules),
+            "nodes": len(created_nodes),
+            "battles": 3,
+            "rag_docs": len(rag_entries),
+        },
     )
     return {
         "message": "Demo data seeded successfully",

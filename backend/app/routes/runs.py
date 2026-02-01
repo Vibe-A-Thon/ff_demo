@@ -12,6 +12,7 @@ import json
 import zipfile
 from app.core.external_services import DatabaseClient
 from app.core.logging_config import get_logger
+from app.audit import record_audit
 from app.deps import get_db
 from app.models import RunSession, RunStartRequest
 from app.run_helpers import record_run_event
@@ -47,6 +48,12 @@ async def list_runs(
         None: No explicit exceptions are raised.
     """
     runs = await db.runs.find({}, {"_id": 0}).sort("started_at", -1).to_list(200)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "run.list",
+        "run",
+        "list",
+    )
     return runs
 
 @router.post("/runs/start")
@@ -72,6 +79,13 @@ async def start_run(
     run = RunSession(scenario_id=payload.scenario_id, seed=seed_value, mode=payload.mode)
     await db.runs.insert_one(run.model_dump())
     await record_run_event(run.id, "run.started", {"scenario_id": run.scenario_id, "seed": run.seed, "mode": run.mode})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "run.started",
+        "run",
+        run.id,
+        metadata={"scenario_id": run.scenario_id, "seed": run.seed, "mode": run.mode},
+    )
     logger.info(
         "run.created",
         extra={"payload": {"run_id": run.id, "scenario_id": run.scenario_id, "mode": run.mode}},
@@ -100,6 +114,13 @@ async def get_run(
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "run.read",
+        "run",
+        run_id,
+        metadata={"stage": run.get("current_stage") or "init"},
+    )
     events = await db.run_events.find({"run_id": run_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
     return {"run": run, "events": events}
 
@@ -131,6 +152,14 @@ async def step_run(
         current_stage = WAR_LOOP_STAGES[0]
 
     if current_stage == "done":
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "run.step",
+            "run",
+            run_id,
+            decision="completed",
+            metadata={"stage": current_stage},
+        )
         return {"run_id": run_id, "status": "completed"}
 
     step_index = int(run.get("step_count", 0)) + 1
@@ -159,6 +188,14 @@ async def step_run(
             logger.info(
                 "run.awaiting_approval",
                 extra={"payload": {"run_id": run_id, "stage": current_stage, "step": step_index}},
+            )
+            await record_audit(
+                current_user.get("id", "unknown"),
+                "run.step",
+                "run",
+                run_id,
+                decision="awaiting_approval",
+                metadata={"stage": current_stage, "step": step_index},
             )
             return {"run_id": run_id, "stage": current_stage, "status": "awaiting_approval"}
 
@@ -221,6 +258,14 @@ async def step_run(
             "run.stage.failed",
             extra={"payload": {"run_id": run_id, "stage": current_stage, "next": next_override, "step": step_index}},
         )
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "run.step",
+            "run",
+            run_id,
+            decision="failed",
+            metadata={"stage": current_stage, "next": next_override, "step": step_index},
+        )
         return {
             "run_id": run_id,
             "stage": current_stage,
@@ -238,6 +283,13 @@ async def step_run(
     logger.info(
         "run.stage.completed",
         extra={"payload": {"run_id": run_id, "stage": current_stage, "next_stage": next_stage, "status": update_fields.get("status")}},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "run.step",
+        "run",
+        run_id,
+        metadata={"stage": current_stage, "next_stage": next_stage, "status": update_fields.get("status")},
     )
     return {
         "run_id": run_id,
@@ -335,4 +387,11 @@ async def export_brc(
 
     memory.seek(0)
     headers = {"Content-Disposition": f"attachment; filename={archive_name}"}
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "run.exported",
+        "run",
+        run_id,
+        metadata={"archive": archive_name},
+    )
     return Response(content=memory.read(), media_type="application/octet-stream", headers=headers)

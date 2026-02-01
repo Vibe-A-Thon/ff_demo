@@ -174,7 +174,9 @@ export const seedData = () => api.post('/seed-data');
 // WebSocket helper
 export const createBattleWebSocket = (battleId) => {
   const wsUrl = BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://');
-  return new WebSocket(`${wsUrl}/ws/battle/${battleId}`);
+  const token = localStorage.getItem('ff_token');
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+  return new WebSocket(`${wsUrl}/ws/battle/${battleId}${tokenParam}`);
 };
 
 export default api;

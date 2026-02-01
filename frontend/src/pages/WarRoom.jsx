@@ -328,6 +328,27 @@ const WarRoom = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedBattle?.id) return;
+    let isCancelled = false;
+    const refreshBattle = async () => {
+      try {
+        const response = await battleAPI.get(selectedBattle.id);
+        if (!isCancelled && response?.data) {
+          setSelectedBattle((prev) => ({ ...prev, ...response.data }));
+        }
+      } catch (error) {
+        // ignore transient refresh failures
+      }
+    };
+    refreshBattle();
+    const interval = setInterval(refreshBattle, 4000);
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [selectedBattle?.id]);
+
   // Check metrics for alerts whenever they change
   useEffect(() => {
     if (selectedBattle?.metrics) {
@@ -935,6 +956,14 @@ const WarRoom = () => {
       setGovernanceStatus(null);
       setWorkflowApprovals([]);
     }
+  }, [workflowRunId, syncWorkflow]);
+
+  useEffect(() => {
+    if (!workflowRunId) return;
+    const interval = setInterval(() => {
+      syncWorkflow(workflowRunId);
+    }, 5000);
+    return () => clearInterval(interval);
   }, [workflowRunId, syncWorkflow]);
 
   const metrics = selectedBattle?.metrics || {};

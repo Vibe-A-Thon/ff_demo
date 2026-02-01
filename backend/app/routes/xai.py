@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from app.core.external_services import DatabaseClient, LLMClient
 from app.core.logging_config import get_logger
+from app.audit import record_audit
+from app.security import require_permission
 from app.deps import get_db, get_llm_client
 from app.xai_utils import build_evidence_items, build_explanation_bundle
 from app.run_helpers import record_run_event
@@ -27,7 +29,11 @@ class CommentorResponse(BaseModel):
     timestamp: str
 
 @router.get("/xai/explain/{run_id}")
-async def explain_run(run_id: str, db: DatabaseClient = Depends(get_db)):
+async def explain_run(
+    run_id: str,
+    current_user: dict = Depends(require_permission("xai:read")),
+    db: DatabaseClient = Depends(get_db),
+):
     """Generate an explanation bundle for a run.
 
     Args:
@@ -72,6 +78,13 @@ async def explain_run(run_id: str, db: DatabaseClient = Depends(get_db)):
             "similar_cases": len(similar_cases),
         },
     )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "xai.bundle.generated",
+        "run",
+        run_id,
+        metadata={"bundle_id": bundle.bundle_id, "evidence_links": [f"xai_bundle:{bundle.bundle_id}"]},
+    )
     logger.info(
         "xai.bundle.generated",
         extra={"payload": {"run_id": run_id, "evidence": len(evidence_items), "similar_cases": len(similar_cases)}},
@@ -81,7 +94,11 @@ async def explain_run(run_id: str, db: DatabaseClient = Depends(get_db)):
 
 
 @router.get("/xai/explain/{run_id}/full")
-async def explain_run_full(run_id: str, db: DatabaseClient = Depends(get_db)):
+async def explain_run_full(
+    run_id: str,
+    current_user: dict = Depends(require_permission("xai:read")),
+    db: DatabaseClient = Depends(get_db),
+):
     """Return explanation bundle with extended details.
 
     Args:
@@ -94,7 +111,7 @@ async def explain_run_full(run_id: str, db: DatabaseClient = Depends(get_db)):
     Raises:
         HTTPException: If run is not found.
     """
-    bundle = await explain_run(run_id, db=db)
+    bundle = await explain_run(run_id, current_user=current_user, db=db)
     return {
         "bundle": bundle,
         "evidence_graph": bundle.evidence_graph,
@@ -105,7 +122,11 @@ async def explain_run_full(run_id: str, db: DatabaseClient = Depends(get_db)):
 
 
 @router.get("/xai/package/{package_id}")
-async def explain_package(package_id: str, db: DatabaseClient = Depends(get_db)):
+async def explain_package(
+    package_id: str,
+    current_user: dict = Depends(require_permission("xai:read")),
+    db: DatabaseClient = Depends(get_db),
+):
     """Get or derive XAI bundle for a package.
 
     Args:
@@ -123,19 +144,41 @@ async def explain_package(package_id: str, db: DatabaseClient = Depends(get_db))
         raise HTTPException(status_code=404, detail="RSB package not found")
 
     if package.get("xai_bundle"):
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "xai.package.bundle.read",
+            "rsb_package",
+            package_id,
+            metadata={"source": "package"},
+        )
         return {"bundle": package.get("xai_bundle"), "source": "package"}
 
     run_id = package.get("run_id") or (package.get("manifest", {}) or {}).get("run_id")
     if run_id:
-        bundle = await explain_run(run_id, db=db)
+        bundle = await explain_run(run_id, current_user=current_user, db=db)
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "xai.package.bundle.read",
+            "rsb_package",
+            package_id,
+            metadata={"source": "run", "run_id": run_id},
+        )
         return {"bundle": bundle, "source": "run"}
 
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "xai.package.bundle.read",
+        "rsb_package",
+        package_id,
+        metadata={"source": "none"},
+    )
     return {"bundle": None, "source": "none"}
 
 
 @router.post("/xai/commentary", response_model=CommentorResponse)
 async def generate_commentary(
     payload: CommentorRequest,
+    current_user: dict = Depends(require_permission("xai:write")),
     llm_client: LLMClient | None = Depends(get_llm_client),
 ):
     """Generate UI commentary text.
@@ -176,6 +219,13 @@ async def generate_commentary(
                 "xai.commentary.generated",
                 extra={"payload": {"screen": payload.screen, "generated_by": "openai"}},
             )
+            await record_audit(
+                current_user.get("id", "unknown"),
+                "xai.commentary.generated",
+                "xai_commentary",
+                payload.screen,
+                metadata={"mode": "llm", "role": payload.role},
+            )
             return CommentorResponse(text=text, generated_by="openai", timestamp=now)
         except Exception:
             pass
@@ -187,5 +237,12 @@ async def generate_commentary(
     logger.info(
         "xai.commentary.generated",
         extra={"payload": {"screen": payload.screen, "generated_by": "synthetic"}},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "xai.commentary.generated",
+        "xai_commentary",
+        payload.screen,
+        metadata={"mode": "synthetic", "role": payload.role},
     )
     return CommentorResponse(text=fallback, generated_by="synthetic", timestamp=now)

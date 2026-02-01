@@ -11,6 +11,7 @@ import json
 import zipfile
 from app.db import db
 from app.core.logging_config import get_logger
+from app.audit import record_audit
 from app.models import Battle, BattleCreate
 from app.security import require_permission
 
@@ -31,6 +32,12 @@ async def get_battles(current_user: dict = Depends(require_permission("battle:re
         None: No explicit exceptions are raised.
     """
     battles = await db.battles.find({}, {"_id": 0}).to_list(100)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "battle.list",
+        "battle",
+        "list",
+    )
     return battles
 
 @router.get("/battles/{battle_id}")
@@ -50,6 +57,12 @@ async def get_battle(battle_id: str, current_user: dict = Depends(require_permis
     battle = await db.battles.find_one({"id": battle_id}, {"_id": 0})
     if not battle:
         raise HTTPException(status_code=404, detail="Battle not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "battle.read",
+        "battle",
+        battle_id,
+    )
     return battle
 
 @router.post("/battles")
@@ -68,6 +81,13 @@ async def create_battle(battle_data: BattleCreate, current_user: dict = Depends(
     """
     battle = Battle(scenario_name=battle_data.scenario_name, parameters=battle_data.parameters)
     await db.battles.insert_one(battle.model_dump())
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "battle.created",
+        "battle",
+        battle.id,
+        metadata={"scenario": battle.scenario_name},
+    )
     logger.info("battle.created", extra={"payload": {"battle_id": battle.id, "scenario": battle.scenario_name}})
     return battle
 
@@ -91,6 +111,12 @@ async def start_battle(battle_id: str, current_user: dict = Depends(require_perm
 
     await db.battles.update_one({"id": battle_id}, {"$set": {"status": "running"}})
     battle["status"] = "running"
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "battle.started",
+        "battle",
+        battle_id,
+    )
     logger.info("battle.started", extra={"payload": {"battle_id": battle_id}})
     return battle
 
@@ -116,6 +142,13 @@ async def stop_battle(battle_id: str, current_user: dict = Depends(require_permi
     await db.battles.update_one({"id": battle_id}, {"$set": {"status": "completed", "completed_at": completed_at}})
     battle["status"] = "completed"
     battle["completed_at"] = completed_at
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "battle.stopped",
+        "battle",
+        battle_id,
+        metadata={"completed_at": completed_at},
+    )
     logger.info("battle.completed", extra={"payload": {"battle_id": battle_id}})
     return battle
 
@@ -136,6 +169,12 @@ async def delete_battle(battle_id: str, current_user: dict = Depends(require_per
     result = await db.battles.delete_one({"id": battle_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Battle not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "battle.deleted",
+        "battle",
+        battle_id,
+    )
     logger.info("battle.deleted", extra={"payload": {"battle_id": battle_id}})
     return {"message": "Battle deleted"}
 
@@ -204,6 +243,13 @@ async def import_brc(file: UploadFile = File(...), current_user: dict = Depends(
         completed_at=datetime.now(timezone.utc).isoformat(),
     )
     await db.battles.insert_one(battle.model_dump())
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "battle.imported",
+        "battle",
+        battle.id,
+        metadata={"scenario": battle.scenario_name, "source": "brc", "run_id": run_id},
+    )
     logger.info(
         "battle.imported",
         extra={"payload": {"battle_id": battle.id, "scenario": battle.scenario_name, "source": "brc"}},

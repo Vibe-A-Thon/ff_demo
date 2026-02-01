@@ -34,6 +34,12 @@ async def get_rules(
         None: No explicit exceptions are raised.
     """
     rules = await db.rules.find({}, {"_id": 0}).to_list(100)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rule.list",
+        "rule",
+        "list",
+    )
     return rules
 
 @router.get("/rules/{rule_id}")
@@ -58,6 +64,12 @@ async def get_rule(
     rule = await db.rules.find_one({"id": rule_id}, {"_id": 0})
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rule.read",
+        "rule",
+        rule_id,
+    )
     return rule
 
 @router.post("/rules")
@@ -81,6 +93,13 @@ async def create_rule(
     """
     rule = Rule(**rule_data.model_dump())
     await db.rules.insert_one(rule.model_dump())
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rule.created",
+        "rule",
+        rule.id,
+        metadata={"name": rule.name, "status": rule.status},
+    )
     logger.info("rule.created", extra={"payload": {"rule_id": rule.id, "name": rule.name}})
     return rule
 
@@ -115,6 +134,13 @@ async def update_rule(
     update_data["version"] = existing.get("version", 1) + 1
 
     await db.rules.update_one({"id": rule_id}, {"$set": update_data})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rule.updated",
+        "rule",
+        rule_id,
+        metadata={"version": update_data.get("version")},
+    )
     logger.info("rule.updated", extra={"payload": {"rule_id": rule_id, "version": update_data.get("version")}})
     return await db.rules.find_one({"id": rule_id}, {"_id": 0})
 
@@ -140,6 +166,12 @@ async def delete_rule(
     result = await db.rules.delete_one({"id": rule_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Rule not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rule.deleted",
+        "rule",
+        rule_id,
+    )
     logger.info("rule.deleted", extra={"payload": {"rule_id": rule_id}})
     return {"message": "Rule deleted"}
 
@@ -179,6 +211,16 @@ async def test_rule(
     await db.rules.update_one(
         {"id": rule_id},
         {"$set": {"test_results": test_results, "status": "tested"}},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rule.tested",
+        "rule",
+        rule_id,
+        metadata={
+            "failed": test_results.get("failed"),
+            "coverage": test_results.get("coverage"),
+        },
     )
     logger.info("rule.tested", extra={"payload": {"rule_id": rule_id, "passed": test_results.get("passed")}})
     return test_results

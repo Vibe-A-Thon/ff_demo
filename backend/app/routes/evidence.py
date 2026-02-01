@@ -194,6 +194,12 @@ async def get_evidence_packs(current_user: dict = Depends(require_permission("ev
         approvals = await _fetch_approvals(pack.get("run_id"), pack.get("id"))
         pack["approvals"] = approvals
         hydrated.append(pack)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "evidence_pack.list",
+        "evidence_pack",
+        "list",
+    )
     return hydrated
 
 @router.get("/evidence-packs/{pack_id}")
@@ -214,6 +220,12 @@ async def get_evidence_pack(pack_id: str, current_user: dict = Depends(require_p
     if not pack:
         raise HTTPException(status_code=404, detail="Evidence pack not found")
     pack["approvals"] = await _fetch_approvals(pack.get("run_id"), pack_id)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "evidence_pack.read",
+        "evidence_pack",
+        pack_id,
+    )
     return pack
 
 @router.post("/evidence-packs/generate/{battle_id}")
@@ -264,6 +276,13 @@ async def generate_evidence_pack(battle_id: str, current_user: dict = Depends(re
     pack_dict["checksum"] = compute_checksum(pack_dict)
 
     await db.evidence_packs.insert_one(pack_dict)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "evidence.pack.generated",
+        "evidence_pack",
+        pack_dict.get("id"),
+        metadata={"battle_id": battle_id, "source": "battle"},
+    )
     logger.info(
         "evidence.pack.generated",
         extra={"payload": {"pack_id": pack_dict.get("id"), "battle_id": battle_id, "source": "battle"}},
@@ -329,6 +348,13 @@ async def generate_evidence_pack_from_run(run_id: str, current_user: dict = Depe
     pack_dict["checksum"] = compute_checksum(pack_dict)
 
     await db.evidence_packs.insert_one(pack_dict)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "evidence.pack.generated",
+        "evidence_pack",
+        pack_dict.get("id"),
+        metadata={"run_id": run_id, "source": "run"},
+    )
     logger.info(
         "evidence.pack.generated",
         extra={"payload": {"pack_id": pack_dict.get("id"), "run_id": run_id, "source": "run"}},
@@ -359,6 +385,20 @@ async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_i
 
     pack["approvals"] = await _fetch_approvals(pack.get("run_id"), pack_id)
     redacted_pack = redact_evidence_pack(pack, mode)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "evidence_pack.exported",
+        "evidence_pack",
+        pack_id,
+        decision=mode,
+        metadata={
+            "mode": mode,
+            "requestor_id": requestor_id,
+            "evidence_links": [f"evidence_pack:{pack_id}"],
+        }
+        if requestor_id
+        else {"mode": mode, "evidence_links": [f"evidence_pack:{pack_id}"]},
+    )
     if requestor_id:
         await record_audit(
             requestor_id,
@@ -366,7 +406,7 @@ async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_i
             "evidence_pack",
             pack_id,
             decision=mode,
-            metadata={"mode": mode},
+            metadata={"mode": mode, "evidence_links": [f"evidence_pack:{pack_id}"]},
         )
 
     return {
@@ -379,7 +419,11 @@ async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_i
     }
 
 @router.post("/evidence-packs/{pack_id}/request-export-approval")
-async def request_evidence_export_approval(pack_id: str, request: EvidenceExportApprovalRequest):
+async def request_evidence_export_approval(
+    pack_id: str,
+    request: EvidenceExportApprovalRequest,
+    current_user: dict = Depends(require_permission("evidence:write")),
+):
     pack = await db.evidence_packs.find_one({"id": pack_id}, {"_id": 0})
     if not pack:
         raise HTTPException(status_code=404, detail="Evidence pack not found")
@@ -397,6 +441,11 @@ async def request_evidence_export_approval(pack_id: str, request: EvidenceExport
         "evidence_pack_export_requested",
         "evidence_pack",
         pack_id,
-        metadata=approval.metadata,
+        metadata={
+            **approval.metadata,
+            "mode": request.mode,
+            "reason": (request.metadata or {}).get("reason"),
+            "evidence_links": [f"evidence_pack:{pack_id}"],
+        },
     )
     return approval

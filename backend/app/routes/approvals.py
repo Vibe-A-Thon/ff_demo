@@ -28,6 +28,12 @@ async def get_approvals(current_user: dict = Depends(require_permission("approva
         None: No explicit exceptions are raised.
     """
     approvals = await db.approvals.find({}, {"_id": 0}).to_list(100)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "approval.list",
+        "approval",
+        "list",
+    )
     return approvals
 
 @router.post("/approvals")

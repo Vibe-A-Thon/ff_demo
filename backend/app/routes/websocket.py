@@ -5,9 +5,13 @@ import json
 from datetime import datetime, timezone
 from typing import Dict, List
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi.security import HTTPAuthorizationCredentials
 from app.db import db
 from app.rag_utils import openai_client
 from app.core.logging_config import get_logger
+from app.audit import record_audit
+from app.security import get_current_user
+from app.core.rbac import has_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -80,6 +84,29 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
+async def _authorize_websocket(websocket: WebSocket) -> dict | None:
+    auth_header = websocket.headers.get("authorization")
+    token = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1]
+    if not token:
+        token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4401)
+        return None
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    try:
+        user = await get_current_user(credentials)
+    except Exception:
+        await websocket.close(code=4401)
+        return None
+    role = user.get("role", "")
+    if not has_permission(role, "battle:read"):
+        await websocket.close(code=4403)
+        return None
+    return user
+
 @router.websocket("/ws/battle/{battle_id}")
 async def websocket_battle(websocket: WebSocket, battle_id: str):
     """Handle websocket connections for battle updates.
@@ -94,14 +121,28 @@ async def websocket_battle(websocket: WebSocket, battle_id: str):
     Raises:
         WebSocketDisconnect: When the client disconnects.
     """
+    user = await _authorize_websocket(websocket)
+    if not user:
+        return
     await manager.connect(websocket, battle_id)
+    await record_audit(
+        user.get("id", "unknown"),
+        "battle.websocket.connected",
+        "battle",
+        battle_id,
+        metadata={"mode": "websocket"},
+    )
     try:
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
 
             if message.get("type") == "run_turn":
-                turn_data = await simulate_battle_turn(battle_id, message.get("turn_number", 1))
+                turn_data = await simulate_battle_turn(
+                    battle_id,
+                    message.get("turn_number", 1),
+                    actor_id=user.get("id", "unknown"),
+                )
                 await manager.broadcast(battle_id, turn_data)
             elif message.get("type") == "stream_thinking":
                 async for chunk in stream_ai_thinking(message.get("team", "blue"), message.get("context", "")):
@@ -109,7 +150,7 @@ async def websocket_battle(websocket: WebSocket, battle_id: str):
     except WebSocketDisconnect:
         manager.disconnect(websocket, battle_id)
 
-async def simulate_battle_turn(battle_id: str, turn_number: int):
+async def simulate_battle_turn(battle_id: str, turn_number: int, actor_id: str | None = None):
     """Simulate and persist a battle turn.
 
     Args:
@@ -147,6 +188,13 @@ async def simulate_battle_turn(battle_id: str, turn_number: int):
     await db.battles.update_one(
         {"id": battle_id},
         {"$push": {"turns": turn_data}, "$set": {"metrics": turn_data["metrics"]}},
+    )
+    await record_audit(
+        actor_id or "unknown",
+        "battle.turn.simulated",
+        "battle",
+        battle_id,
+        metadata={"turn_number": turn_number, "mode": "websocket"},
     )
     logger.info(
         "ws.turn.simulated",

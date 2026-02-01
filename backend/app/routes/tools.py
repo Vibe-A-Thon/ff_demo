@@ -4,16 +4,18 @@ Provides listing and execution for synthetic tool registry.
 """
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.models import ToolCall, ToolResult
 from app.tooling import TOOL_REGISTRY, TOOL_IMPLEMENTATIONS, derive_seed
 from app.core.logging_config import get_logger
+from app.audit import record_audit
+from app.security import require_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 @router.get("/tools")
-async def list_tools():
+async def list_tools(current_user: dict = Depends(require_permission("tools:read"))):
     """List available tools.
 
     Args:
@@ -25,10 +27,16 @@ async def list_tools():
     Raises:
         None: No explicit exceptions are raised.
     """
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "tools.list",
+        "tool",
+        "list",
+    )
     return list(TOOL_REGISTRY.values())
 
 @router.post("/tools/{tool_name}/run")
-async def run_tool(tool_name: str, payload: ToolCall):
+async def run_tool(tool_name: str, payload: ToolCall, current_user: dict = Depends(require_permission("tools:write"))):
     """Run a tool with parameters.
 
     Args:
@@ -55,6 +63,13 @@ async def run_tool(tool_name: str, payload: ToolCall):
         raise HTTPException(status_code=500, detail="Tool implementation missing")
 
     output = impl(payload.params, derived_seed)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "tool.executed",
+        "tool",
+        tool_name,
+        metadata={"team_id": payload.team_id, "seed": derived_seed},
+    )
     logger.info(
         "tool.executed",
         extra={"payload": {"tool": tool_name, "team_id": payload.team_id, "seed": derived_seed}},

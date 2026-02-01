@@ -30,13 +30,19 @@ async def record_audit(
     Raises:
         None: No explicit exceptions are raised.
     """
+    normalized_metadata = dict(metadata or {})
+    normalized_metadata.setdefault("reason", None)
+    normalized_metadata.setdefault("mode", None)
+    normalized_metadata.setdefault("evidence_links", [])
+    if normalized_metadata["evidence_links"] is None:
+        normalized_metadata["evidence_links"] = []
     entry = AuditLogEntry(
         actor_id=actor_id,
         action=action,
         target_type=target_type,
         target_id=target_id,
         decision=decision,
-        metadata=metadata or {},
+        metadata=normalized_metadata,
     )
     await db.audit_logs.insert_one(entry.model_dump())
     return entry

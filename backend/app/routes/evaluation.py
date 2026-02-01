@@ -1,16 +1,18 @@
 """Run evaluation and quality routes."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
 from app.graph_utils import run_quality_checks, build_evaluation_report
 from app.run_helpers import record_run_event
 from app.core.logging_config import get_logger
+from app.audit import record_audit
+from app.security import require_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 @router.get("/runs/{run_id}/quality")
-async def get_run_quality(run_id: str):
+async def get_run_quality(run_id: str, current_user: dict = Depends(require_permission("evaluation:read"))):
     """Compute and persist quality checks for a run.
 
     Args:
@@ -29,6 +31,13 @@ async def get_run_quality(run_id: str):
     events = await db.run_events.find({"run_id": run_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
     result = run_quality_checks(run, events)
     await db.quality_checks.insert_one(result.model_dump())
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "evaluation.quality.completed",
+        "run",
+        run_id,
+        metadata={"status": result.status, "evidence_links": [f"quality_check:{result.check_id}"]},
+    )
     logger.info(
         "evaluation.quality.completed",
         extra={"payload": {"run_id": run_id, "status": result.status}},
@@ -36,7 +45,7 @@ async def get_run_quality(run_id: str):
     return result
 
 @router.get("/runs/{run_id}/evaluate")
-async def evaluate_run(run_id: str):
+async def evaluate_run(run_id: str, current_user: dict = Depends(require_permission("evaluation:read"))):
     """Generate and persist an evaluation report for a run.
 
     Args:
@@ -55,6 +64,13 @@ async def evaluate_run(run_id: str):
     report = build_evaluation_report(run)
     await db.evaluations.insert_one(report.model_dump())
     await record_run_event(run_id, "evaluation.completed", {"report_id": report.report_id})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "evaluation.report.completed",
+        "run",
+        run_id,
+        metadata={"report_id": report.report_id, "evidence_links": [f"evaluation_report:{report.report_id}"]},
+    )
     logger.info(
         "evaluation.report.completed",
         extra={"payload": {"run_id": run_id, "report_id": report.report_id}},

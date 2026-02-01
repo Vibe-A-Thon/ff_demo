@@ -3,16 +3,18 @@
 Provides graph and comparison views for war loop runs.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
 from app.graph_utils import build_run_graph, summarize_run_metrics
 from app.core.logging_config import get_logger
+from app.audit import record_audit
+from app.security import require_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 @router.get("/runs/{run_id}/graph")
-async def get_run_graph(run_id: str):
+async def get_run_graph(run_id: str, current_user: dict = Depends(require_permission("graph:read"))):
     """Build a graph for a run.
 
     Args:
@@ -30,6 +32,13 @@ async def get_run_graph(run_id: str):
 
     events = await db.run_events.find({"run_id": run_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
     graph = build_run_graph(run_id, events)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "graph.run.generated",
+        "run",
+        run_id,
+        metadata={"nodes": len(graph.get("nodes", [])), "edges": len(graph.get("edges", []))},
+    )
     logger.info(
         "graph.run.generated",
         extra={"payload": {"run_id": run_id, "nodes": len(graph.get("nodes", [])), "edges": len(graph.get("edges", []))}},
@@ -37,7 +46,7 @@ async def get_run_graph(run_id: str):
     return {"run_id": run_id, "graph": graph}
 
 @router.get("/runs/compare")
-async def compare_runs(run_a: str, run_b: str):
+async def compare_runs(run_a: str, run_b: str, current_user: dict = Depends(require_permission("graph:read"))):
     """Compare two runs and return metric deltas.
 
     Args:
@@ -69,5 +78,12 @@ async def compare_runs(run_a: str, run_b: str):
     logger.info(
         "graph.runs.compared",
         extra={"payload": {"run_a": run_a, "run_b": run_b, "decision_changed": delta["decision_changed"]}},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "graph.runs.compared",
+        "run",
+        f"{run_a}:{run_b}",
+        metadata={"decision_changed": delta["decision_changed"]},
     )
     return {"run_a": metrics_a, "run_b": metrics_b, "delta": delta}

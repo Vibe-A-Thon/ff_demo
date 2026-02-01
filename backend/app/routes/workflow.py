@@ -8,6 +8,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
 from app.core.logging_config import get_logger
+from app.audit import record_audit
 from app.models import WorkflowAdvanceRequest, WorkflowDecisionRequest, WorkflowAutoRunRequest
 from app.run_helpers import record_run_event
 from app.workflow_service import (
@@ -41,6 +42,13 @@ async def get_workflow(run_id: str, current_user: dict = Depends(require_permiss
     run = await db.runs.find_one({"id": run_id}, {"_id": 0})
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.read",
+        "run",
+        run_id,
+        metadata={"workflow_state": run.get("workflow_state", "incident_created")},
+    )
     return {
         "run_id": run_id,
         "workflow_state": run.get("workflow_state", "incident_created"),
@@ -70,6 +78,12 @@ async def get_workflow_approvals_endpoint(run_id: str, current_user: dict = Depe
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     approvals = await get_workflow_approvals(run_id)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.approvals.read",
+        "run",
+        run_id,
+    )
     return {"run_id": run_id, "approvals": approvals}
 
 
@@ -91,6 +105,13 @@ async def get_workflow_status(run_id: str, current_user: dict = Depends(require_
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     governance = await compute_governance_status(run_id)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.status.read",
+        "run",
+        run_id,
+        metadata={"workflow_state": run.get("workflow_state", "incident_created")},
+    )
     return {
         "run_id": run_id,
         "workflow_state": run.get("workflow_state", "incident_created"),
@@ -123,6 +144,14 @@ async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest, c
         raise HTTPException(status_code=400, detail="Unknown workflow state")
 
     if current_state in APPROVAL_STATES:
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "workflow.advance",
+            "run",
+            run_id,
+            decision="awaiting_approval",
+            metadata={"state": current_state, "actor_id": payload.actor_id},
+        )
         return {
             "run_id": run_id,
             "workflow_state": current_state,
@@ -131,6 +160,14 @@ async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest, c
 
     next_state, transitions = await advance_workflow(run, payload.actor_id, payload.outcome, payload.notes)
     if not transitions:
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "workflow.advance",
+            "run",
+            run_id,
+            decision="no_transition",
+            metadata={"state": current_state, "actor_id": payload.actor_id, "outcome": payload.outcome},
+        )
         return {"run_id": run_id, "workflow_state": current_state, "status": "no_transition"}
 
     pending_approval = None
@@ -143,6 +180,13 @@ async def advance_workflow_state(run_id: str, payload: WorkflowAdvanceRequest, c
         )
 
     await record_run_event(run_id, "workflow.state_changed", {"from": current_state, "to": next_state})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.advance",
+        "run",
+        run_id,
+        metadata={"from": current_state, "to": next_state, "reason": payload.notes},
+    )
     logger.info(
         "workflow.state_changed",
         extra={"payload": {"run_id": run_id, "from": current_state, "to": next_state}},
@@ -190,12 +234,28 @@ async def decide_workflow_state(run_id: str, payload: WorkflowDecisionRequest, c
 
     next_state, entry = await decide_workflow(run, payload.actor_id, payload.actor_role, payload.decision, payload.notes)
     if next_state == current_state:
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "workflow.decision",
+            "run",
+            run_id,
+            decision=payload.decision,
+            metadata={"state": current_state, "actor_id": payload.actor_id, "actor_role": payload.actor_role},
+        )
         return {"run_id": run_id, "workflow_state": current_state, "message": entry.get("message")}
 
     await record_run_event(
         run_id,
         "workflow.approval_decision",
         {"from": current_state, "to": next_state, "decision": payload.decision},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.decision",
+        "run",
+        run_id,
+        decision=payload.decision,
+        metadata={"from": current_state, "to": next_state, "reason": payload.notes},
     )
     logger.info(
         "workflow.approval_decision",
@@ -251,6 +311,13 @@ async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest, curren
         if not new_entries:
             break
         await record_run_event(run_id, "workflow.state_changed", {"from": current_state, "to": next_state})
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "workflow.auto_run",
+            "run",
+            run_id,
+            metadata={"from": current_state, "to": next_state, "reason": payload.notes},
+        )
         logger.info(
             "workflow.state_changed",
             extra={"payload": {"run_id": run_id, "from": current_state, "to": next_state}},
@@ -283,6 +350,14 @@ async def auto_run_workflow(run_id: str, payload: WorkflowAutoRunRequest, curren
                 "$push": {"workflow_history": {"$each": transitions}},
             },
         )
+
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.auto_run",
+        "run",
+        run_id,
+        metadata={"steps": steps, "final_state": current_state, "actor_id": payload.actor_id},
+    )
 
     return {
         "run_id": run_id,
@@ -327,6 +402,13 @@ async def freeze_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_
         },
     )
     await record_run_event(run_id, "workflow.frozen", {"actor": payload.actor_id, "notes": payload.notes})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.frozen",
+        "run",
+        run_id,
+        metadata={"actor": payload.actor_id, "notes": payload.notes, "reason": payload.notes},
+    )
     logger.info(
         "workflow.frozen",
         extra={"payload": {"run_id": run_id, "actor": payload.actor_id}},
@@ -367,6 +449,13 @@ async def rollback_workflow(run_id: str, payload: WorkflowAdvanceRequest, curren
         },
     )
     await record_run_event(run_id, "workflow.rolled_back", {"actor": payload.actor_id, "notes": payload.notes})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.rolled_back",
+        "run",
+        run_id,
+        metadata={"actor": payload.actor_id, "notes": payload.notes, "reason": payload.notes},
+    )
     logger.info(
         "workflow.rolled_back",
         extra={"payload": {"run_id": run_id, "actor": payload.actor_id}},
@@ -405,6 +494,13 @@ async def reset_workflow(run_id: str, payload: WorkflowAdvanceRequest, current_u
         },
     )
     await record_run_event(run_id, "workflow.reset", {"actor": payload.actor_id, "notes": payload.notes})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "workflow.reset",
+        "run",
+        run_id,
+        metadata={"actor": payload.actor_id, "notes": payload.notes, "reason": payload.notes},
+    )
     logger.info(
         "workflow.reset",
         extra={"payload": {"run_id": run_id, "actor": payload.actor_id}},

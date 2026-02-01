@@ -3,15 +3,17 @@
 Provides aggregated dashboard metrics for battles and rules.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.db import db
 from app.core.logging_config import get_logger
+from app.audit import record_audit
+from app.security import require_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 @router.get("/metrics/dashboard")
-async def get_dashboard_metrics():
+async def get_dashboard_metrics(current_user: dict = Depends(require_permission("metrics:read"))):
     """Return summary metrics for the dashboard.
 
     Args:
@@ -51,5 +53,12 @@ async def get_dashboard_metrics():
     logger.info(
         "metrics.dashboard.generated",
         extra={"payload": {"total_battles": payload["total_battles"], "total_rules": payload["total_rules"]}},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "metrics.dashboard.generated",
+        "metrics",
+        "dashboard",
+        metadata={"total_battles": payload["total_battles"], "total_rules": payload["total_rules"]},
     )
     return payload

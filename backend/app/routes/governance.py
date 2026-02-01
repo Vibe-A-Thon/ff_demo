@@ -1,10 +1,11 @@
 """Governance routes for approvals and audit."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
 from app.models import ApprovalRequest
 from app.audit import record_audit
 from app.core.logging_config import get_logger
+from app.security import require_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -12,7 +13,12 @@ logger = get_logger(__name__)
 REQUIRED_APPROVAL_STAGES = ["orange_review_approve", "white_compliance_audit"]
 
 @router.post("/runs/{run_id}/request-approval")
-async def request_run_approval(run_id: str, stage: str, requestor_id: str):
+async def request_run_approval(
+    run_id: str,
+    stage: str,
+    requestor_id: str,
+    current_user: dict = Depends(require_permission("approvals:write")),
+):
     """Request approval for a run stage.
 
     Args:
@@ -45,7 +51,7 @@ async def request_run_approval(run_id: str, stage: str, requestor_id: str):
     return approval
 
 @router.get("/runs/{run_id}/safe-to-proceed")
-async def safe_to_proceed(run_id: str):
+async def safe_to_proceed(run_id: str, current_user: dict = Depends(require_permission("workflow:read"))):
     """Check whether a run is safe to proceed.
 
     Args:
@@ -64,10 +70,17 @@ async def safe_to_proceed(run_id: str):
         "governance.safe_to_proceed",
         extra={"payload": {"run_id": run_id, "safe": len(missing) == 0, "missing": missing}},
     )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "governance.safe_to_proceed",
+        "run",
+        run_id,
+        metadata={"safe": len(missing) == 0, "missing": missing},
+    )
     return {"run_id": run_id, "safe_to_proceed": len(missing) == 0, "missing": missing}
 
 @router.get("/audit/logs")
-async def get_audit_logs():
+async def get_audit_logs(current_user: dict = Depends(require_permission("audit:read"))):
     """List audit log entries.
 
     Args:
@@ -80,4 +93,10 @@ async def get_audit_logs():
         None: No explicit exceptions are raised.
     """
     logs = await db.audit_logs.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "audit.logs.read",
+        "audit_log",
+        "list",
+    )
     return logs

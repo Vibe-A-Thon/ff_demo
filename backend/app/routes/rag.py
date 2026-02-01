@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Depends
 from app.core.external_services import DatabaseClient, LLMClient, VectorDocument, VectorStore
 from app.core.logging_config import get_logger
+from app.audit import record_audit
 from app.deps import get_db, get_llm_client, get_vector_store
 from app.models import RAGDocument, RAGDocumentCreate, RAGHit, RAGQueryRequest, RAGResponse
 from app.rag_utils import (
@@ -44,6 +45,12 @@ async def list_rag_collections(
         None: No explicit exceptions are raised.
     """
     collections = await db.rag_documents.distinct("collection")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rag.collection.list",
+        "rag_collection",
+        "list",
+    )
     return {"collections": sorted(collections)}
 
 @router.get("/rag/documents")
@@ -71,6 +78,13 @@ async def list_rag_documents(
     if collection:
         query["collection"] = collection
     docs = await db.rag_documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(max(limit, 1))
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rag.document.list",
+        "rag_document",
+        collection or "all",
+        metadata={"limit": limit},
+    )
     return docs
 
 @router.post("/rag/documents")
@@ -104,6 +118,13 @@ async def create_rag_document(
     await vector_store.upsert(
         "rag_documents",
         [VectorDocument(id=doc.id, vector=embedding, metadata={"collection": doc.collection, "title": doc.title})],
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rag.document.created",
+        "rag_document",
+        doc.id,
+        metadata={"collection": doc.collection, "title": doc.title},
     )
     logger.info("rag.document.created", extra={"payload": {"doc_id": doc.id, "collection": doc.collection}})
     return doc
@@ -174,6 +195,13 @@ async def seed_rag_data(
         seeded += 1
 
     logger.info("rag.seed.completed", extra={"payload": {"count": seeded, "reset": reset}})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rag.seed.completed",
+        "rag_collection",
+        "seed",
+        metadata={"count": seeded, "reset": reset},
+    )
     return {"message": "RAG data seeded", "count": seeded}
 
 @router.post("/rag/retrieve")
@@ -206,6 +234,18 @@ async def rag_retrieve(
         query["synthetic_only"] = True
     docs = await db.rag_documents.find(query, {"_id": 0}).to_list(500)
     if not docs:
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "rag.retrieve",
+            "rag_query",
+            request.query[:64],
+            metadata={
+                "collections": request.collections,
+                "top_k": request.top_k,
+                "synthetic_only": request.synthetic_only,
+                "hits": 0,
+            },
+        )
         return []
 
     query_embedding = await get_embedding(request.query, llm_client=llm_client)
@@ -235,6 +275,18 @@ async def rag_retrieve(
     logger.info(
         "rag.retrieve.completed",
         extra={"payload": {"query": request.query, "collections": request.collections, "hits": len(hits)}},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rag.retrieve",
+        "rag_query",
+        request.query[:64],
+        metadata={
+            "collections": request.collections,
+            "top_k": request.top_k,
+            "synthetic_only": request.synthetic_only,
+            "hits": len(hits),
+        },
     )
     return hits
 
@@ -370,6 +422,22 @@ async def rag_query(
                 "used_fallback": response.used_fallback,
                 "generated_by": response.generated_by,
             }
+        },
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rag.query",
+        "rag_query",
+        request.query[:64],
+        metadata={
+            "collections": request.collections,
+            "top_k": request.top_k,
+            "synthetic_only": request.synthetic_only,
+            "retrieval_score": response.retrieval_score,
+            "used_fallback": response.used_fallback,
+            "generated_by": response.generated_by,
+            "run_id": request.run_id,
+            "team_id": request.team_id,
         },
     )
     return response

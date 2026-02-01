@@ -27,6 +27,7 @@ from app.rsb_utils import (
     build_rsb_archive,
 )
 from app.core.logging_config import get_logger
+from app.audit import record_audit
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -49,6 +50,12 @@ async def get_rsb_packages(
         None: No explicit exceptions are raised.
     """
     packages = await db.rsb_packages.find({}, {"_id": 0}).to_list(100)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.list",
+        "rsb_package",
+        "list",
+    )
     return packages
 
 @router.get("/rsb-packages/{package_id}")
@@ -73,6 +80,12 @@ async def get_rsb_package(
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.read",
+        "rsb_package",
+        package_id,
+    )
     return package
 
 @router.post("/rsb-packages")
@@ -109,6 +122,13 @@ async def create_rsb_package(
             for conflict in conflicts
         ]
     await db.rsb_packages.insert_one(package.model_dump())
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.created",
+        "rsb_package",
+        package.id,
+        metadata={"rule_id": package.rule_id},
+    )
     logger.info("rsb.package.created", extra={"payload": {"package_id": package.id, "rule_id": package.rule_id}})
     return package
 
@@ -249,6 +269,13 @@ async def upload_rsb_package(
             package.storage_path = str(storage_path)
 
             await db.rsb_packages.insert_one(package.model_dump())
+            await record_audit(
+                current_user.get("id", "unknown"),
+                "rsb.package.uploaded",
+                "rsb_package",
+                package.id,
+                metadata={"status": package.status, "file": file.filename},
+            )
             logger.info(
                 "rsb.package.uploaded",
                 extra={"payload": {"package_id": package.id, "status": package.status, "file": file.filename}},
@@ -287,6 +314,13 @@ async def test_rsb_package(
         test_results = build_test_results(package_id, file_names)
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": {"test_results": test_results, "status": "tested"}})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.tested",
+        "rsb_package",
+        package_id,
+        metadata={"status": "tested"},
+    )
     logger.info("rsb.package.tested", extra={"payload": {"package_id": package_id, "status": "tested"}})
     return test_results
 
@@ -342,6 +376,12 @@ async def get_rsb_diffs(
             }
         )
 
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.diffs",
+        "rsb_package",
+        package_id,
+    )
     return {
         "package_id": package_id,
         "rule_id": rule_id,
@@ -418,6 +458,14 @@ async def apply_rsb_patch(
     }
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": updates})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.patched",
+        "rsb_package",
+        package_id,
+        decision=decision,
+        metadata={"status": updates.get("status"), "commit_message": commit_message, "reason": commit_message},
+    )
     logger.info(
         "rsb.package.patched",
         extra={"payload": {"package_id": package_id, "decision": decision, "status": updates.get("status")}},
@@ -453,6 +501,13 @@ async def merge_rsb_package(
         raise HTTPException(status_code=400, detail="Package validation failed; fix errors before merge")
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": {"status": "merged"}})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.merged",
+        "rsb_package",
+        package_id,
+        metadata={"status": "merged"},
+    )
     logger.info("rsb.package.merged", extra={"payload": {"package_id": package_id}})
     return {"message": "Package merged successfully", "status": "merged"}
 
@@ -485,6 +540,13 @@ async def resolve_rsb_conflicts(
         {"id": package_id},
         {"$set": {"conflict_resolutions": decisions}},
     )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.conflicts_resolved",
+        "rsb_package",
+        package_id,
+        metadata={"resolutions": list(decisions.keys()) if isinstance(decisions, dict) else []},
+    )
     logger.info("rsb.package.conflicts_resolved", extra={"payload": {"package_id": package_id}})
     return await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
 
@@ -511,6 +573,13 @@ async def stage_rsb_package(
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
     await db.rsb_packages.update_one({"id": package_id}, {"$set": {"status": "staged"}})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.staged",
+        "rsb_package",
+        package_id,
+        metadata={"status": "staged"},
+    )
     logger.info("rsb.package.staged", extra={"payload": {"package_id": package_id}})
     return await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
 
@@ -541,6 +610,12 @@ async def export_rsb_package(
         file_path = Path(storage_path)
         response = StreamingResponse(file_path.open("rb"), media_type="application/zip")
         response.headers["Content-Disposition"] = f"attachment; filename={package.get('name','package')}.rsb"
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "rsb.package.exported",
+            "rsb_package",
+            package_id,
+        )
         return response
 
     raise HTTPException(status_code=404, detail="RSB archive not available")
@@ -567,5 +642,11 @@ async def delete_rsb_package(
     result = await db.rsb_packages.delete_one({"id": package_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="RSB Package not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.deleted",
+        "rsb_package",
+        package_id,
+    )
     logger.info("rsb.package.deleted", extra={"payload": {"package_id": package_id}})
     return {"message": "RSB Package deleted"}

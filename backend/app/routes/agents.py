@@ -1,20 +1,22 @@
 """Agent registry and task routes."""
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
 from app.agent_registry import AgentRegistry
 from app.models import AgentProfile, AgentProfileCreate, AgentRequest, AgentRequestCreate, AgentRequestDecision, AgentResult, AgentTask
 from app.rag_utils import contains_sensitive_identifiers
 from app.teams_data import default_agent_payloads
 from app.core.logging_config import get_logger
+from app.audit import record_audit
+from app.security import require_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
 DEFAULT_REGISTRY = AgentRegistry.from_defaults()
 
 @router.get("/agents")
-async def list_agents(team_id: str | None = None):
+async def list_agents(team_id: str | None = None, current_user: dict = Depends(require_permission("agents:read"))):
     """List agents, optionally filtered by team.
 
     Args:
@@ -31,11 +33,24 @@ async def list_agents(team_id: str | None = None):
         query["team_id"] = team_id
     agents = await db.agents.find(query, {"_id": 0}).to_list(200)
     if agents:
+        await record_audit(
+            current_user.get("id", "unknown"),
+            "agents.list",
+            "agent",
+            team_id or "all",
+        )
         return agents
-    return [agent.model_dump() for agent in DEFAULT_REGISTRY.list_agents(team_id)]
+    fallback = [agent.model_dump() for agent in DEFAULT_REGISTRY.list_agents(team_id)]
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agents.list",
+        "agent",
+        team_id or "all",
+    )
+    return fallback
 
 @router.get("/agents/{agent_id}")
-async def get_agent(agent_id: str):
+async def get_agent(agent_id: str, current_user: dict = Depends(require_permission("agents:read"))):
     """Get a single agent profile.
 
     Args:
@@ -53,10 +68,16 @@ async def get_agent(agent_id: str):
         if fallback:
             return fallback.model_dump()
         raise HTTPException(status_code=404, detail="Agent not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agents.read",
+        "agent",
+        agent_id,
+    )
     return agent
 
 @router.get("/agents/registry")
-async def get_registry_snapshot(team_id: str | None = None):
+async def get_registry_snapshot(team_id: str | None = None, current_user: dict = Depends(require_permission("agents:read"))):
     """Return registry snapshot and delegation preview.
 
     Args:
@@ -74,10 +95,16 @@ async def get_registry_snapshot(team_id: str | None = None):
     delegation_preview = (
         DEFAULT_REGISTRY.build_delegation_plan(preview_team, "Registry preview") if preview_team else []
     )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agents.registry.snapshot",
+        "agent_registry",
+        team_id or "all",
+    )
     return {"teams": teams, "agents": agents, "delegation_preview": delegation_preview}
 
 @router.post("/agents/register")
-async def register_agent(agent_data: AgentProfileCreate):
+async def register_agent(agent_data: AgentProfileCreate, current_user: dict = Depends(require_permission("agents:write"))):
     """Register a new agent profile.
 
     Args:
@@ -91,11 +118,18 @@ async def register_agent(agent_data: AgentProfileCreate):
     """
     profile = AgentProfile(**agent_data.model_dump())
     await db.agents.insert_one(profile.model_dump())
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agents.registered",
+        "agent",
+        profile.agent_id,
+        metadata={"team_id": profile.team_id},
+    )
     logger.info("agent.registered", extra={"payload": {"agent_id": profile.agent_id, "team_id": profile.team_id}})
     return profile
 
 @router.post("/agents/seed")
-async def seed_agents():
+async def seed_agents(current_user: dict = Depends(require_permission("agents:write"))):
     """Seed default agents into storage.
 
     Args:
@@ -119,11 +153,18 @@ async def seed_agents():
         await db.agents.insert_one(profile.model_dump())
         inserted += 1
     total = await db.agents.count_documents({})
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agents.seeded",
+        "agent",
+        "seed",
+        metadata={"inserted": inserted, "total": total},
+    )
     logger.info("agents.seeded", extra={"payload": {"inserted": inserted, "total": total}})
     return {"message": "Agents seeded", "count": total, "inserted": inserted}
 
 @router.post("/agents/tasks")
-async def create_agent_task(task_data: AgentTask):
+async def create_agent_task(task_data: AgentTask, current_user: dict = Depends(require_permission("agents:write"))):
     """Create an agent task.
 
     Args:
@@ -140,6 +181,13 @@ async def create_agent_task(task_data: AgentTask):
         if contains_sensitive_identifiers(joined):
             raise HTTPException(status_code=400, detail="Synthetic-only mode: sensitive identifiers detected")
     await db.agent_tasks.insert_one(task_data.model_dump())
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.task.created",
+        "agent_task",
+        task_data.task_id,
+        metadata={"team_id": task_data.team_id, "run_id": task_data.run_id},
+    )
     logger.info(
         "agent.task.created",
         extra={"payload": {"task_id": task_data.task_id, "team_id": task_data.team_id, "run_id": task_data.run_id}},
@@ -147,7 +195,7 @@ async def create_agent_task(task_data: AgentTask):
     return task_data
 
 @router.get("/agents/tasks")
-async def list_agent_tasks(run_id: str | None = None, team_id: str | None = None, status_filter: str | None = None):
+async def list_agent_tasks(run_id: str | None = None, team_id: str | None = None, status_filter: str | None = None, current_user: dict = Depends(require_permission("agents:read"))):
     """List agent tasks.
 
     Args:
@@ -169,10 +217,17 @@ async def list_agent_tasks(run_id: str | None = None, team_id: str | None = None
     if status_filter:
         query["status"] = status_filter
     tasks = await db.agent_tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.task.list",
+        "agent_task",
+        run_id or team_id or "all",
+        metadata={"run_id": run_id, "team_id": team_id, "status": status_filter},
+    )
     return tasks
 
 @router.post("/agents/tasks/{task_id}/complete")
-async def complete_agent_task(task_id: str, result: AgentResult):
+async def complete_agent_task(task_id: str, result: AgentResult, current_user: dict = Depends(require_permission("agents:write"))):
     """Complete an agent task.
 
     Args:
@@ -192,6 +247,13 @@ async def complete_agent_task(task_id: str, result: AgentResult):
         {"task_id": task_id},
         {"$set": {"status": result.status, "result": result.model_dump(), "updated_at": datetime.now(timezone.utc).isoformat()}},
     )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.task.completed",
+        "agent_task",
+        task_id,
+        metadata={"status": result.status},
+    )
     logger.info(
         "agent.task.completed",
         extra={"payload": {"task_id": task_id, "status": result.status}},
@@ -199,7 +261,7 @@ async def complete_agent_task(task_id: str, result: AgentResult):
     return result
 
 @router.post("/agents/requests")
-async def create_agent_request(request_data: AgentRequestCreate):
+async def create_agent_request(request_data: AgentRequestCreate, current_user: dict = Depends(require_permission("agents:write"))):
     """Create an inter-team agent request.
 
     Args:
@@ -213,6 +275,13 @@ async def create_agent_request(request_data: AgentRequestCreate):
     """
     req = AgentRequest(**request_data.model_dump())
     await db.agent_requests.insert_one(req.model_dump())
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.request.created",
+        "agent_request",
+        req.request_id,
+        metadata={"from_team": req.from_team, "to_team": req.to_team},
+    )
     logger.info(
         "agent.request.created",
         extra={"payload": {"request_id": req.request_id, "from": req.from_team, "to": req.to_team}},
@@ -220,7 +289,7 @@ async def create_agent_request(request_data: AgentRequestCreate):
     return req
 
 @router.get("/agents/requests")
-async def list_agent_requests(team_id: str | None = None, status_filter: str | None = None):
+async def list_agent_requests(team_id: str | None = None, status_filter: str | None = None, current_user: dict = Depends(require_permission("agents:read"))):
     """List agent requests.
 
     Args:
@@ -239,10 +308,17 @@ async def list_agent_requests(team_id: str | None = None, status_filter: str | N
     if status_filter:
         query["status"] = status_filter
     requests = await db.agent_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.request.list",
+        "agent_request",
+        team_id or "all",
+        metadata={"team_id": team_id, "status": status_filter},
+    )
     return requests
 
 @router.post("/agents/requests/{request_id}/respond")
-async def respond_agent_request(request_id: str, decision: AgentRequestDecision):
+async def respond_agent_request(request_id: str, decision: AgentRequestDecision, current_user: dict = Depends(require_permission("agents:write"))):
     """Respond to an agent request.
 
     Args:
@@ -265,6 +341,14 @@ async def respond_agent_request(request_id: str, decision: AgentRequestDecision)
     }
     await db.agent_requests.update_one({"request_id": request_id}, {"$set": updated})
     request_doc.update(updated)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "agent.request.responded",
+        "agent_request",
+        request_id,
+        decision=decision.status,
+        metadata={"reason": decision.response},
+    )
     logger.info(
         "agent.request.responded",
         extra={"payload": {"request_id": request_id, "status": decision.status}},
