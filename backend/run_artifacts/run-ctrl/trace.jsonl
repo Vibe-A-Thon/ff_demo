@@ -13,3 +13,6 @@
 {"event_type": "workflow.frozen", "payload": {"actor": "user", "notes": null}}
 {"event_type": "workflow.rolled_back", "payload": {"actor": "user", "notes": null}}
 {"event_type": "workflow.reset", "payload": {"actor": "user", "notes": null}}
+{"event_type": "workflow.frozen", "payload": {"actor": "user", "notes": null}}
+{"event_type": "workflow.rolled_back", "payload": {"actor": "user", "notes": null}}
+{"event_type": "workflow.reset", "payload": {"actor": "user", "notes": null}}
