@@ -47,7 +47,7 @@ def _load_schema(name: str) -> Dict[str, Any]:
 
 def _load_policy() -> Dict[str, Any]:
     if not POLICY_FILE.exists():
-        return {"prohibited_patterns": [], "prohibited_keywords": []}
+        return {"prohibited_patterns": [], "terms": []}
     return yaml.safe_load(POLICY_FILE.read_text(encoding="utf-8")) or {}
 
 
@@ -60,7 +60,10 @@ def _scan_text(text: str, policy: Dict[str, Any]) -> List[str]:
         except re.error:
             continue
     lowered = text.lower()
-    for keyword in policy.get("prohibited_keywords", []):
+    terms = policy.get("terms", [])
+    if isinstance(terms, dict):
+        terms = terms.get("include", [])
+    for keyword in terms:
         if keyword.lower() in lowered:
             hits.append(keyword)
     if contains_sensitive_identifiers(text):
@@ -489,17 +492,20 @@ async def build_baseline_snapshot(team_id: str) -> Dict[str, Any]:
     memory_counts: Dict[str, Dict[str, int]] = {}
     agent_entries: List[Dict[str, Any]] = []
     for agent in agents:
-        artifacts = await db.agent_artifacts.find({"agent_id": agent.get("agent_id")}, {"_id": 0}).to_list(10)
-        tasks = await db.agent_tasks.find({"target_agent_id": agent.get("agent_id")}, {"_id": 0}).to_list(10)
+        agent_id = agent.get("agent_id")
+        if not agent_id:
+            continue
+        artifacts = await db.agent_artifacts.find({"agent_id": agent_id}, {"_id": 0}).to_list(10)
+        tasks = await db.agent_tasks.find({"target_agent_id": agent_id}, {"_id": 0}).to_list(10)
         semantic = _build_semantic_entries(agent, artifacts)
         episodic = _build_episodic_entries(agent, tasks)
-        memory_counts[agent.get("agent_id")] = {
+        memory_counts[agent_id] = {
             "semantic": len(semantic),
             "episodic": len(episodic),
         }
         agent_entries.append(
             {
-                "agent_id": agent.get("agent_id"),
+                "agent_id": agent_id,
                 "name": agent.get("agent_name"),
                 "role": agent.get("role"),
                 "semantic": len(semantic),
@@ -539,7 +545,7 @@ async def apply_amc_merge_state(
     baseline = preview.get("baseline")
     imported = preview.get("import")
     merged = preview.get("merged")
-    team_id = merged.get("team_id")
+    team_id = merged.get("team_id") if merged else None
 
     state_update = {
         "team_id": team_id,
