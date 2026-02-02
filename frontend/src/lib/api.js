@@ -420,7 +420,14 @@ export const xaiAPI = {
     api.get(`/xai/evidence-pack/${packId}/similar`, { params }),
 };
 
-// Seed data
+// Seed data APIs
+export const seedAPI = {
+  seed: () => api.post("/seed-data"),
+  seedComprehensive: () => api.post("/seed-comprehensive"),
+  clearAll: () => api.delete("/clear-all-data"),
+};
+
+// Legacy export for backwards compatibility
 export const seedData = () => api.post("/seed-data");
 
 // WebSocket helper

@@ -139,3 +139,143 @@ async def seed_data(
         "battles": 3,
         "rag_docs": len(rag_entries),
     }
+
+
+@router.post("/seed-comprehensive")
+async def seed_comprehensive_data(
+    current_user: dict = Depends(require_permission("seed:write")),
+    db: DatabaseClient = Depends(get_db),
+):
+    """Seed comprehensive demo data for hackathon demo.
+    
+    Populates all collections with realistic data including:
+    - Teams (3)
+    - Agents (5)
+    - Rules (5)
+    - Battles (15)
+    - Run Events (100+)
+    - RSB Packages (2)
+    - Knowledge Nodes (7)
+    - RAG Documents (4)
+    - Agent Artifacts (10)
+    
+    Returns:
+        dict: Detailed seeding summary with counts per collection
+    """
+    from app.seed_data.demo_data_generator import generate_demo_data
+    
+    logger.info("Starting comprehensive data seed")
+    
+    # Generate all demo data
+    data = generate_demo_data()
+    
+    # Clear existing data
+    collections_to_clear = [
+        "teams", "agents", "rules", "battles", "run_events",
+        "rsb_packages", "knowledge_nodes", "rag_documents", "agent_artifacts"
+    ]
+    
+    for coll_name in collections_to_clear:
+        coll = getattr(db, coll_name, None)
+        if coll:
+            result = await coll.delete_many({})
+            logger.info(f"Cleared {coll_name}: {result.deleted_count} documents")
+    
+    # Insert new data
+    counts = {}
+    
+    # Teams
+    if data["teams"]:
+        await db.teams.insert_many(data["teams"])
+        counts["teams"] = len(data["teams"])
+    
+    # Agents
+    if data["agents"]:
+        await db.agents.insert_many(data["agents"])
+        counts["agents"] = len(data["agents"])
+    
+    # Rules
+    if data["rules"]:
+        await db.rules.insert_many(data["rules"])
+        counts["rules"] = len(data["rules"])
+    
+    # Battles (Runs)
+    if data["battles"]:
+        await db.runs.insert_many(data["battles"])
+        counts["battles"] = len(data["battles"])
+    
+    # Run Events
+    if data["run_events"]:
+        await db.run_events.insert_many(data["run_events"])
+        counts["run_events"] = len(data["run_events"])
+    
+    # RSB Packages
+    if data["rsb_packages"]:
+        await db.rsb_packages.insert_many(data["rsb_packages"])
+        counts["rsb_packages"] = len(data["rsb_packages"])
+    
+    # Knowledge Nodes
+    if data["knowledge_nodes"]:
+        await db.knowledge_nodes.insert_many(data["knowledge_nodes"])
+        counts["knowledge_nodes"] = len(data["knowledge_nodes"])
+    
+    # RAG Documents
+    if data["rag_documents"]:
+        await db.rag_documents.insert_many(data["rag_documents"])
+        counts["rag_documents"] = len(data["rag_documents"])
+    
+    # Agent Artifacts
+    if data["agent_artifacts"]:
+        await db.agent_artifacts.insert_many(data["agent_artifacts"])
+        counts["agent_artifacts"] = len(data["agent_artifacts"])
+    
+    logger.info("Comprehensive seed completed", extra={"payload": counts})
+    
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "seed.comprehensive_completed",
+        "seed",
+        "comprehensive",
+        metadata=counts
+    )
+    
+    return {
+        "message": "Comprehensive demo data seeded successfully",
+        "status": "success",
+        "collections_seeded": counts,
+        "total_documents": sum(counts.values())
+    }
+
+
+@router.delete("/clear-all-data")
+async def clear_all_data(
+    current_user: dict = Depends(require_permission("seed:write")),
+    db: DatabaseClient = Depends(get_db),
+):
+    """Clear all data from database (use with caution!)."""
+    
+    collections = [
+        "teams", "agents", "rules", "battles", "runs", "run_events",
+        "rsb_packages", "knowledge_nodes", "rag_documents", "agent_artifacts"
+    ]
+    
+    deleted_counts = {}
+    for coll_name in collections:
+        coll = getattr(db, coll_name, None)
+        if coll:
+            result = await coll.delete_many({})
+            deleted_counts[coll_name] = result.deleted_count
+    
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "seed.clear_all",
+        "seed",
+        "clear",
+        metadata=deleted_counts
+    )
+    
+    return {
+        "message": "All data cleared",
+        "deleted": deleted_counts,
+        "total_deleted": sum(deleted_counts.values())
+    }
