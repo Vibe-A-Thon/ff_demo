@@ -240,6 +240,76 @@ const BattleTimeline = ({ turns, currentTurn, onJumpTo, onHoverTurn }) => {
       })}
     </div>
   );
+// Immunity Timer Component with "Wow" Animation
+const ImmunityTimer = ({ value, isLive }) => {
+  // Value is in minutes, e.g. 3.1
+  const numericValue = parseFloat(value) || 0;
+  const isExcellent = numericValue < 1.0;
+  
+  return (
+    <div className={`relative overflow-hidden rounded-lg border p-4 transition-all duration-500 ${
+      isExcellent 
+        ? 'bg-green-500/10 border-green-500/50 shadow-[0_0_30px_-5px_rgba(34,197,94,0.3)]' 
+        : 'bg-card border-border'
+    }`}>
+      {isExcellent && (
+        <div className="absolute inset-0 bg-green-500/5 animate-pulse" />
+      )}
+      <div className="relative flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Shield className={`h-4 w-4 ${isExcellent ? 'text-green-400' : 'text-muted-foreground'}`} />
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Time to Immunity
+            </span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className={`text-3xl font-mono font-bold tracking-tight ${
+              isExcellent ? 'text-green-400' : 'text-foreground'
+            }`}>
+              {numericValue.toFixed(2)}
+            </span>
+            <span className="text-sm text-muted-foreground">min</span>
+          </div>
+        </div>
+        
+        {/* Visual Gauge */}
+        <div className="w-16 h-16 relative flex items-center justify-center">
+            <svg className="w-full h-full transform -rotate-90">
+              <circle
+                cx="32"
+                cy="32"
+                r="28"
+                stroke="currentColor"
+                strokeWidth="4"
+                fill="none"
+                className="text-muted/20"
+              />
+              <circle
+                cx="32"
+                cy="32"
+                r="28"
+                stroke="currentColor"
+                strokeWidth="4"
+                fill="none"
+                strokeDasharray={175}
+                strokeDashoffset={175 - (175 * Math.max(0, Math.min(1, 1 - (numericValue / 10))))}
+                className={`${isExcellent ? 'text-green-500' : 'text-blue-500'} transition-all duration-1000 ease-out`}
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+               {isLive && <Zap className={`h-5 w-5 ${isExcellent ? 'text-green-400 fill-green-400 animate-bounce' : 'text-muted-foreground'}`} />}
+            </div>
+        </div>
+      </div>
+      
+      {isExcellent && (
+        <div className="absolute bottom-1 right-3 text-[10px] font-mono text-green-400 animate-pulse">
+          IMMUNITY ACHIEVED
+        </div>
+      )}
+    </div>
+  );
 };
 
 const useAnimatedNumber = (value, duration = 800) => {
@@ -2260,15 +2330,23 @@ const WarRoom = () => {
 
         {/* Timeline */}
         <div className="w-72 border-r border-border bg-zinc-900/50 flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-semibold flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              Battle Timeline
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              {selectedBattle?.turns?.length || 0} turns • Turn {currentTurn}
-            </p>
-            <div className="flex flex-wrap gap-2 mt-2">
+          <div className="p-4 border-b border-border space-y-4">
+             {selectedBattle && (
+                <ImmunityTimer 
+                  value={selectedBattle.metrics?.time_to_immunity} 
+                  isLive={isRunning} 
+                />
+             )}
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                Battle Timeline
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {selectedBattle?.turns?.length || 0} turns • Turn {currentTurn}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
               {resolveTeamModel("red") && (
                 <Badge variant="outline" className="border-red-500/50 text-red-300">
                   Red • {resolveModelLabel(resolveTeamModel("red"))}

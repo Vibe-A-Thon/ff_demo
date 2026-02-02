@@ -72,6 +72,44 @@ const badgeStyles = {
   approved: "bg-blue-500/15 text-blue-400 border-blue-500/20",
 };
 
+const LiveTicker = () => {
+  const [offset, setOffset] = useState(0);
+  
+  useEffect(() => {
+    let frame;
+    const animate = () => {
+      setOffset(prev => (prev + 0.5) % 100);
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const items = [
+    "🔥 Red Team launching credential stuffing wave...",
+    "🛡️ Blue Team blocked 94% of ATO attempts in last 5m",
+    "🤖 Agent Sentinel-Blue learning new velocity pattern...",
+    "⚡ RSB-492 Hotfix deployed to production (Time-to-Immunity: 0.8m)",
+    "👁️ Gold Team capturing evidence for Case-1192"
+  ];
+
+  return (
+    <div className="w-full overflow-hidden bg-zinc-900/50 border-y border-border py-1.5 mb-2">
+      <div 
+        className="flex gap-12 whitespace-nowrap text-xs font-mono text-muted-foreground"
+        style={{ transform: `translateX(-${offset}px)` }}
+      >
+        {[...items, ...items, ...items].map((item, i) => (
+          <span key={i} className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 
 const DashboardHome = () => {
   const { user } = useAuth();
@@ -168,6 +206,7 @@ const DashboardHome = () => {
           A consolidated operational view across battles, approvals, and risk posture. Use the quick actions to jump into the most
           critical workflows.
         </p>
+        <LiveTicker />
       </header>
       <ScrollArea className="flex-1">
         <div className="space-y-6 pr-2">

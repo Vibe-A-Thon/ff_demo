@@ -16,17 +16,7 @@ logger = get_logger(__name__)
 
 @router.get("/metrics/dashboard")
 async def get_dashboard_metrics(current_user: dict = Depends(require_permission("metrics:read"))):
-    """Return summary metrics for the dashboard.
-
-    Args:
-        None: This endpoint takes no parameters.
-
-    Returns:
-        dict: Aggregated metrics for battles and rules.
-
-    Raises:
-        None: No explicit exceptions are raised.
-    """
+    """Return summary metrics for the dashboard."""
     runs = await db.runs.find({}, {"_id": 0}).to_list(200)
     run_events = await db.run_events.find({}, {"_id": 0}).sort("created_at", 1).to_list(1000)
     artifacts = await db.agent_artifacts.find({}, {"_id": 0, "run_id": 1}).to_list(2000)
@@ -267,42 +257,41 @@ async def get_performance_metrics(current_user: dict = Depends(require_permissio
         metadata={"rag_samples": rag_count, "graph_samples": graph_count},
     )
     return payload
- 
- @ r o u t e r . g e t ( " / m e t r i c s / a g e n t - e f f e c t i v e n e s s " )  
- a s y n c   d e f   g e t _ a g e n t _ e f f e c t i v e n e s s ( c u r r e n t _ u s e r :   d i c t   =   D e p e n d s ( r e q u i r e _ p e r m i s s i o n ( " m e t r i c s : r e a d " ) ) ) :  
-         " " " R e t u r n   e f f e c t i v e n e s s   m e t r i c s   p e r   a g e n t . " " "  
-         t a s k s   =   a w a i t   d b . a g e n t _ t a s k s . f i n d ( { } ,   { " _ i d " :   0 ,   " t a r g e t _ a g e n t _ i d " :   1 ,   " s t a t u s " :   1 ,   " o u t c o m e " :   1 } ) . t o _ l i s t ( 1 0 0 0 0 )  
-         m e m o r i e s   =   a w a i t   d b . a g e n t _ m e m o r i e s . f i n d ( { } ,   { " _ i d " :   0 ,   " a g e n t _ i d " :   1 } ) . t o _ l i s t ( 1 0 0 0 0 )  
-          
-         a g e n t _ s t a t s   =   { }  
-          
-         f o r   t   i n   t a s k s :  
-                 a i d   =   t . g e t ( " t a r g e t _ a g e n t _ i d " )  
-                 i f   n o t   a i d :   c o n t i n u e  
-                 i f   a i d   n o t   i n   a g e n t _ s t a t s :  
-                         a g e n t _ s t a t s [ a i d ]   =   { " t a s k s " :   0 ,   " s u c c e s s " :   0 ,   " m e m o r i e s " :   0 }  
-                 a g e n t _ s t a t s [ a i d ] [ " t a s k s " ]   + =   1  
-                 i f   t . g e t ( " s t a t u s " )   = =   " c o m p l e t e d " :  
-                           a g e n t _ s t a t s [ a i d ] [ " s u c c e s s " ]   + =   1  
-  
-         f o r   m   i n   m e m o r i e s :  
-                 a i d   =   m . g e t ( " a g e n t _ i d " )  
-                 i f   n o t   a i d :   c o n t i n u e  
-                 i f   a i d   n o t   i n   a g e n t _ s t a t s :  
-                           a g e n t _ s t a t s [ a i d ]   =   { " t a s k s " :   0 ,   " s u c c e s s " :   0 ,   " m e m o r i e s " :   0 }  
-                 a g e n t _ s t a t s [ a i d ] [ " m e m o r i e s " ]   + =   1  
-  
-         p a y l o a d   =   [ ]  
-         f o r   a i d ,   s t a t s   i n   a g e n t _ s t a t s . i t e m s ( ) :  
-                 r a t e   =   ( s t a t s [ " s u c c e s s " ]   /   s t a t s [ " t a s k s " ]   *   1 0 0 )   i f   s t a t s [ " t a s k s " ]   e l s e   0  
-                 p a y l o a d . a p p e n d ( {  
-                         " a g e n t _ i d " :   a i d ,  
-                         " t a s k s _ t o t a l " :   s t a t s [ " t a s k s " ] ,  
-                         " s u c c e s s _ r a t e " :   r o u n d ( r a t e ,   1 ) ,  
-                         " m e m o r i e s _ c r e a t e d " :   s t a t s [ " m e m o r i e s " ]  
-                 } )  
-                  
-         #   E n r i c h   w i t h   a g e n t   n a m e s   i f   p o s s i b l e   ( T e a m   r e g i s t r y ? )  
-         #   F o r   n o w ,   r e t u r n   r a w   I D s .   F r o n t e n d   c a n   m a p   i f   n e e d e d   o r   g o o d   e n o u g h .  
-         r e t u r n   s o r t e d ( p a y l o a d ,   k e y = l a m b d a   x :   x [ " t a s k s _ t o t a l " ] ,   r e v e r s e = T r u e )  
- 
+
+@router.get("/metrics/agent-effectiveness")
+async def get_agent_effectiveness(current_user: dict = Depends(require_permission("metrics:read"))):
+    """Return effectiveness metrics per agent."""
+    tasks = await db.agent_tasks.find({}, {"_id": 0, "target_agent_id": 1, "status": 1, "outcome": 1}).to_list(10000)
+    memories = await db.agent_memories.find({}, {"_id": 0, "agent_id": 1}).to_list(10000)
+
+    agent_stats = {}
+
+    for t in tasks:
+        aid = t.get("target_agent_id")
+        if not aid:
+            continue
+        if aid not in agent_stats:
+            agent_stats[aid] = {"tasks": 0, "success": 0, "memories": 0}
+        agent_stats[aid]["tasks"] += 1
+        if t.get("status") == "completed":
+            agent_stats[aid]["success"] += 1
+
+    for m in memories:
+        aid = m.get("agent_id")
+        if not aid:
+            continue
+        if aid not in agent_stats:
+            agent_stats[aid] = {"tasks": 0, "success": 0, "memories": 0}
+        agent_stats[aid]["memories"] += 1
+
+    payload = []
+    for aid, stats in agent_stats.items():
+        rate = (stats["success"] / stats["tasks"] * 100) if stats["tasks"] else 0
+        payload.append({
+            "agent_id": aid,
+            "tasks_total": stats["tasks"],
+            "success_rate": round(rate, 1),
+            "memories_created": stats["memories"]
+        })
+
+    return sorted(payload, key=lambda x: x["tasks_total"], reverse=True)

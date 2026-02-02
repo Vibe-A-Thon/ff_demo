@@ -405,3 +405,62 @@ async def export_brc(
         metadata={"archive": archive_name},
     )
     return Response(content=payload, media_type="application/octet-stream", headers=headers)
+
+
+@router.post("/runs/{run_id}/kill")
+async def kill_run(
+    run_id: str,
+    current_user: dict = Depends(require_permission("workflow:control")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, str]:
+    """Emergency stop (Kill Switch) for a run.
+
+    Enforces SoD-005: Restricted to TechManager and Bank Admin (and Super Admin).
+
+    Args:
+        run_id: Run identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, str]: Status message.
+
+    Raises:
+        HTTPException: If run not found or permission denied.
+    """
+    # Enforce SoD-005
+    allowed_roles = {"tech_manager", "bank_admin", "admin", "super_admin", "demo_user"}
+    user_role = current_user.get("role", "unknown")
+    if user_role not in allowed_roles:
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Kill Switch is restricted to specific roles. Current role '{user_role}' is not authorized."
+        )
+
+    run = await db.runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.get("status") in {"completed", "failed", "terminated"}:
+        return {"message": f"Run is already {run.get('status')}"}
+
+    await db.runs.update_one(
+        {"id": run_id},
+        {"$set": {"status": "terminated", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    await record_run_event(run_id, "run.terminated", {"reason": "kill_switch_activated", "user": current_user.get("id")})
+    
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "run.killed",
+        "run",
+        run_id,
+        decision="terminated",
+        metadata={"reason": "emergency_stop"},
+    )
+    logger.warning(
+        "run.killed",
+        extra={"payload": {"run_id": run_id, "user": current_user.get("id")}},
+    )
+    return {"message": "Run terminated successfully"}
