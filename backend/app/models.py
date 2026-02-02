@@ -117,6 +117,8 @@ class RSBPackage(BaseModel):
     conflicts: List[Dict[str, Any]] = []
     conflict_resolutions: Dict[str, Any] = {}
     checksum: Optional[str] = None
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
     source_filename: Optional[str] = None
     storage_path: Optional[str] = None
     status: str = "pending"
@@ -153,6 +155,7 @@ class EvidencePack(BaseModel):
     metrics: Dict[str, Any] = {}
     xai_bundle: Optional[Dict[str, Any]] = None
     checksum: str = ""
+    checksum_chain: List[Dict[str, Any]] = []
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 class ApprovalRequest(BaseModel):
@@ -208,6 +211,7 @@ class KnowledgeNode(BaseModel):
     name: str
     data: Dict[str, Any] = {}
     connections: List[str] = []
+    created_by: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 class KnowledgeNodeCreate(BaseModel):

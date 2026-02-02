@@ -106,7 +106,10 @@ export const evidenceAPI = {
   get: (id) => api.get(`/evidence-packs/${id}`),
   generate: (battleId) => api.post(`/evidence-packs/generate/${battleId}`),
   generateRun: (runId) => api.post(`/evidence-packs/generate/run/${runId}`),
-  export: (id, params) => api.get(`/evidence-packs/${id}/export`, { params }),
+  export: (id, params) => {
+    const responseType = params?.format === 'pdf' || params?.format === 'story_pdf' ? 'blob' : undefined;
+    return api.get(`/evidence-packs/${id}/export`, { params, responseType });
+  },
   requestExportApproval: (id, data) =>
     api.post(`/evidence-packs/${id}/request-export-approval`, data),
 };

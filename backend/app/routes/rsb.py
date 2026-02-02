@@ -80,6 +80,9 @@ async def get_rsb_package(
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
+
+    if package.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot approve own patch")
     await record_audit(
         current_user.get("id", "unknown"),
         "rsb.package.read",
@@ -108,6 +111,7 @@ async def create_rsb_package(
         None: No explicit exceptions are raised.
     """
     package = RSBPackage(**package_data.model_dump())
+    package.created_by = current_user.get("id", "unknown")
     rule_id = package.rule_id or package.manifest.get("rule_id")
     if rule_id:
         conflicts = await db.rsb_packages.find({"rule_id": rule_id}, {"_id": 0}).to_list(5)
@@ -250,6 +254,7 @@ async def upload_rsb_package(
                 source_filename=file.filename,
                 status="pending" if validation.get("valid") else "failed",
             )
+            package.created_by = current_user.get("id", "unknown")
 
             if rule_id:
                 conflicts = await db.rsb_packages.find({"rule_id": rule_id}, {"_id": 0}).to_list(5)
@@ -455,6 +460,7 @@ async def apply_rsb_patch(
         "rule_spec_patch": patched_spec,
         "version": manifest.get("rule_version"),
         "storage_path": str(patched_path),
+        "updated_by": current_user.get("id", "unknown"),
     }
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": updates})
@@ -495,12 +501,15 @@ async def merge_rsb_package(
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
 
+    if package.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot merge own package")
+
     if package.get("conflicts") and not package.get("conflict_resolutions"):
         raise HTTPException(status_code=409, detail="Merge conflicts must be resolved before merging")
     if package.get("validation", {}).get("valid") is False:
         raise HTTPException(status_code=400, detail="Package validation failed; fix errors before merge")
 
-    await db.rsb_packages.update_one({"id": package_id}, {"$set": {"status": "merged"}})
+    await db.rsb_packages.update_one({"id": package_id}, {"$set": {"status": "merged", "updated_by": current_user.get("id", "unknown")}})
     await record_audit(
         current_user.get("id", "unknown"),
         "rsb.package.merged",
@@ -536,9 +545,12 @@ async def resolve_rsb_conflicts(
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
 
+    if package.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot resolve own conflicts")
+
     await db.rsb_packages.update_one(
         {"id": package_id},
-        {"$set": {"conflict_resolutions": decisions}},
+        {"$set": {"conflict_resolutions": decisions, "updated_by": current_user.get("id", "unknown")}},
     )
     await record_audit(
         current_user.get("id", "unknown"),
@@ -572,7 +584,9 @@ async def stage_rsb_package(
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
-    await db.rsb_packages.update_one({"id": package_id}, {"$set": {"status": "staged"}})
+    if package.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot stage own package")
+    await db.rsb_packages.update_one({"id": package_id}, {"$set": {"status": "staged", "updated_by": current_user.get("id", "unknown")}})
     await record_audit(
         current_user.get("id", "unknown"),
         "rsb.package.staged",

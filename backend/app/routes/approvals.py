@@ -77,6 +77,8 @@ async def approve_request(approval_id: str, approver_id: str, current_user: dict
     approval = await db.approvals.find_one({"id": approval_id}, {"_id": 0})
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
+    if approval.get("requestor_id") == approver_id:
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot approve own request")
 
     approver_entry = {
         "approver_id": approver_id,
@@ -112,6 +114,8 @@ async def reject_request(approval_id: str, approver_id: str, current_user: dict 
     approval = await db.approvals.find_one({"id": approval_id}, {"_id": 0})
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
+    if approval.get("requestor_id") == approver_id:
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot reject own request")
 
     approver_entry = {
         "approver_id": approver_id,

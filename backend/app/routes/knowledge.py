@@ -50,6 +50,7 @@ async def create_knowledge_node(node_data: KnowledgeNodeCreate, current_user: di
         None: No explicit exceptions are raised.
     """
     node = KnowledgeNode(**node_data.model_dump())
+    node.created_by = current_user.get("id", "unknown")
     await db.knowledge_nodes.insert_one(node.model_dump())
     await record_audit(
         current_user.get("id", "unknown"),
@@ -78,6 +79,12 @@ async def connect_nodes(node_id: str, target_id: str, current_user: dict = Depen
     Raises:
         HTTPException: If the source node does not exist.
     """
+    source = await db.knowledge_nodes.find_one({"id": node_id}, {"_id": 0})
+    target = await db.knowledge_nodes.find_one({"id": target_id}, {"_id": 0})
+    if not source or not target:
+        raise HTTPException(status_code=404, detail="Node not found")
+    if source.get("created_by") == current_user.get("id") or target.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot modify own node")
     result = await db.knowledge_nodes.update_one(
         {"id": node_id},
         {"$addToSet": {"connections": target_id}},
@@ -110,6 +117,11 @@ async def delete_knowledge_node(node_id: str, current_user: dict = Depends(requi
     Raises:
         HTTPException: If the node does not exist.
     """
+    node = await db.knowledge_nodes.find_one({"id": node_id}, {"_id": 0})
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    if node.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot delete own node")
     result = await db.knowledge_nodes.delete_one({"id": node_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Node not found")

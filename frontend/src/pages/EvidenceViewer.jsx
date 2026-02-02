@@ -18,70 +18,62 @@ import {
   Clock,
   Hash,
   Eye,
-  RefreshCw,
-  Folder,
-  CheckCircle2,
-  AlertTriangle,
-  Copy,
-  ExternalLink,
-  Search,
-  GitCompare,
-  FileJson,
-  FileDown,
-  Eraser,
-} from "lucide-react";
-
-const EvidenceViewer = () => {
-  const [evidencePacks, setEvidencePacks] = useState([]);
-  const [selectedPack, setSelectedPack] = useState(null);
-  const [battles, setBattles] = useState([]);
-  const [selectedBattle, setSelectedBattle] = useState("");
-  const [runs, setRuns] = useState([]);
-  const [selectedRun, setSelectedRun] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [testStatusFilter, setTestStatusFilter] = useState("all");
-  const [testQuery, setTestQuery] = useState("");
-  const [logQuery, setLogQuery] = useState("");
-  const [comparePackId, setComparePackId] = useState("");
-  const [redactionEnabled, setRedactionEnabled] = useState(true);
-  const [redactEmails, setRedactEmails] = useState(true);
-  const [redactAccounts, setRedactAccounts] = useState(true);
-  const [redactPhones, setRedactPhones] = useState(false);
-  const [registrySnapshot, setRegistrySnapshot] = useState(null);
-  const [expandedStages, setExpandedStages] = useState({});
-  const [selectedArtifact, setSelectedArtifact] = useState(null);
-  const [artifactDrawerOpen, setArtifactDrawerOpen] = useState(false);
-  const [artifactApprovals, setArtifactApprovals] = useState([]);
-  const [artifactFilter, setArtifactFilter] = useState(null);
-  const [packFilter, setPackFilter] = useState(null);
-  const [ragEvalSummary, setRagEvalSummary] = useState(null);
-  const [ragAlerts, setRagAlerts] = useState([]);
-  const [ragSettings, setRagSettings] = useState(null);
-  const [lineageGraph, setLineageGraph] = useState(null);
-  const [lineageLoading, setLineageLoading] = useState(false);
-  const [lineageTypeFilters, setLineageTypeFilters] = useState({
-    run: true,
-    stage: true,
-    task: true,
-    agent: true,
-    artifact: true,
-    evidence_pack: true,
-  });
-  const [lineageGroupByType, setLineageGroupByType] = useState(true);
-
-  useEffect(() => {
-    loadData();
-    const loadRegistry = async () => {
+    if (format === "pdf") {
       try {
-        const response = await agentAPI.getRegistry();
-        setRegistrySnapshot(response?.data || null);
+        const response = await evidenceAPI.export(selectedPack.id, { format: "pdf" });
+        const blob = new Blob([response.data], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `evidence-pack-${selectedPack.id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Evidence pack PDF exported!");
       } catch (error) {
-        setRegistrySnapshot(null);
+        toast.error("PDF export failed");
       }
-    };
-    loadRegistry();
-  }, []);
+      return;
+    }
+    if (format === "story") {
+      try {
+        const response = await evidenceAPI.export(selectedPack.id, { format: "story" });
+        const data = response.data;
+        const content = data?.data || "";
+        const blob = new Blob([content], { type: "text/markdown" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = data?.filename || `evidence-story-${selectedPack.id}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Story report exported!");
+      } catch (error) {
+        toast.error("Story report export failed");
+      }
+      return;
+    }
+    if (format === "story_pdf") {
+      try {
+        const response = await evidenceAPI.export(selectedPack.id, { format: "story_pdf" });
+        const blob = new Blob([response.data], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `evidence-story-${selectedPack.id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Story report PDF exported!");
+      } catch (error) {
+        toast.error("Story report PDF export failed");
+      }
+      return;
+    }
 
   useEffect(() => {
     const loadRagSummary = async () => {
@@ -694,6 +686,32 @@ const EvidenceViewer = () => {
                   </Button>
                   <Button
                     variant="outline"
+                    onClick={() => exportPackAs("story")}
+                    data-testid="export-story-btn"
+                    data-explain="Export Story Report"
+                    data-explain-title="Story-mode report"
+                    data-explain-summary="Exports a narrative report with stage timeline, diffs, and approvals."
+                    data-explain-rules="EV-021,EV-033"
+                    data-explain-evidence="Timeline,Diffs,Approvals"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Export Story
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => exportPackAs("story_pdf")}
+                    data-testid="export-story-pdf-btn"
+                    data-explain="Export Story PDF"
+                    data-explain-title="Story-mode PDF report"
+                    data-explain-summary="Exports a PDF report with stage timeline, diffs, and approvals."
+                    data-explain-rules="EV-021,EV-033"
+                    data-explain-evidence="Timeline,Diffs,Approvals"
+                  >
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Export Story PDF
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => exportPackAs("pdf")}
                     data-testid="export-pdf-btn"
                     data-explain="Export Evidence PDF"
@@ -966,6 +984,21 @@ const EvidenceViewer = () => {
                               <li key={`${item.case_id}-${idx}`}>
                                 <span className="text-white">{item.case_id}</span>
                                 <div>{item.summary}</div>
+                                {typeof item.similarity === "number" && (
+                                  <div>Similarity: {(item.similarity * 100).toFixed(1)}%</div>
+                                )}
+                                {item.metadata?.evidence_pack_id && (
+                                  <div>Evidence Pack: {item.metadata.evidence_pack_id}</div>
+                                )}
+                                {item.metadata?.matched_rules?.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {item.metadata.matched_rules.map((rule) => (
+                                      <Badge key={rule} variant="outline" className="text-[10px]">
+                                        {rule}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
                               </li>
                             ))}
                             {(!xaiBundle.similar_cases || xaiBundle.similar_cases.length === 0) && (
@@ -988,7 +1021,7 @@ const EvidenceViewer = () => {
               </Card>
 
               {/* XAI Narrative */}
-              <Card className="border-border border-yellow-500/30 bg-yellow-500/5">
+              <Card className="border-yellow-500/30 bg-yellow-500/5">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-yellow-400">
                     <FileText className="h-5 w-5" />

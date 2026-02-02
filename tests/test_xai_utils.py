@@ -15,7 +15,7 @@ def test_build_evidence_items_limit():
 def test_build_explanation_bundle_contains_graph():
     events = [{"event_type": "event", "payload": {}}]
     items = build_evidence_items(events)
-    bundle = build_explanation_bundle("run-1", "review", items)
+    bundle = build_explanation_bundle("run-1", "review", items, {"avg_score": 0.7})
     assert bundle.evidence_graph is not None
     assert bundle.decision_id == "review"
 
@@ -28,5 +28,11 @@ def test_build_evidence_graph_nodes():
 
 
 def test_build_counterfactuals():
-    assert build_counterfactuals("block")[0]["expected_outcome"] == "review"
-    assert build_counterfactuals("review")[0]["expected_outcome"] == "allow"
+    items = build_evidence_items(
+        [
+            {"event_type": "risk", "payload": {"risk_score": 0.9}},
+            {"event_type": "device", "payload": {"device_risk": "high"}},
+        ]
+    )
+    assert build_counterfactuals("block", items)[0]["expected_outcome"] == "review"
+    assert build_counterfactuals("review", items)[0]["expected_outcome"] == "allow"

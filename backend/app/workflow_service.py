@@ -343,6 +343,13 @@ async def decide_workflow(run: Dict[str, Any], actor_id: str, actor_role: Option
     approval_action = approval_rule["approval_action"]
     await ensure_stage_approval(run["id"], state, requestor_id=actor_id)
 
+    approval = await db.approvals.find_one(
+        {"resource_type": "run", "resource_id": run["id"], "action": state},
+        {"_id": 0},
+    )
+    if approval and approval.get("requestor_id") == actor_id:
+        return state, {"message": "SoD violation: requester cannot approve own request"}
+
     await db.approvals.update_one(
         {"resource_type": "run", "resource_id": run["id"], "action": state},
         {

@@ -1,61 +1,58 @@
 # Fraud Forge — Current Status Update
 
-> Scope: Status snapshot based on the current workspace implementation and the full requirements corpus.
-
-## Sources Reviewed (requirements + plans)
+## Overall Progress
+- **Estimated completion:** **78%**
+- **Completed:** **78%**
+- **Pending:** **22%**
 - [agentic-fraud-defense.md](agentic-fraud-defense.md)
-- [AI_DEV_plan_c.md](AI_DEV_plan_c.md)
 - [AI_DEV_plan_cp.md](AI_DEV_plan_cp.md)
-- [AI_DEV_plan_ds.md](AI_DEV_plan_ds.md)
 - [AI_DEV_requirements_c.md](AI_DEV_requirements_c.md)
-- [AI_DEV_requirements_cp.md](AI_DEV_requirements_cp.md)
-- [AI_DEV_requirements_ds.md](AI_DEV_requirements_ds.md)
-- [app_DEV_Instructions_Plan.md](app_DEV_Instructions_Plan.md)
+- **Action-level RBAC + SoD enforcement** — **80%**
+  - SoD enforced for visual patch actions, brain surgery edits, approvals, and exports; UI warnings still partial.
 - [app_RAG_Implementation.md](app_RAG_Implementation.md)
 - [app_requirements.md](app_requirements.md)
-- [banking_fraud_taxonomy_catalog_120.json](banking_fraud_taxonomy_catalog_120.json)
-- [c_implement_RAG_Plan.md](c_implement_RAG_Plan.md)
-- [c_resources_RAG.md](c_resources_RAG.md)
-- [Coding_Standards.md](Coding_Standards.md)
+### 10) XAI / Explainability
+- **Explanation bundles (Gold Team)** — **75%**
+  - Explanation bundle exists; used by evidence viewer and RSB viewer.
+- **Evidence graph + counterfactuals + similar cases** — **100%**
+  - Counterfactuals and similar-case retrieval now derived from real evidence packs and telemetry.
 - [Current_Status.md](Current_Status.md)
-- [design_guidelines.json](design_guidelines.json)
-- [FF_TEAM_AGENTS.md](FF_TEAM_AGENTS.md)
-- [Fraud_Forge_Winning_Highlights.md](Fraud_Forge_Winning_Highlights.md)
-- [Fraud_Groups.md](Fraud_Groups.md)
-- [implementation_Plan_Agents.md](implementation_Plan_Agents.md)
-- [implementation_Plan_do.md](implementation_Plan_do.md)
+### 11) Evidence Packs
+- **Evidence pack generation (battle + run)** — **80%**
+  - Packs include narrative, artifacts, approvals, checksum, and story reports.
+- **Export + redaction controls** — **90%**
+  - JSON/PDF export and story-mode export implemented; external approval enforced.
+- **Full provenance chain + evidence lineage graph** — **90%**
+  - Persistent artifacts and lineage graph across war-loop stages and evidence packs; checksum chain added.
 - [implementation_Plan_sub_Agents.md](implementation_Plan_sub_Agents.md)
-- [implement_AIXAI_Plan.md](implement_AIXAI_Plan.md)
-- [implement_Multi_RAG_Plan.md](implement_Multi_RAG_Plan.md)
-- [integrations_config.json](integrations_config.json)
-- [RBAC.md](RBAC.md)
+### 14) Demo & Hackathon Readiness
+- **Demo mode (wow factor + replay)** — **85%**
+  - Demo controls present; deterministic replay wired with seeded outputs.
+- **Story mode report + evidence export** — **100%**
+  - Story-mode report export (markdown + PDF) implemented and auto-attached to evidence packs.
 - [resources_RAG.md](resources_RAG.md)
-- [requirements_Agents.md](requirements_Agents.md)
-- [requirements_AIXAI.md](requirements_AIXAI.md)
+- Evidence pack PDF export + signed checksum chain.
+- Counterfactuals + similar-case retrieval linked to real evidence packs.
+- Story-mode report export with stage timeline + diffs + approvals (including War Room export).
+- SoD enforcement for visual patch actions, brain surgery edits, approvals, and exports.
 - [requirements_do.md](requirements_do.md)
 - [requirements_sub_Agents.md](requirements_sub_Agents.md)
-- [RSB_Format_Understanding.md](RSB_Format_Understanding.md)
-- [UIX_DEV_Instructions_Plan.md](UIX_DEV_Instructions_Plan.md)
-- [UIX_requirements.md](UIX_requirements.md)
+2. **Operational KPI wiring** from real run telemetry (not mock).
+3. **Regression tests** for deterministic replay + lineage integrity.
 - [VS_Impl_requirements_FF_Plan.md](VS_Impl_requirements_FF_Plan.md)
 - [VS_requirements_FF.md](VS_requirements_FF.md)
-
----
-
+2. **Counterfactuals + similar-case retrieval** linked to real evidence, not templates. — **Complete**
+3. **Story-mode report export** with stage timeline + diffs + approvals. — **Complete**
+4. **Evidence pack polish** (PDF export + signed checksum chain). — **Complete**
 ## Overall Progress
-- **Estimated completion:** **70%**
-- **Completed:** **70%**
-- **Pending:** **30%**
-
-> Notes: UI coverage is broad but many flows are still mock or synthetic. Core pipelines (APMC and production-grade governance) are incomplete. RAG systems are complete.
-
----
+- **Governance SoD enforcement:** 20% pending
+- **Demo story-mode automation:** 0% pending
 
 ## Feature / Requirement Completion Matrix
 
 ### 1) Platform Foundations
 - **Backend FastAPI scaffolding + route coverage** — **80%**
-  - Auth, battles, runs, workflow, agents, RSB, RAG, evidence, XAI, knowledge routes exist.
+5. Extend **story-mode exports** into automated demo scripts (optional).
 - **Frontend React shell + routing + screen coverage** — **85%**
   - Core screens implemented; several use mock data or placeholder APIs.
 - **Docker/compose baseline** — **60%**

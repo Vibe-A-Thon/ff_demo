@@ -9,7 +9,13 @@ from app.audit import record_audit
 from app.security import require_permission
 from app.deps import get_db, get_llm_client
 from app.config import get_integration_setting
-from app.xai_utils import build_evidence_items, build_explanation_bundle
+from app.xai_utils import (
+    build_evidence_items,
+    build_explanation_bundle,
+    build_case_signature,
+    build_pack_signature,
+    score_case_similarity,
+)
 from app.run_helpers import record_run_event
 
 router = APIRouter()
@@ -55,7 +61,7 @@ async def explain_run(
     decision = run.get("last_decision", "monitor")
     events = await db.run_events.find({"run_id": run_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
     evidence_items = build_evidence_items(events)
-    bundle = build_explanation_bundle(run_id, decision, evidence_items)
+    bundle = build_explanation_bundle(run_id, decision, evidence_items, run.get("last_metrics", {}))
 
     if llm_client:
         try:
@@ -79,18 +85,38 @@ async def explain_run(
         except Exception:
             pass
 
+    current_signature = build_case_signature(
+        run_id,
+        decision,
+        events,
+        evidence_items,
+        run.get("last_metrics", {}),
+    )
     similar_cases = []
-    packs = await db.evidence_packs.find({}, {"_id": 0}).sort("created_at", -1).to_list(3)
+    packs = await db.evidence_packs.find({}, {"_id": 0}).sort("created_at", -1).to_list(50)
     for pack in packs:
+        if pack.get("run_id") == run_id:
+            continue
+        candidate_signature = build_pack_signature(pack)
+        similarity, details = score_case_similarity(current_signature, candidate_signature)
+        if similarity < 0.2:
+            continue
         similar_cases.append(
             {
                 "case_id": pack.get("id"),
                 "summary": pack.get("narrative", "Evidence pack summary"),
-                "similarity": 0.82,
-                "metadata": {"battle_id": pack.get("battle_id")},
+                "similarity": similarity,
+                "metadata": {
+                    "run_id": pack.get("run_id"),
+                    "battle_id": pack.get("battle_id"),
+                    "evidence_pack_id": pack.get("id"),
+                    "matched_rules": details.get("matched_rules", []),
+                    "score_breakdown": details,
+                },
             }
         )
-    bundle.similar_cases = similar_cases
+    similar_cases.sort(key=lambda item: item.get("similarity", 0), reverse=True)
+    bundle.similar_cases = similar_cases[:5]
 
     await record_run_event(
         run_id,

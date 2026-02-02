@@ -10,7 +10,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
-import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI, agentAPI, ragAPI, settingsAPI, llmAPI } from "../lib/api";
+import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI, agentAPI, ragAPI, settingsAPI, llmAPI, evidenceAPI } from "../lib/api";
 import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
 import {
@@ -37,6 +37,8 @@ import {
   Undo2,
   RefreshCcw,
   Sparkles,
+  FileText,
+  FileDown,
 } from "lucide-react";
 
 // Thinking Visualizer Component with Streaming
@@ -1124,6 +1126,50 @@ const WarRoom = () => {
     }
   }, [workflowRunId]);
 
+  const handleExportStory = useCallback(async (format) => {
+    if (!workflowRunId) {
+      toast.error("Start a lifecycle run first");
+      return;
+    }
+    try {
+      const packResponse = await evidenceAPI.generateRun(workflowRunId);
+      const packId = packResponse?.data?.id;
+      if (!packId) {
+        toast.error("Failed to create evidence pack");
+        return;
+      }
+      if (format === "story_pdf") {
+        const response = await evidenceAPI.export(packId, { format: "story_pdf" });
+        const blob = new Blob([response.data], { type: "application/pdf" });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `evidence-story-${packId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        toast.success("Story report PDF exported");
+        return;
+      }
+      const response = await evidenceAPI.export(packId, { format: "story" });
+      const data = response.data;
+      const content = data?.data || "";
+      const blob = new Blob([content], { type: "text/markdown" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = data?.filename || `evidence-story-${packId}.md`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Story report exported");
+    } catch (error) {
+      toast.error("Failed to export story report");
+    }
+  }, [workflowRunId]);
+
   useEffect(() => {
     if (lifecycleAutoRef.current) return;
     const params = new URLSearchParams(location.search);
@@ -1577,6 +1623,26 @@ const WarRoom = () => {
               >
                 <RotateCcw className="h-4 w-4" />
                 Replay
+              </Button>
+              <Button
+                variant="secondary"
+                className="gap-2"
+                onClick={() => handleExportStory("story")}
+                disabled={!workflowRunId}
+                data-testid="war-room-story-export"
+              >
+                <FileText className="h-4 w-4" />
+                Export Story
+              </Button>
+              <Button
+                variant="secondary"
+                className="gap-2"
+                onClick={() => handleExportStory("story_pdf")}
+                disabled={!workflowRunId}
+                data-testid="war-room-story-export-pdf"
+              >
+                <FileDown className="h-4 w-4" />
+                Export Story PDF
               </Button>
               <Button
                 variant="secondary"

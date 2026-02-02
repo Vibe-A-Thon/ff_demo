@@ -6,11 +6,15 @@ Generate and retrieve evidence packs for battles and runs.
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
+from io import BytesIO
 from app.db import db
 from app.core.logging_config import get_logger
 from app.models import EvidencePack, EvidenceExportApprovalRequest, ApprovalRequest
 from app.xai_utils import build_evidence_items, build_explanation_bundle
-from app.audit import record_audit, redact_evidence_pack, compute_checksum
+from app.audit import record_audit, redact_evidence_pack, compute_checksum, build_checksum_chain_entry
+from app.pdf_utils import build_evidence_pack_pdf, build_story_report_pdf
+from app.story_report import build_story_report, build_story_markdown
 from app.security import require_permission
 
 router = APIRouter()
@@ -268,12 +272,26 @@ async def generate_evidence_pack(battle_id: str, current_user: dict = Depends(re
     ]
     decision = "review" if battle.get("turns") else "monitor"
     evidence_items = build_evidence_items(events)
-    xai_bundle = build_explanation_bundle(battle_id, decision, evidence_items)
+    xai_bundle = build_explanation_bundle(battle_id, decision, evidence_items, None)
     pack_data["xai_bundle"] = xai_bundle.model_dump()
+
+    approvals = await _fetch_approvals(None, None)
+    story_report = build_story_report(pack_data, None, events, approvals)
+    story_markdown = build_story_markdown(story_report)
 
     pack = EvidencePack(**pack_data)
     pack_dict = pack.model_dump()
     pack_dict["checksum"] = compute_checksum(pack_dict)
+    pack_dict["story_report"] = story_report
+    pack_dict["story_markdown"] = story_markdown
+    pack_dict["checksum_chain"] = [
+        build_checksum_chain_entry(
+            {**pack_dict, "checksum_chain": []},
+            previous_hash=None,
+            signer_id="system",
+            context={"action": "pack.generated", "source": "battle"},
+        )
+    ]
 
     await db.evidence_packs.insert_one(pack_dict)
     await record_audit(
@@ -320,7 +338,7 @@ async def generate_evidence_pack_from_run(run_id: str, current_user: dict = Depe
 
     decision = run.get("last_decision", "monitor")
     evidence_items = build_evidence_items(events)
-    xai_bundle = build_explanation_bundle(run_id, decision, evidence_items)
+    xai_bundle = build_explanation_bundle(run_id, decision, evidence_items, run.get("last_metrics", {}))
 
     approvals = await _fetch_approvals(run_id, None)
     llm_events = await db.audit_logs.find(
@@ -361,9 +379,22 @@ async def generate_evidence_pack_from_run(run_id: str, current_user: dict = Depe
         "llm_model_pins": list(model_pins.values()),
     }
 
+    story_report = build_story_report(pack_data, run, events, approvals)
+    story_markdown = build_story_markdown(story_report)
+
     pack = EvidencePack(**pack_data)
     pack_dict = pack.model_dump()
     pack_dict["checksum"] = compute_checksum(pack_dict)
+    pack_dict["story_report"] = story_report
+    pack_dict["story_markdown"] = story_markdown
+    pack_dict["checksum_chain"] = [
+        build_checksum_chain_entry(
+            {**pack_dict, "checksum_chain": []},
+            previous_hash=None,
+            signer_id="system",
+            context={"action": "pack.generated", "source": "run"},
+        )
+    ]
 
     await db.evidence_packs.insert_one(pack_dict)
     await record_audit(
@@ -380,7 +411,13 @@ async def generate_evidence_pack_from_run(run_id: str, current_user: dict = Depe
     return pack_dict
 
 @router.get("/evidence-packs/{pack_id}/export")
-async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_id: str | None = None, current_user: dict = Depends(require_permission("evidence:read"))) -> Dict[str, Any]:
+async def export_evidence_pack(
+    pack_id: str,
+    mode: str = "internal",
+    format: str = "json",
+    requestor_id: str | None = None,
+    current_user: dict = Depends(require_permission("evidence:read")),
+) -> Dict[str, Any]:
     pack = await db.evidence_packs.find_one({"id": pack_id}, {"_id": 0})
     if not pack:
         raise HTTPException(status_code=404, detail="Evidence pack not found")
@@ -388,7 +425,12 @@ async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_i
     if mode not in {"internal", "external"}:
         raise HTTPException(status_code=400, detail="Invalid export mode")
 
+    if format not in {"json", "pdf", "story", "story_pdf"}:
+        raise HTTPException(status_code=400, detail="Invalid export format")
+
     if mode == "external":
+        if requestor_id and requestor_id == current_user.get("id"):
+            raise HTTPException(status_code=403, detail="SoD violation: requester cannot export own evidence")
         approval = await db.approvals.find_one(
             {
                 "resource_type": "evidence_pack",
@@ -403,6 +445,29 @@ async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_i
 
     pack["approvals"] = await _fetch_approvals(pack.get("run_id"), pack_id)
     redacted_pack = redact_evidence_pack(pack, mode)
+    chain = pack.get("checksum_chain", [])
+    previous_hash = chain[-1]["payload_hash"] if chain else None
+    export_context = {
+        "action": "pack.exported",
+        "mode": mode,
+        "format": format,
+        "requestor_id": requestor_id,
+    }
+    export_entry = build_checksum_chain_entry(
+        {
+            "pack_id": pack_id,
+            "checksum": pack.get("checksum", ""),
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "mode": mode,
+            "format": format,
+        },
+        previous_hash=previous_hash,
+        signer_id=current_user.get("id", "system"),
+        context=export_context,
+    )
+    chain.append(export_entry)
+    await db.evidence_packs.update_one({"id": pack_id}, {"$set": {"checksum_chain": chain}})
+    redacted_pack["checksum_chain"] = chain
     await record_audit(
         current_user.get("id", "unknown"),
         "evidence_pack.exported",
@@ -426,6 +491,44 @@ async def export_evidence_pack(pack_id: str, mode: str = "internal", requestor_i
             decision=mode,
             metadata={"mode": mode, "evidence_links": [f"evidence_pack:{pack_id}"]},
         )
+
+    if format == "pdf":
+        pdf_bytes = build_evidence_pack_pdf(redacted_pack)
+        filename = f"evidence_pack_{pack_id}.pdf"
+        return StreamingResponse(
+            BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    if format in {"story", "story_pdf"}:
+        run = None
+        events = []
+        if pack.get("run_id"):
+            run = await db.runs.find_one({"id": pack.get("run_id")}, {"_id": 0})
+            events = await db.run_events.find({"run_id": pack.get("run_id")}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+        else:
+            events = pack.get("logs", [])
+        approvals = await _fetch_approvals(pack.get("run_id"), pack_id)
+        report = build_story_report(redacted_pack, run, events, approvals)
+        markdown = build_story_markdown(report)
+        if format == "story_pdf":
+            pdf_bytes = build_story_report_pdf(report)
+            filename = f"evidence_story_{pack_id}.pdf"
+            return StreamingResponse(
+                BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename={filename}"},
+            )
+        return {
+            "filename": f"evidence_story_{pack_id}.md",
+            "content_type": "text/markdown",
+            "data": markdown,
+            "report": report,
+            "checksum": pack.get("checksum", ""),
+            "export_mode": mode,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     return {
         "filename": f"evidence_pack_{pack_id}.json",

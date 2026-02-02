@@ -2,6 +2,9 @@
 
 import json
 import hashlib
+import hmac
+import os
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from app.db import db
 from app.models import AuditLogEntry
@@ -111,3 +114,53 @@ def compute_checksum(payload: Dict[str, Any]) -> str:
         None: No explicit exceptions are raised.
     """
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _get_chain_secret() -> str:
+    return os.environ.get("EVIDENCE_CHAIN_SECRET") or os.environ.get("JWT_SECRET_KEY", "default_secret")
+
+
+def sign_checksum(payload_hash: str, previous_hash: str | None = None, secret: str | None = None) -> str:
+    """Sign a checksum hash with an HMAC signature.
+
+    Args:
+        payload_hash: Current payload hash.
+        previous_hash: Previous hash in chain.
+        secret: Optional signing secret.
+
+    Returns:
+        str: HMAC signature.
+    """
+    chain_secret = (secret or _get_chain_secret()).encode()
+    message = f"{payload_hash}:{previous_hash or ''}".encode()
+    return hmac.new(chain_secret, message, hashlib.sha256).hexdigest()
+
+
+def build_checksum_chain_entry(
+    payload: Dict[str, Any],
+    previous_hash: str | None = None,
+    signer_id: str = "system",
+    context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Build a signed checksum chain entry.
+
+    Args:
+        payload: Payload to checksum.
+        previous_hash: Previous chain hash.
+        signer_id: Actor identifier.
+        context: Optional context metadata.
+
+    Returns:
+        Dict[str, Any]: Chain entry.
+    """
+    payload_hash = compute_checksum(payload)
+    signature = sign_checksum(payload_hash, previous_hash)
+    return {
+        "payload_hash": payload_hash,
+        "previous_hash": previous_hash,
+        "signature": signature,
+        "algorithm": "HMAC-SHA256",
+        "signer_id": signer_id,
+        "context": context or {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
