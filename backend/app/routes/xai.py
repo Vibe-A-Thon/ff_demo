@@ -277,7 +277,7 @@ async def generate_commentary(
     current_user: dict = Depends(require_permission("xai:write")),
     llm_client: LLMClient | None = Depends(get_llm_client),
 ):
-    """Generate UI commentary text.
+    """Generate UI commentary text with self-learning.
 
     Args:
         payload: Commentary payload.
@@ -285,16 +285,25 @@ async def generate_commentary(
 
     Returns:
         CommentorResponse: Generated commentary.
-
-    Raises:
-        None: No explicit exceptions are raised.
     """
+    from app.core.agent_learning import LEARNING_ENGINE
+    
     now = datetime.now(timezone.utc).isoformat()
     highlights = ", ".join(payload.highlights[:6]) if payload.highlights else "key activity updates"
+    
+    # Self-Learning: Recall
+    lessons = await LEARNING_ENGINE.recall_lessons("commentor", "gold", f"{payload.screen} {payload.role}")
+    lesson_context = ""
+    if lessons:
+        lesson_context = "\nPast successful commentaries:\n" + "\n".join(
+            [f"- {l['content']}" for l in lessons]
+        )
+
     prompt = (
         "You are The Commentor, an explainability agent. "
         "Describe what is happening on the current screen in 2-3 concise sentences, present tense. "
         "Do not invent sensitive identifiers or personal data. "
+        f"{lesson_context}\n"
         f"Screen: {payload.screen}. Role: {payload.role}. "
         f"Summary: {payload.summary or 'Operational overview.'}. "
         f"Highlights: {highlights}."
@@ -312,6 +321,15 @@ async def generate_commentary(
                 max_tokens=120,
             )
             text = text.strip()
+            # Record lesson
+            await LEARNING_ENGINE.record_lesson(
+                agent_id="commentor",
+                team_id="gold",
+                task_type=payload.screen,
+                content=text,
+                outcome="success",
+                confidence=0.9
+            )
             logger.info(
                 "xai.commentary.generated",
                 extra={"payload": {"screen": payload.screen, "generated_by": "openai"}},

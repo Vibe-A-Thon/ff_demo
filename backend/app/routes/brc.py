@@ -12,7 +12,10 @@ from __future__ import annotations
 
 from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
-from fastapi.responses import Response, StreamingResponse
+try:
+    from fastapi.responses import Response, StreamingResponse
+except ModuleNotFoundError:
+    from starlette.responses import Response, StreamingResponse
 
 from app.audit import record_audit
 from app.core.logging_config import get_logger

@@ -15,6 +15,7 @@ from app.tooling import TOOL_IMPLEMENTATIONS, derive_seed, rng
 from app.config import get_integration_setting
 from app.deps import get_llm_service
 from app.rag_utils import contains_sensitive_identifiers
+from app.core.agent_learning import LEARNING_ENGINE
 
 DEFAULT_REGISTRY = AgentRegistry.from_defaults()
 
@@ -368,20 +369,25 @@ class BaseAgent:
         return AgentTrace(agent_id=self.agent_id, team_id=self.team_id, plan=plan_steps, outputs=outputs, notes=notes)
 
     async def run_task(self, task: AgentTask) -> AgentResult:
-        """Run an agent task with deterministic outputs.
+        """Run an agent task with deterministic outputs and self-learning capabilities.
 
         Args:
             task: Agent task payload.
 
         Returns:
             AgentResult: Deterministic task result.
-
-        Raises:
-            None: No explicit exceptions are raised.
         """
         trace_info = _build_trace_ids(task, self.agent_id)
         validation_issues = await self.validate_task(task)
         if validation_issues:
+            await LEARNING_ENGINE.record_lesson(
+                self.agent_id,
+                self.team_id,
+                task.task_type,
+                f"Task failed validation: {', '.join(validation_issues)}",
+                outcome="failure",
+                confidence=0.0
+            )
             return AgentResult(
                 status="failed",
                 outputs=[],
@@ -393,12 +399,23 @@ class BaseAgent:
 
         seed = _derive_task_seed(task, self.agent_id)
         await self.pre_execute(task, seed)
+        
+        # Self-Learning: Recall past lessons
+        task_desc = f"{task.task_type} {task.params.get('objective', '')}"
+        lessons = await LEARNING_ENGINE.recall_lessons(self.agent_id, self.team_id, task_desc)
+        lesson_context = ""
+        if lessons:
+            lesson_context = "\nStrategy Improvements from Past Lessons:\n" + "\n".join(
+                [f"- {l['content']} (Outcome: {l['outcome']}, Confidence: {l.get('confidence', 0):.2f})" for l in lessons]
+            )
+
         llm_service = get_llm_service()
         llm_summary: str | None = None
         try:
             prompt = (
                 "You are an AI agent in Fraud Forge. Summarize the task output in 1-2 sentences. "
-                "Keep it synthetic and defensive.\n"
+                "Keep it synthetic and defensive. Incorporate lessons if applicable.\n"
+                f"{lesson_context}\n"
                 f"Team: {task.team_id}. Task: {task.task_type}. Objective: {task.params.get('objective', 'N/A')}."
             )
             llm_summary = await llm_service.generate(
@@ -418,7 +435,9 @@ class BaseAgent:
         except Exception:
             llm_summary = None
         try:
-            plan_steps = await self.plan({"task": task.model_dump()})
+            # Plan and Act with potential context injection in future
+            plan_context = {"task": task.model_dump(), "lessons": lessons}
+            plan_steps = await self.plan(plan_context)
             outputs = await self.act(plan_steps, seed)
             notes = await self.reflect(outputs)
         except Exception as exc:
@@ -465,11 +484,23 @@ class BaseAgent:
             artifacts.append(artifact)
             decision_trace.append(f"generated {artifact_type}")
 
+        # Self-Learning: Record the success
+        quality_score = round(rng(seed).uniform(0.72, 0.95), 2)
+        if llm_summary:
+             await LEARNING_ENGINE.record_lesson(
+                 self.agent_id,
+                 self.team_id,
+                 task.task_type,
+                 f"Successfully executed {task.task_type}: {llm_summary}",
+                 outcome="success",
+                 confidence=quality_score
+             )
+
         result = AgentResult(
             status="success",
             outputs=artifacts,
             metrics={
-                "quality": round(rng(seed).uniform(0.72, 0.95), 2),
+                "quality": quality_score,
                 "latency_ms": int(rng(seed).uniform(120, 680)),
                 "seed": seed,
                 "llm": bool(llm_summary),

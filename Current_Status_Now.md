@@ -129,6 +129,7 @@
 | Team registry (8 teams) | 100% | ✅ | Full metadata and registry |
 | Agent registry (56 agents) | 100% | ✅ | Complete roster with contracts |
 | BaseAgent runtime | 100% | ✅ | Deterministic task IDs, artifacts |
+| Self-Learning Capability | 100% | ✅ | Memory recall & outcome recording |
 | Task routing & inter-team requests | 90% | 🟢 | Routing APIs implemented |
 | Multi-team orchestration | 90% | 🟢 | Lineage chaining implemented |
 | Artifact persistence | 95% | 🟢 | Versioned artifacts with lineage |
@@ -152,9 +153,9 @@
 - ✅ Task routing to teams and specific agents
 - ✅ Cross-team request/response logging
 - ✅ Agent status and progress events
+- ✅ Enhanced agent learning from outcomes (Memory + Reflection)
 
 **Pending Tasks:**
-- ⏳ Enhanced agent learning from outcomes
 - ⏳ Agent effectiveness metrics dashboard
 
 ---
@@ -611,6 +612,11 @@
 - ✅ `frontend/src/pages/BattleReplay.jsx` (Replay UI + Actions)
 - ✅ `backend/app/services/capsules/brc/schemas/*` (Validation schemas)
 - ✅ `backend/app/services/capsules/brc/policies/*` (Safety policies)
+
+### New Components (This Session - Self-Learning Agents)
+- ✅ `backend/app/core/agent_learning.py` (Learning Engine)
+- ✅ `backend/app/agents.py` (Self-Learning BaseAgent Runtime)
+- ✅ `backend/app/routes/xai.py` (Self-Learning Commentor)
 
 ---
 
