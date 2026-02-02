@@ -126,6 +126,23 @@ export const amcAPI = {
     }),
 };
 
+// PEP APIs
+export const pepAPI = {
+  export: (data) => api.post('/pep/export', data, { responseType: 'blob' }),
+  validate: (formData) =>
+    api.post('/pep/validate', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  preview: (formData) =>
+    api.post('/pep/preview', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  import: (formData) =>
+    api.post('/pep/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
 // Evidence Pack APIs
 export const evidenceAPI = {
   getAll: () => api.get('/evidence-packs'),

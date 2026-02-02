@@ -6,7 +6,7 @@ import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { ScrollArea } from "../components/ui/scroll-area";
-import { amcAPI, teamAPI } from "../lib/api";
+import { amcAPI, pepAPI, teamAPI } from "../lib/api";
 import { toast } from "sonner";
 import { Download, Upload, FileDiff, ShieldCheck, FolderOpen, RefreshCw } from "lucide-react";
 
@@ -30,6 +30,10 @@ const downloadBlob = (blob, filename) => {
 const AmcManager = () => {
   const [teams, setTeams] = useState([]);
   const [catalog, setCatalog] = useState([]);
+  const [pepTeams, setPepTeams] = useState([]);
+  const [pepExporting, setPepExporting] = useState(false);
+  const [pepIncludeEval, setPepIncludeEval] = useState(false);
+  const [pepIncludeModels, setPepIncludeModels] = useState(false);
   const [teamId, setTeamId] = useState("");
   const [envTag, setEnvTag] = useState("sandbox");
   const [scope, setScope] = useState(DEFAULT_SCOPE);
@@ -51,6 +55,7 @@ const AmcManager = () => {
         setTeams(response?.data || []);
         if (response?.data?.length) {
           setTeamId(response.data[0].team_id);
+          setPepTeams(response.data.map((team) => team.team_id));
         }
       } catch (error) {
         setTeams([]);
@@ -96,6 +101,29 @@ const AmcManager = () => {
       toast.error("AMC export failed.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handlePepExport = async () => {
+    if (!pepTeams.length) {
+      toast.error("Select at least one team for PEP export.");
+      return;
+    }
+    setPepExporting(true);
+    try {
+      const response = await pepAPI.export({
+        team_ids: pepTeams,
+        env_tag: envTag,
+        include_eval_suite: pepIncludeEval,
+        include_model_bundle: pepIncludeModels,
+      });
+      const filename = response?.headers?.["content-disposition"]?.split("filename=")?.[1]?.replace(/"/g, "") || "pep_pack.zip";
+      downloadBlob(response.data, filename);
+      toast.success("PEP export ready.");
+    } catch (error) {
+      toast.error("PEP export failed.");
+    } finally {
+      setPepExporting(false);
     }
   };
 
@@ -261,6 +289,62 @@ const AmcManager = () => {
                   <Download className="mr-2 h-4 w-4" /> {exporting ? "Exporting..." : "Export AMC"}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-card mt-6" data-testid="pep-export-card">
+            <CardHeader>
+              <CardTitle>Portable Evolution Pack (PEP)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-xs text-muted-foreground">Teams Included</label>
+                  <div className="mt-2 space-y-2">
+                    {teams.map((team) => (
+                      <label key={team.team_id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={pepTeams.includes(team.team_id)}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setPepTeams((prev) =>
+                              checked ? [...prev, team.team_id] : prev.filter((id) => id !== team.team_id)
+                            );
+                          }}
+                          data-testid={`pep-team-${team.team_id}`}
+                        />
+                        {team.bank_facing_name || team.internal_name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Options</label>
+                  <div className="mt-2 space-y-2 text-sm text-muted-foreground">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={pepIncludeEval}
+                        onChange={(event) => setPepIncludeEval(event.target.checked)}
+                        data-testid="pep-include-eval"
+                      />
+                      Include synthetic eval suite
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={pepIncludeModels}
+                        onChange={(event) => setPepIncludeModels(event.target.checked)}
+                        data-testid="pep-include-models"
+                      />
+                      Include model bundle
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <Button onClick={handlePepExport} disabled={pepExporting} data-testid="pep-export-run">
+                <Download className="mr-2 h-4 w-4" /> {pepExporting ? "Exporting..." : "Export PEP"}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

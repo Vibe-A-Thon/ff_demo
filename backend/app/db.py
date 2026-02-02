@@ -28,6 +28,8 @@ async def init_database() -> None:
     await db.amc_packages.create_index([("id", ASCENDING)], unique=True)
     await db.amc_packages.create_index([("team_id", ASCENDING), ("created_at", ASCENDING)])
     await db.amc_states.create_index([("team_id", ASCENDING)], unique=True)
+    await db.pep_packs.create_index([("id", ASCENDING)], unique=True)
+    await db.pep_packs.create_index([("created_at", ASCENDING)])
     await db.evidence_packs.create_index([("id", ASCENDING)], unique=True)
     await db.knowledge_nodes.create_index([("id", ASCENDING)], unique=True)
     await db.rag_documents.create_index([("id", ASCENDING)], unique=True)

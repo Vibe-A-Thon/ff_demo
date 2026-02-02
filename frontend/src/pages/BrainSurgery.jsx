@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../c
 import { Switch } from "../components/ui/switch";
 import { Progress } from "../components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { knowledgeAPI, ragAPI, settingsAPI, agentAPI, graphAPI, evidenceAPI } from "../lib/api";
+import { knowledgeAPI, ragAPI, settingsAPI, agentAPI, graphAPI, evidenceAPI, amcAPI, pepAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   Plus,
@@ -26,6 +26,8 @@ import {
   Lock,
   Lightbulb,
   AlertTriangle,
+  Upload,
+  FileDiff,
 } from "lucide-react";
 
 const nodeColors = {
@@ -91,9 +93,24 @@ const BrainSurgery = () => {
     evidence_pack: true,
   });
   const [lineageGroupByType, setLineageGroupByType] = useState(true);
+  const [amcFile, setAmcFile] = useState(null);
+  const [amcValidation, setAmcValidation] = useState(null);
+  const [amcPreview, setAmcPreview] = useState(null);
+  const [amcMode, setAmcMode] = useState("merge");
+  const [amcImporting, setAmcImporting] = useState(false);
+  const [amcActivate, setAmcActivate] = useState(false);
+  const [pepFile, setPepFile] = useState(null);
+  const [pepPreview, setPepPreview] = useState(null);
+  const [pepImporting, setPepImporting] = useState(false);
   const graphRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  const baselineFrame = {
+    name: "Baseline",
+    summary: "Current production knowledge snapshot.",
+    details: { status: "active", team: "baseline", notes: "Sandbox baseline loaded" },
+  };
 
   const patches = [
     { id: "patch-ato-01", name: "ATO Patch v1.2", risk: "low", coverage: "+12%" },
@@ -453,6 +470,99 @@ const BrainSurgery = () => {
     setPerfCpu(Math.max(1, Math.round(next / 4)));
   };
 
+  const handleAmcValidate = async () => {
+    if (!amcFile) {
+      toast.error("Upload an AMC file first.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", amcFile);
+    try {
+      const response = await amcAPI.validate(formData);
+      setAmcValidation(response?.data || null);
+      toast.success("AMC validation complete.");
+    } catch (error) {
+      toast.error("AMC validation failed.");
+    }
+  };
+
+  const handleAmcPreview = async () => {
+    if (!amcFile) {
+      toast.error("Upload an AMC file first.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", amcFile);
+    try {
+      const response = await amcAPI.preview(formData);
+      setAmcPreview(response?.data || null);
+      toast.success("AMC preview ready.");
+    } catch (error) {
+      toast.error("AMC preview failed.");
+    }
+  };
+
+  const handleAmcImport = async () => {
+    if (!amcFile) {
+      toast.error("Upload an AMC file first.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", amcFile);
+    formData.append("mode", amcMode);
+    formData.append("activate", amcActivate);
+    setAmcImporting(true);
+    try {
+      const response = await amcAPI.import(formData);
+      setAmcPreview(response?.data?.preview || null);
+      toast.success("AMC imported into sandbox.");
+    } catch (error) {
+      toast.error("AMC import failed.");
+    } finally {
+      setAmcImporting(false);
+    }
+  };
+
+  const handlePepPreview = async () => {
+    if (!pepFile) {
+      toast.error("Upload a PEP file first.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", pepFile);
+    try {
+      const response = await pepAPI.preview(formData);
+      setPepPreview(response?.data || null);
+      toast.success("PEP preview ready.");
+    } catch (error) {
+      toast.error("PEP preview failed.");
+    }
+  };
+
+  const handlePepImport = async () => {
+    if (!pepFile) {
+      toast.error("Upload a PEP file first.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", pepFile);
+    setPepImporting(true);
+    try {
+      const response = await pepAPI.import(formData);
+      const payload = response?.data || null;
+      setPepPreview(payload);
+      const firstImported = payload?.imports?.find((item) => item.status === "imported");
+      if (firstImported?.preview) {
+        setAmcPreview(firstImported.preview);
+      }
+      toast.success("PEP imported into sandbox.");
+    } catch (error) {
+      toast.error("PEP import failed.");
+    } finally {
+      setPepImporting(false);
+    }
+  };
+
   const getSafetyBadge = (risk) => {
     if (risk === "low") return { label: "SAFE TO MERGE", className: "status-success" };
     if (risk === "medium") return { label: "REQUIRES REVIEW", className: "status-warning" };
@@ -580,6 +690,143 @@ const BrainSurgery = () => {
             <Maximize2 className="h-4 w-4" />
           </Button>
         </div>
+      </div>
+
+      {/* AMC Import (3-frame) */}
+      <div className="px-6 py-4" data-testid="amc-import-panel">
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-sm">AMC Import (3-Frame Merge View)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div>
+                <label className="text-xs text-muted-foreground">Upload AMC</label>
+                <Input
+                  type="file"
+                  accept=".amc,.zip"
+                  onChange={(event) => setAmcFile(event.target.files?.[0] || null)}
+                  data-testid="amc-upload"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Import Mode</label>
+                <Select value={amcMode} onValueChange={setAmcMode}>
+                  <SelectTrigger className="w-full" data-testid="amc-mode-trigger">
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="merge">Merge</SelectItem>
+                    <SelectItem value="replace">Replace</SelectItem>
+                    <SelectItem value="merge_calibrate">Merge + Calibrate</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end gap-2">
+                <Button variant="outline" onClick={handleAmcValidate} data-testid="amc-validate-btn">
+                  <Shield className="h-4 w-4 mr-2" /> Validate
+                </Button>
+                <Button variant="outline" onClick={handleAmcPreview} data-testid="amc-preview-btn">
+                  <FileDiff className="h-4 w-4 mr-2" /> Preview
+                </Button>
+                <Button onClick={handleAmcImport} disabled={amcImporting} data-testid="amc-import-btn">
+                  <Upload className="h-4 w-4 mr-2" /> {amcImporting ? "Importing" : "Import"}
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <Button
+                variant={amcActivate ? "default" : "outline"}
+                onClick={() => setAmcActivate((prev) => !prev)}
+                data-testid="amc-activate-toggle"
+              >
+                {amcActivate ? "Activate After Import" : "Activate Later"}
+              </Button>
+              {amcValidation && (
+                <Badge variant="outline" className={amcValidation.valid ? "status-success" : "status-error"}>
+                  {amcValidation.valid ? "Validation Passed" : "Validation Failed"}
+                </Badge>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Card className="border-border bg-black/20" data-testid="amc-frame-baseline">
+                <CardHeader>
+                  <CardTitle className="text-xs">Baseline</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                    {JSON.stringify(baselineFrame, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+              <Card className="border-border bg-black/20" data-testid="amc-frame-import">
+                <CardHeader>
+                  <CardTitle className="text-xs">AMC Import</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                    {JSON.stringify(amcPreview || { status: "Awaiting preview" }, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+              <Card className="border-border bg-black/20" data-testid="amc-frame-merged">
+                <CardHeader>
+                  <CardTitle className="text-xs">Merged (Sandbox)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                    {JSON.stringify(
+                      amcPreview
+                        ? { ...amcPreview, merge_mode: amcMode, activation: amcActivate ? "pending" : "manual" }
+                        : { status: "Awaiting import" },
+                      null,
+                      2
+                    )}
+                  </pre>
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="px-6 pb-6" data-testid="pep-import-panel">
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-sm">PEP Import (Portable Evolution Pack)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div>
+                <label className="text-xs text-muted-foreground">Upload PEP</label>
+                <Input
+                  type="file"
+                  accept=".pep.zip,.zip"
+                  onChange={(event) => setPepFile(event.target.files?.[0] || null)}
+                  data-testid="pep-upload"
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <Button variant="outline" onClick={handlePepPreview} data-testid="pep-preview-btn">
+                  <FileDiff className="h-4 w-4 mr-2" /> Preview
+                </Button>
+                <Button onClick={handlePepImport} disabled={pepImporting} data-testid="pep-import-btn">
+                  <Upload className="h-4 w-4 mr-2" /> {pepImporting ? "Importing" : "Import"}
+                </Button>
+              </div>
+            </div>
+            <Card className="border-border bg-black/20" data-testid="pep-preview-frame">
+              <CardHeader>
+                <CardTitle className="text-xs">PEP Preview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                  {JSON.stringify(pepPreview || { status: "Awaiting preview" }, null, 2)}
+                </pre>
+              </CardContent>
+            </Card>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Graph Canvas */}

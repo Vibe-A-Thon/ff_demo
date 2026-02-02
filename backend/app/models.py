@@ -525,6 +525,24 @@ class AMCPackage(BaseModel):
     created_by: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
+
+class PEPExportRequest(BaseModel):
+    team_ids: List[str]
+    env_tag: str = "sandbox"
+    include_eval_suite: bool = False
+    include_model_bundle: bool = False
+
+
+class PEPPack(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    teams: List[str] = []
+    env_tag: str = "sandbox"
+    manifest: Dict[str, Any] = {}
+    storage_path: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
 class AgentRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
     request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))

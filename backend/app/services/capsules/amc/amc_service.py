@@ -97,7 +97,7 @@ def _compute_pack_hashes(files: Dict[str, bytes]) -> Tuple[Dict[str, str], str]:
     return hashes, f"sha256:{pack_hash}"
 
 
-def _build_tool_registry_yaml() -> str:
+def build_tool_registry_yaml() -> str:
     payload = {
         "version": "1.0",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -106,7 +106,7 @@ def _build_tool_registry_yaml() -> str:
     return yaml.safe_dump(payload, sort_keys=False)
 
 
-def _build_prompt_manifest_yaml(team_id: str) -> str:
+def build_prompt_manifest_yaml(team_id: str) -> str:
     payload = {
         "version": "1.0",
         "team_id": team_id,
@@ -377,8 +377,8 @@ async def export_amc(team_id: str, export_scope: Dict[str, Any], env_tag: str) -
     if not agents:
         agents = [a for a in default_agent_payloads() if a["team_id"] == team_id]
 
-    prompt_manifest = _build_prompt_manifest_yaml(team_id)
-    tool_registry = _build_tool_registry_yaml()
+    prompt_manifest = build_prompt_manifest_yaml(team_id)
+    tool_registry = build_tool_registry_yaml()
     prompt_hash = f"sha256:{_sha256_bytes(prompt_manifest.encode('utf-8'))}"
     tool_hash = f"sha256:{_sha256_bytes(tool_registry.encode('utf-8'))}"
 
