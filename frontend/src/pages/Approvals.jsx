@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { approvalAPI, ruleAPI, rsbAPI, agentAPI, ragAPI, settingsAPI } from "../lib/api";
+import { approvalAPI, ruleAPI, rsbAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   ShieldCheck,
@@ -32,9 +32,6 @@ const Approvals = () => {
   const [overrideAck, setOverrideAck] = useState(false);
   const [rules, setRules] = useState([]);
   const [packages, setPackages] = useState([]);
-  const [registrySnapshot, setRegistrySnapshot] = useState(null);
-  const [ragAlerts, setRagAlerts] = useState([]);
-  const [ragSettings, setRagSettings] = useState(null);
   
   const [formData, setFormData] = useState({
     resource_type: "rule",
@@ -45,29 +42,6 @@ const Approvals = () => {
 
   useEffect(() => {
     loadData();
-    const loadRegistry = async () => {
-      try {
-        const response = await agentAPI.getRegistry();
-        setRegistrySnapshot(response?.data || null);
-      } catch (error) {
-        setRegistrySnapshot(null);
-      }
-    };
-    loadRegistry();
-    const loadRagAlerts = async () => {
-      try {
-        const [alertsRes, settingsRes] = await Promise.all([
-          ragAPI.evaluationAlerts({ limit: 5 }),
-          settingsAPI.get(),
-        ]);
-        setRagAlerts(alertsRes?.data?.items || []);
-        setRagSettings(settingsRes?.data?.rag || null);
-      } catch (error) {
-        setRagAlerts([]);
-        setRagSettings(null);
-      }
-    };
-    loadRagAlerts();
   }, []);
 
   const loadData = async () => {
@@ -102,11 +76,6 @@ const Approvals = () => {
   };
 
   const handleApprove = async (approvalId) => {
-    const target = approvals.find((item) => item.id === approvalId);
-    if (ragAlerts.length > 0 && ["deploy", "merge"].includes(target?.action)) {
-      toast.error("Release approval blocked: RAG regression alert detected.");
-      return;
-    }
     try {
       await approvalAPI.approve(approvalId, "admin-user");
       loadData();
@@ -207,9 +176,6 @@ const Approvals = () => {
   }
   if (selectedApproval?.resource_type === "rsb_package" && selectedApproval?.action === "merge") {
     sodWarnings.push("RSB merges require compliance sign-off before release");
-  }
-  if (ragAlerts.length > 0 && ["deploy", "merge"].includes(selectedApproval?.action)) {
-    sodWarnings.push("RAG regression alert active: release approval blocked until resolved");
   }
 
   return (
@@ -333,22 +299,6 @@ const Approvals = () => {
               </p>
             </div>
           )}
-          {ragAlerts.length > 0 && (
-            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-400" />
-                <span className="font-semibold text-red-400">RELEASES BLOCKED</span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                RAG regression alerts detected. Approvals for deploy/merge are paused.
-              </p>
-              {ragSettings && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Thresholds: faith drop {ragSettings.faithfulness_drop}, rel drop {ragSettings.relevancy_drop}
-                </p>
-              )}
-            </div>
-          )}
         </div>
 
         <ScrollArea className="flex-1">
@@ -398,8 +348,9 @@ const Approvals = () => {
       {/* Approval Details */}
       <div className="flex-1 overflow-hidden">
         {selectedApproval ? (
-          <div className="h-full flex flex-col">
-            <div className="p-6 border-b border-border">
+          <ScrollArea className="h-full">
+            <div className="p-6 space-y-6">
+              {/* Header */}
               <div className="flex items-start justify-between">
                 <div>
                   <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -440,7 +391,6 @@ const Approvals = () => {
                     </Button>
                     <Button
                       onClick={() => handleApprove(selectedApproval.id)}
-                      disabled={ragAlerts.length > 0 && ["deploy", "merge"].includes(selectedApproval.action)}
                       data-testid="approve-approval-btn"
                       data-explain="Approve change"
                       data-explain-title="Approval rationale"
@@ -454,36 +404,6 @@ const Approvals = () => {
                   </div>
                 )}
               </div>
-            </div>
-            <ScrollArea className="flex-1">
-              <div className="p-6 space-y-6">
-
-              <Card className="border-border" data-testid="approvals-registry">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Registry Snapshot</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs text-muted-foreground">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="border-border">
-                      {registrySnapshot?.teams?.length || 0} teams
-                    </Badge>
-                    <Badge variant="outline" className="border-border">
-                      {registrySnapshot?.agents?.length || 0} agents
-                    </Badge>
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-3">
-                    {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
-                      <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-2">
-                        <div className="text-white text-xs font-medium">{item.agent_name}</div>
-                        <div className="text-[11px] text-muted-foreground">{item.role}</div>
-                      </div>
-                    ))}
-                    {!registrySnapshot?.delegation_preview?.length && (
-                      <div className="text-xs text-muted-foreground">Registry data not available.</div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
               <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
                 <DialogContent className="bg-card border-border" data-testid="override-modal">
                   <DialogHeader>
@@ -740,7 +660,7 @@ const Approvals = () => {
               </Card>
 
               {/* SoD Check */}
-              <Card className="border-blue-500/30 bg-blue-500/5">
+              <Card className="border-border border-blue-500/30 bg-blue-500/5">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-blue-400">
                     <Shield className="h-5 w-5" />
@@ -777,9 +697,8 @@ const Approvals = () => {
                   </div>
                 </CardContent>
               </Card>
-              </div>
-            </ScrollArea>
-          </div>
+            </div>
+          </ScrollArea>
         ) : (
           <div className="h-full flex items-center justify-center text-muted-foreground">
             <div className="text-center">

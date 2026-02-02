@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -7,7 +7,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { metricsAPI, battleAPI, ragAPI, settingsAPI } from "../lib/api";
+import { metricsAPI, battleAPI } from "../lib/api";
 import { toast } from "sonner";
 import JudgeModeBanner from "../components/JudgeModeBanner";
 import {
@@ -68,47 +68,10 @@ const MetricsDashboard = () => {
   const [timeRange, setTimeRange] = useState("7d");
   const [judgeMode, setJudgeMode] = useState(false);
   const [taxonomyFamilies, setTaxonomyFamilies] = useState([]);
-  const [ragEvalSeries, setRagEvalSeries] = useState([]);
-  const [ragEvalLoading, setRagEvalLoading] = useState(false);
-  const [ragSettings, setRagSettings] = useState(null);
-  const [perfMetrics, setPerfMetrics] = useState(null);
-  const [agentMetrics, setAgentMetrics] = useState([]);
 
   useEffect(() => {
     loadMetrics();
-  }, [loadMetrics]);
-
-  useEffect(() => {
-    const loadRagEvaluations = async () => {
-      setRagEvalLoading(true);
-      try {
-        const [response, settingsRes] = await Promise.all([
-          ragAPI.evaluationHistory({ limit: 20 }),
-          settingsAPI.get(),
-        ]);
-        const items = response?.data?.items || [];
-        const series = [...items]
-          .reverse()
-          .map((item, index) => ({
-            name: `Eval ${index + 1}`,
-            faithfulness: item?.metrics?.avg_faithfulness || 0,
-            relevancy: item?.metrics?.avg_answer_relevancy || 0,
-          }));
-        setRagEvalSeries(series);
-        setRagSettings(settingsRes?.data?.rag || null);
-      } catch (error) {
-        setRagEvalSeries([]);
-        setRagSettings(null);
-      } finally {
-        setRagEvalLoading(false);
-      }
-    };
-    loadRagEvaluations();
   }, []);
-
-  const latestRagEval = ragEvalSeries[ragEvalSeries.length - 1];
-  const ragWarn = Number(ragSettings?.faithfulness_warn ?? 0.75);
-  const relWarn = Number(ragSettings?.relevancy_warn ?? 0.75);
 
   useEffect(() => {
     const loadTaxonomy = async () => {
@@ -124,17 +87,11 @@ const MetricsDashboard = () => {
     loadTaxonomy();
   }, []);
 
-  const loadMetrics = useCallback(async () => {
+  const loadMetrics = async () => {
     setLoading(true);
     try {
-      const [response, perfResponse, agentResponse] = await Promise.all([
-        metricsAPI.getDashboard(),
-        metricsAPI.getPerf(),
-        metricsAPI.getAgentEffectiveness(),
-      ]);
+      const response = await metricsAPI.getDashboard();
       setMetrics(response.data);
-      setPerfMetrics(perfResponse?.data || null);
-      setAgentMetrics(agentResponse?.data || []);
     } catch (error) {
       console.error("Failed to load metrics:", error);
       // Use fallback data
@@ -149,11 +106,10 @@ const MetricsDashboard = () => {
         avg_time_to_immunity: 4.2,
         time_series: generateMockTimeSeries(),
       });
-      setPerfMetrics(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   const generateMockTimeSeries = () => {
     const data = [];
@@ -189,11 +145,6 @@ const MetricsDashboard = () => {
     timeToImmunity: Math.round(item.time_to_immunity * 10) / 10,
     patternsLearned: item.patterns_learned || idx * 5,
   })) || [];
-
-  const operational = metrics?.operational_kpis || {};
-  const stageFailurePercent = Math.round((operational.stage_failure_rate || 0) * 100);
-  const ragPerf = perfMetrics?.rag || {};
-  const graphPerf = perfMetrics?.graph || {};
 
   const moneySaved = Math.round(((metrics?.avg_success_rate || 0) / 100) * 120000);
   const moneyAtRisk = Math.round(160000);
@@ -275,8 +226,9 @@ const MetricsDashboard = () => {
   };
 
   return (
-    <div className="flex h-full flex-col" data-testid="metrics-dashboard">
-      <div className="p-6 pb-4">
+    <ScrollArea className="h-full" data-testid="metrics-dashboard">
+      <div className="p-6 space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Metrics Dashboard</h1>
@@ -315,65 +267,8 @@ const MetricsDashboard = () => {
             </Button>
           </div>
         </div>
-      </div>
 
-      <ScrollArea className="flex-1">
-        <div className="px-6 pb-6 space-y-6">
-          <JudgeModeBanner active={judgeMode} />
-
-          {/* Agent Effectiveness Section */}
-          {!loading && agentMetrics.length > 0 && (
-            <Card className="border-border mb-6">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Brain className="h-5 w-5 text-pink-400" />
-                  Agent Effectiveness Leaderboard
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border border-border overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="p-3 text-left font-medium">Agent ID</th>
-                        <th className="p-3 text-left font-medium">Role Impact</th>
-                        <th className="p-3 text-right font-medium">Tasks Executed</th>
-                        <th className="p-3 text-right font-medium">Success Rate</th>
-                        <th className="p-3 text-right font-medium">Memories Created</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {agentMetrics.slice(0, 8).map((agent) => (
-                        <tr key={agent.agent_id} className="hover:bg-muted/30">
-                          <td className="p-3 font-mono">{agent.agent_id}</td>
-                          <td className="p-3">
-                             <div className="flex items-center gap-2">
-                                <div className="h-1.5 w-16 bg-zinc-800 rounded-full overflow-hidden">
-                                  <div 
-                                    className={`h-full ${agent.success_rate >= 80 ? 'bg-green-500' : 'bg-yellow-500'}`} 
-                                    style={{ width: `${agent.success_rate}%` }} 
-                                  />
-                                </div>
-                             </div>
-                          </td>
-                          <td className="p-3 text-right">{agent.tasks_total}</td>
-                          <td className={`p-3 text-right font-bold ${agent.success_rate >= 90 ? 'text-green-400' : 'text-blue-400'}`}>
-                            {agent.success_rate}%
-                          </td>
-                          <td className="p-3 text-right text-purple-400 font-mono">
-                            {agent.memories_created}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {agentMetrics.length === 0 && (
-                     <div className="p-6 text-center text-muted-foreground">No agent performance data available yet. Run a battle to populate.</div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+        <JudgeModeBanner active={judgeMode} />
 
         {/* KPI Cards */}
         {loading ? (
@@ -452,58 +347,6 @@ const MetricsDashboard = () => {
                 color="#34D399"
               />
             </div>
-            <div className="grid grid-cols-4 gap-4">
-              <MetricCard
-                title="Runs Completed"
-                value={`${operational.completed_runs || 0}/${operational.total_runs || 0}`}
-                icon={Activity}
-                color="#22D3EE"
-              />
-              <MetricCard
-                title="Awaiting Approvals"
-                value={operational.awaiting_approval_runs || 0}
-                icon={Shield}
-                color="#F59E0B"
-              />
-              <MetricCard
-                title="Avg Stage Duration"
-                value={`${Math.round(operational.avg_stage_duration_sec || 0)}s`}
-                icon={Clock}
-                color="#60A5FA"
-              />
-              <MetricCard
-                title="Stage Failure Rate"
-                value={`${stageFailurePercent}%`}
-                icon={AlertTriangle}
-                color="#F97316"
-              />
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              <MetricCard
-                title="RAG Avg Latency"
-                value={`${Math.round(ragPerf.avg_total_ms || 0)}ms`}
-                icon={Brain}
-                color="#A855F7"
-              />
-              <MetricCard
-                title="RAG Cache Hit"
-                value={`${Math.round((ragPerf.cache_hit_rate || 0) * 100)}%`}
-                icon={Zap}
-                color="#8B5CF6"
-              />
-              <MetricCard
-                title="Graph Avg Latency"
-                value={`${Math.round(graphPerf.avg_total_ms || 0)}ms`}
-                icon={Activity}
-                color="#38BDF8"
-              />
-              <MetricCard
-                title="Graph Cache Hit"
-                value={`${Math.round((graphPerf.cache_hit_rate || 0) * 100)}%`}
-                icon={BarChart3}
-                color="#22C55E"
-              />
-            </div>
           </>
         )}
 
@@ -562,63 +405,6 @@ const MetricsDashboard = () => {
                   <Bar dataKey="timeToImmunity" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Minutes" />
                 </BarChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* RAG Faithfulness & Relevancy */}
-          <Card className="border-border" data-testid="rag-eval-trend">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="h-5 w-5 text-purple-400" />
-                RAG Faithfulness & Relevancy
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ragEvalLoading && (
-                <div className="text-sm text-muted-foreground">Loading RAG evaluation trends...</div>
-              )}
-              {!ragEvalLoading && ragEvalSeries.length === 0 && (
-                <div className="text-sm text-muted-foreground">No evaluation history yet.</div>
-              )}
-              {!ragEvalLoading && ragEvalSeries.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                  <Badge className={latestRagEval?.faithfulness < ragWarn ? "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30" : "bg-green-500/15 text-green-400 border border-green-500/30"}>
-                    Faithfulness {latestRagEval?.faithfulness?.toFixed?.(3) ?? "—"}
-                  </Badge>
-                  <Badge className={latestRagEval?.relevancy < relWarn ? "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30" : "bg-green-500/15 text-green-400 border border-green-500/30"}>
-                    Relevancy {latestRagEval?.relevancy?.toFixed?.(3) ?? "—"}
-                  </Badge>
-                </div>
-              )}
-              {!ragEvalLoading && ragEvalSeries.length > 0 && (
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={ragEvalSeries}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
-                    <XAxis dataKey="name" stroke="#71717A" fontSize={12} />
-                    <YAxis stroke="#71717A" fontSize={12} domain={[0, 1]} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#18181B', border: '1px solid #27272A', borderRadius: '8px' }}
-                      labelStyle={{ color: '#FAFAFA' }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="faithfulness"
-                      stroke="#22C55E"
-                      strokeWidth={2}
-                      dot={{ fill: '#22C55E', strokeWidth: 2 }}
-                      name="Faithfulness"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="relevancy"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      dot={{ fill: '#3B82F6', strokeWidth: 2 }}
-                      name="Relevancy"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
             </CardContent>
           </Card>
 
@@ -933,7 +719,7 @@ const MetricsDashboard = () => {
 
         {/* Plain English Explanation (conditionally shown) */}
         {viewMode === "plain" && (
-          <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <Card className="border-border border-yellow-500/30 bg-yellow-500/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-yellow-400">
                 <FileText className="h-5 w-5" />
@@ -962,7 +748,6 @@ const MetricsDashboard = () => {
         )}
       </div>
     </ScrollArea>
-  </div>
   );
 };
 

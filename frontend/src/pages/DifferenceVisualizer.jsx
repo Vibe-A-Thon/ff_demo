@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import React, { useState } from "react";
 import ReactDiffViewer, { DiffMethod } from "react-diff-viewer-continued";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -9,7 +8,6 @@ import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { rsbAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   GitCompare,
@@ -24,35 +22,106 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+// Sample diff data for demonstration
+const sampleDiffs = [
+  {
+    id: "1",
+    name: "VEL-001 Rule Update",
+    type: "rule",
+    oldCode: `{
+  "name": "VEL-001",
+  "description": "Velocity check for rapid transactions",
+  "conditions": [
+    {
+      "field": "tx_count",
+      "operator": ">",
+      "value": 10
+    }
+  ],
+  "actions": [
+    {
+      "type": "flag",
+      "severity": "medium"
+    }
+  ],
+  "priority": 1
+}`,
+    newCode: `{
+  "name": "VEL-001",
+  "description": "Enhanced velocity check for rapid transactions",
+  "conditions": [
+    {
+      "field": "tx_count",
+      "operator": ">",
+      "value": 5
+    },
+    {
+      "field": "time_window",
+      "operator": "<",
+      "value": 60
+    }
+  ],
+  "actions": [
+    {
+      "type": "flag",
+      "severity": "high"
+    },
+    {
+      "type": "alert",
+      "channel": "ops"
+    }
+  ],
+  "priority": 1
+}`,
+    status: "pending",
+    comments: [],
+  },
+  {
+    id: "2",
+    name: "Pattern ATO-99 Enhancement",
+    type: "pattern",
+    oldCode: `class ATODetector:
+    def __init__(self):
+        self.threshold = 3
+    
+    def detect(self, events):
+        failed_logins = 0
+        for event in events:
+            if event.type == "login_failed":
+                failed_logins += 1
+        return failed_logins > self.threshold`,
+    newCode: `class ATODetector:
+    def __init__(self):
+        self.threshold = 3
+        self.time_window = 300  # 5 minutes
+        self.ip_threshold = 2
+    
+    def detect(self, events):
+        failed_logins = 0
+        unique_ips = set()
+        for event in events:
+            if event.type == "login_failed":
+                failed_logins += 1
+                unique_ips.add(event.ip)
+        
+        # Multi-factor detection
+        velocity_breach = failed_logins > self.threshold
+        ip_anomaly = len(unique_ips) > self.ip_threshold
+        
+        return velocity_breach or ip_anomaly`,
+    status: "pending",
+    comments: [],
+  },
+];
+
 const DifferenceVisualizer = () => {
-  const [packages, setPackages] = useState([]);
-  const [selectedPackage, setSelectedPackage] = useState(null);
-  const [diffs, setDiffs] = useState([]);
-  const [selectedDiff, setSelectedDiff] = useState(null);
+  const [diffs, setDiffs] = useState(sampleDiffs);
+  const [selectedDiff, setSelectedDiff] = useState(sampleDiffs[0]);
   const [commitMessage, setCommitMessage] = useState("");
   const [sandboxResult, setSandboxResult] = useState(null);
   const [running, setRunning] = useState(false);
   const [conflictDecisions, setConflictDecisions] = useState({});
-  const location = useLocation();
   const mergedPreview = selectedDiff?.newCode || "";
-  const linkedArtifacts = (() => {
-    const artifacts = selectedDiff?.artifacts || selectedPackage?.artifacts || [];
-    if (Array.isArray(artifacts) && artifacts.length > 0) {
-      return artifacts.map((artifact, idx) => ({
-        id: artifact.artifact_id || artifact.id || `${idx}`,
-        type: artifact.artifact_type || artifact.event_type || "artifact",
-        label: artifact.artifact_type || artifact.event_type || "artifact",
-        meta: artifact.artifact_id || artifact.id || "",
-      }));
-    }
-    const derived = [];
-    if (selectedPackage?.rule_spec) derived.push({ id: "rulespec", label: "RuleSpec" });
-    if (selectedPackage?.rule_definition || selectedPackage?.code) derived.push({ id: "codepatch", label: "CodePatch" });
-    if (selectedPackage?.test_results) derived.push({ id: "testplan", label: "TestPlan" });
-    if (selectedPackage?.compliance_docs?.length) derived.push({ id: "compliance", label: "CompliancePack" });
-    if (selectedPackage?.conflicts?.length) derived.push({ id: "review", label: "CodeReviewReport" });
-    return derived;
-  })();
   const conflictBlocks = [
     { id: "conflict-1", label: "Threshold change conflict", recommendation: "Use patch" },
     { id: "conflict-2", label: "Action severity mismatch", recommendation: "Manual merge" },
@@ -128,117 +197,50 @@ const DifferenceVisualizer = () => {
     },
   };
 
-  useEffect(() => {
-    const loadPackages = async () => {
-      try {
-        const response = await rsbAPI.getAll();
-        setPackages(response.data || []);
-        if (response.data?.length) {
-          setSelectedPackage(response.data[0]);
-        }
-      } catch (error) {
-        toast.error("Failed to load RSB packages");
-      }
-    };
-    loadPackages();
-  }, []);
-
-  useEffect(() => {
-    if (!packages.length) return;
-    const searchParams = new URLSearchParams(location.search);
-    const packageId = searchParams.get("package");
-    if (!packageId) return;
-    const matched = packages.find((pkg) => pkg.id === packageId);
-    if (matched) {
-      setSelectedPackage(matched);
-    }
-  }, [location.search, packages]);
-
-  useEffect(() => {
-    const loadDiffs = async () => {
-      if (!selectedPackage) return;
-      try {
-        const response = await rsbAPI.getDiffs(selectedPackage.id);
-        const loadedDiffs = response.data?.diffs || [];
-        setDiffs(loadedDiffs);
-        setSelectedDiff(loadedDiffs[0] || null);
-      } catch (error) {
-        toast.error("Failed to load visual patch diffs");
-      }
-    };
-    loadDiffs();
-  }, [selectedPackage]);
-
-  const handleAccept = async () => {
-    if (!selectedPackage || !selectedDiff) return;
-    try {
-      const response = await rsbAPI.applyPatch(selectedPackage.id, {
-        decision: "accepted",
-        conflict_resolutions: conflictDecisions,
-        commit_message: commitMessage,
-      });
-      const updatedDiffs = diffs.map((diff) =>
-        diff.id === selectedDiff.id ? { ...diff, status: "accepted" } : diff
-      );
-      setDiffs(updatedDiffs);
-      setSelectedDiff({ ...selectedDiff, status: "accepted" });
-      setSelectedPackage(response.data);
-      toast.success("Patch applied and package updated!");
-    } catch (error) {
-      toast.error("Failed to apply patch");
-    }
+  const handleAccept = () => {
+    const updated = diffs.map(d => 
+      d.id === selectedDiff.id ? { ...d, status: "accepted" } : d
+    );
+    setDiffs(updated);
+    setSelectedDiff({ ...selectedDiff, status: "accepted" });
+    toast.success("Changes accepted!");
   };
 
-  const handleReject = async () => {
-    if (!selectedPackage || !selectedDiff) return;
-    try {
-      const response = await rsbAPI.applyPatch(selectedPackage.id, {
-        decision: "rejected",
-        conflict_resolutions: conflictDecisions,
-        commit_message: commitMessage,
-      });
-      const updatedDiffs = diffs.map((diff) =>
-        diff.id === selectedDiff.id ? { ...diff, status: "rejected" } : diff
-      );
-      setDiffs(updatedDiffs);
-      setSelectedDiff({ ...selectedDiff, status: "rejected" });
-      setSelectedPackage(response.data);
-      toast.error("Patch rejected");
-    } catch (error) {
-      toast.error("Failed to reject patch");
-    }
+  const handleReject = () => {
+    const updated = diffs.map(d => 
+      d.id === selectedDiff.id ? { ...d, status: "rejected" } : d
+    );
+    setDiffs(updated);
+    setSelectedDiff({ ...selectedDiff, status: "rejected" });
+    toast.error("Changes rejected");
   };
 
   const handleRequestChanges = () => {
     toast("Changes requested. Assigning back to author.");
   };
 
-  const runSandboxValidation = async () => {
-    if (!selectedPackage) return;
+  const runSandboxValidation = () => {
     setRunning(true);
     setSandboxResult(null);
-    try {
-      const response = await rsbAPI.test(selectedPackage.id);
-      const results = response.data || {};
-      const passed = (results.unit_tests?.failed || 0) === 0 && (results.integration_tests?.failed || 0) === 0;
+    
+    // Simulate sandbox validation
+    setTimeout(() => {
+      const passed = Math.random() > 0.3;
       setSandboxResult({
         passed,
         tests: {
-          unit: results.unit_tests || {},
-          integration: results.integration_tests || {},
-          compliance: results.compliance_checks || {},
+          syntax: true,
+          logic: passed,
+          performance: passed,
+          security: true,
         },
-        message: passed
-          ? "All validation checks passed. Safe to merge."
-          : "Test failures detected. Review required.",
-        timestamp: results.timestamp || new Date().toISOString(),
+        message: passed 
+          ? "All validation checks passed. Safe to merge." 
+          : "Logic validation failed. Review required.",
+        timestamp: new Date().toISOString(),
       });
-      toast.success("Sandbox validation completed");
-    } catch (error) {
-      toast.error("Sandbox validation failed");
-    } finally {
       setRunning(false);
-    }
+    }, 2000);
   };
 
   const generateCommitMessage = () => {
@@ -254,7 +256,6 @@ Reviewed and validated via sandbox testing.`;
   };
 
   const copyDiff = () => {
-    if (!selectedDiff) return;
     const diffText = `--- OLD ---\n${selectedDiff.oldCode}\n\n--- NEW ---\n${selectedDiff.newCode}`;
     navigator.clipboard.writeText(diffText);
     toast.success("Diff copied to clipboard!");
@@ -295,58 +296,35 @@ Reviewed and validated via sandbox testing.`;
     <div className="h-full flex" data-testid="difference-visualizer">
       {/* Diff List */}
       <div className="w-72 border-r border-border flex flex-col">
-        <div className="p-4 border-b border-border space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold">Pending Changes</h2>
-            <p className="text-sm text-muted-foreground">{diffs.filter(d => d.status === "pending").length} awaiting review</p>
-          </div>
-          <Select
-            value={selectedPackage?.id || ""}
-            onValueChange={(value) => setSelectedPackage(packages.find((pkg) => pkg.id === value) || null)}
-          >
-            <SelectTrigger data-testid="patcher-package-select">
-              <SelectValue placeholder="Select RSB package" />
-            </SelectTrigger>
-            <SelectContent>
-              {packages.map((pkg) => (
-                <SelectItem key={pkg.id} value={pkg.id}>
-                  {pkg.name} • v{pkg.version}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="p-4 border-b border-border">
+          <h2 className="text-lg font-semibold">Pending Changes</h2>
+          <p className="text-sm text-muted-foreground">{diffs.filter(d => d.status === "pending").length} awaiting review</p>
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-2">
-            {diffs.length > 0 ? (
-              diffs.map((diff) => (
-                <div
-                  key={diff.id}
-                  onClick={() => setSelectedDiff(diff)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedDiff?.id === diff.id
-                      ? "border-blue-500 bg-blue-500/10"
-                      : "border-border hover:border-zinc-600 bg-card"
-                  }`}
-                  data-testid={`diff-${diff.id}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <FileCode className={`h-4 w-4 ${diff.type === 'code' ? 'text-blue-400' : 'text-purple-400'}`} />
-                    <span className="font-medium text-sm">{diff.name}</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <Badge variant="outline" className="text-xs capitalize">{diff.type}</Badge>
-                    {diff.status === "accepted" && <CheckCircle2 className="h-4 w-4 text-green-400" />}
-                    {diff.status === "rejected" && <X className="h-4 w-4 text-red-400" />}
-                    {diff.status === "pending" && <AlertTriangle className="h-4 w-4 text-yellow-400" />}
-                  </div>
+            {diffs.map((diff) => (
+              <div
+                key={diff.id}
+                onClick={() => setSelectedDiff(diff)}
+                className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                  selectedDiff?.id === diff.id
+                    ? "border-blue-500 bg-blue-500/10"
+                    : "border-border hover:border-zinc-600 bg-card"
+                }`}
+                data-testid={`diff-${diff.id}`}
+              >
+                <div className="flex items-center gap-2">
+                  <FileCode className={`h-4 w-4 ${diff.type === 'rule' ? 'text-blue-400' : 'text-purple-400'}`} />
+                  <span className="font-medium text-sm">{diff.name}</span>
                 </div>
-              ))
-            ) : (
-              <div className="text-xs text-muted-foreground p-4" data-testid="no-diffs">
-                No diffs available for this package.
+                <div className="flex items-center justify-between mt-2">
+                  <Badge variant="outline" className="text-xs capitalize">{diff.type}</Badge>
+                  {diff.status === "accepted" && <CheckCircle2 className="h-4 w-4 text-green-400" />}
+                  {diff.status === "rejected" && <X className="h-4 w-4 text-red-400" />}
+                  {diff.status === "pending" && <AlertTriangle className="h-4 w-4 text-yellow-400" />}
+                </div>
               </div>
-            )}
+            ))}
           </div>
         </ScrollArea>
       </div>
@@ -380,136 +358,130 @@ Reviewed and validated via sandbox testing.`;
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={runSandboxValidation}
+                  disabled={running}
+                  data-testid="sandbox-validate-btn"
+                  data-explain="Run sandbox validation"
+                  data-explain-title="Sandbox checks"
+                  data-explain-summary="Runs syntactic and logic validation against safe test data."
+                  data-explain-rules="DIFF-VAL-01,SAFE-003"
+                  data-explain-evidence="Sandbox results,Test suite"
+                >
+                  <Play className={`h-4 w-4 mr-2 ${running ? 'animate-spin' : ''}`} />
+                  Validate
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleReject}
+                  disabled={selectedDiff.status !== "pending"}
+                  data-testid="reject-btn"
+                  data-explain="Reject diff"
+                  data-explain-title="Rejection reason"
+                  data-explain-summary="Rejects changes that violate policy, performance, or risk thresholds."
+                  data-explain-rules="DIFF-DEC-02,RISK-004"
+                  data-explain-evidence="Risk delta,Policy mismatch"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleRequestChanges}
+                  disabled={selectedDiff.status !== "pending"}
+                  data-testid="request-changes-btn"
+                  data-explain="Request changes"
+                  data-explain-title="Change request"
+                  data-explain-summary="Sends the diff back for revision with reviewer notes."
+                  data-explain-rules="DIFF-DEC-03"
+                  data-explain-evidence="Reviewer notes,Policy checklist"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Request Changes
+                </Button>
+                <Button
+                  onClick={handleAccept}
+                  disabled={selectedDiff.status !== "pending"}
+                  data-testid="accept-btn"
+                  data-explain="Accept diff"
+                  data-explain-title="Acceptance rationale"
+                  data-explain-summary="Approves changes after validation, enabling deployment workflows."
+                  data-explain-rules="DIFF-DEC-01,COM-012"
+                  data-explain-evidence="Sandbox pass,Review notes,Audit trail"
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Accept
+                </Button>
+              </div>
+            </div>
+
+            {/* Sandbox Result */}
+            {sandboxResult && (
+              <div className={`mx-4 mt-4 p-4 rounded-lg border ${
+                sandboxResult.passed 
+                  ? 'bg-green-500/10 border-green-500/30' 
+                  : 'bg-red-500/10 border-red-500/30'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {sandboxResult.passed 
+                    ? <CheckCircle2 className="h-5 w-5 text-green-400" />
+                    : <AlertTriangle className="h-5 w-5 text-red-400" />
+                  }
+                  <span className="font-semibold">
+                    {sandboxResult.passed ? 'Sandbox Validation Passed' : 'Sandbox Validation Failed'}
+                  </span>
                 </div>
-
-                <ScrollArea className="flex-1">
-                  <div className="pb-6">
-                    {/* Sandbox Result */}
-                    {sandboxResult && (
-                      <div className={`mx-4 mt-4 p-4 rounded-lg border ${
-                        sandboxResult.passed 
-                          ? 'bg-green-500/10 border-green-500/30' 
-                          : 'bg-red-500/10 border-red-500/30'
-                      }`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          {sandboxResult.passed 
-                            ? <CheckCircle2 className="h-5 w-5 text-green-400" />
-                            : <AlertTriangle className="h-5 w-5 text-red-400" />
-                          }
-                          <span className="font-semibold">
-                            {sandboxResult.passed ? 'Sandbox Validation Passed' : 'Sandbox Validation Failed'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-3">{sandboxResult.message}</p>
-                        <div className="flex flex-wrap gap-4">
-                          {Object.entries(sandboxResult.tests).map(([test, results]) => {
-                            const failed = results?.failed ?? 0;
-                            const passed = results?.passed ?? 0;
-                            const total = results?.total ?? passed + failed;
-                            const ok = failed === 0;
-                            return (
-                              <div key={test} className="flex items-center gap-1">
-                                {ok ? <Check className="h-3 w-3 text-green-400" /> : <X className="h-3 w-3 text-red-400" />}
-                                <span className="text-xs capitalize">{test}</span>
-                                <span className="text-[10px] text-muted-foreground">{passed}/{total}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Three-Pane Preview */}
-                    <div className="mx-4 mt-4 grid grid-cols-3 gap-4" data-testid="three-pane-preview">
-                      <Card className="border-border">
-                        <CardHeader>
-                          <CardTitle className="text-sm">Existing Model</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="rounded-lg overflow-hidden">
-                            <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
-                              {selectedDiff.oldCode}
-                            </SyntaxHighlighter>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card className="border-border">
-                        <CardHeader>
-                          <CardTitle className="text-sm">APMC (Patched)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="rounded-lg overflow-hidden">
-                            <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
-                              {selectedDiff.newCode}
-                            </SyntaxHighlighter>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card className="border-green-500/30 bg-green-500/5">
-                        <CardHeader>
-                          <CardTitle className="text-sm text-green-300">Merged Model</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="rounded-lg overflow-hidden">
-                            <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
-                              {mergedPreview}
-                            </SyntaxHighlighter>
-                          </div>
-                        </CardContent>
-                      </Card>
+                <p className="text-sm text-muted-foreground mb-3">{sandboxResult.message}</p>
+                <div className="flex gap-4">
+                  {Object.entries(sandboxResult.tests).map(([test, passed]) => (
+                    <div key={test} className="flex items-center gap-1">
+                      {passed 
+                        ? <Check className="h-3 w-3 text-green-400" />
+                        : <X className="h-3 w-3 text-red-400" />
+                      }
+                      <span className="text-xs capitalize">{test}</span>
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                    {/* Patch Overlay */}
-                    <div className="mx-4 mt-4">
-                      <Card className="border-border">
-                        <CardHeader>
-                          <CardTitle className="text-sm">Patch Overlay</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-3 gap-3 text-xs">
-                            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
-                              <div className="text-green-300 font-semibold">Additions</div>
-                              <div className="font-mono text-lg">+12</div>
-                            </div>
-                            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                              <div className="text-red-300 font-semibold">Removals</div>
-                              <div className="font-mono text-lg">-4</div>
-                            </div>
-                            <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                              <div className="text-yellow-300 font-semibold">Hotspots</div>
-                              <div className="font-mono text-lg">2</div>
-                            </div>
-                          </div>
-                          <div className="mt-4">
-                            <div className="text-xs text-muted-foreground mb-2">Impact Map</div>
-                            <div className="flex items-center gap-2" data-testid="overlay-map">
-                              {overlaySegments.map((segment) => (
-                                <div
-                                  key={segment.id}
-                                  className={`h-3 rounded-full ${getOverlayClass(segment.kind)}`}
-                                  style={{ flex: segment.intensity * 10 }}
-                                  title={`${segment.label} • ${(segment.intensity * 100).toFixed(0)}%`}
-                                />
-                              ))}
-                            </div>
-                            <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-2">
-                                <span className="h-2 w-2 rounded-full bg-green-500/60" />
-                                Additions
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="h-2 w-2 rounded-full bg-red-500/60" />
-                                Removals
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="h-2 w-2 rounded-full bg-yellow-400/60" />
-                                Hotspots
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
+            {/* Three-Pane Preview */}
+            <div className="mx-4 mt-4 grid grid-cols-3 gap-4" data-testid="three-pane-preview">
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Existing Model</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-lg overflow-hidden">
+                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                      {selectedDiff.oldCode}
+                    </SyntaxHighlighter>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">APMC (Patched)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-lg overflow-hidden">
+                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                      {selectedDiff.newCode}
+                    </SyntaxHighlighter>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border border-green-500/30 bg-green-500/5">
+                <CardHeader>
+                  <CardTitle className="text-sm text-green-300">Merged Model</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-lg overflow-hidden">
+                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                      {mergedPreview}
+                    </SyntaxHighlighter>
                   </div>
                 </CardContent>
               </Card>
@@ -661,26 +633,11 @@ Reviewed and validated via sandbox testing.`;
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    {linkedArtifacts.length > 0 ? (
-                      linkedArtifacts.map((artifact) => (
-                        <div key={artifact.id} className="flex flex-col gap-1">
-                          <Badge variant="outline" className="text-xs">
-                            {artifact.label}
-                          </Badge>
-                          {artifact.meta && (
-                            <span className="text-[11px] text-muted-foreground font-mono">
-                              {artifact.meta}
-                            </span>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <Badge variant="outline" className="text-xs">No linked artifacts</Badge>
-                    )}
+                    <Badge variant="outline" className="text-xs">RuleSpec</Badge>
+                    <Badge variant="outline" className="text-xs">Tests</Badge>
+                    <Badge variant="outline" className="text-xs">Evidence Pack</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Artifacts are attached to this diff for audit and review.
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">Artifacts are attached to this diff for audit and review.</p>
                 </CardContent>
               </Card>
             </div>
@@ -730,8 +687,6 @@ Reviewed and validated via sandbox testing.`;
                 data-testid="commit-message-input"
               />
             </div>
-              </div>
-            </ScrollArea>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">

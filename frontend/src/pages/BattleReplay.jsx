@@ -7,10 +7,8 @@ import { Slider } from "../components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../components/ui/collapsible";
-import { battleAPI, agentAPI, brcAPI } from "../lib/api";
+import { battleAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   Play,
@@ -35,20 +33,13 @@ import {
   Share2,
   Link2,
   FileDown,
-  FileUp,
-  ChevronDown,
-  RefreshCw,
-  Zap,
-  BookOpen,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 // Comparison Card Component
 const ComparisonCard = ({ label, beforeValue, afterValue, format = "number", icon: Icon, color }) => {
   const formatValue = (val) => {
     if (format === "currency") return `$${val?.toLocaleString() || 0}`;
-    if (format === "percent") return `${(val * 100).toFixed(1)}%`;
+    if (format === "percent") return `${val || 0}%`;
     if (format === "minutes") return `${val || 0}m`;
     return val || 0;
   };
@@ -73,12 +64,10 @@ const ComparisonCard = ({ label, beforeValue, afterValue, format = "number", ico
             <p className="font-mono font-semibold">{formatValue(before)}</p>
           </div>
           <div className="text-center">
-            {diff !== 0 ? (
-              improved ? (
-                <TrendingUp className="h-5 w-5 text-green-400 mx-auto" />
-              ) : (
-                <TrendingDown className="h-5 w-5 text-red-400 mx-auto" />
-              )
+            {improved ? (
+              <TrendingUp className="h-5 w-5 text-green-400 mx-auto" />
+            ) : diff < 0 ? (
+              <TrendingDown className="h-5 w-5 text-red-400 mx-auto" />
             ) : (
               <span className="text-muted-foreground">—</span>
             )}
@@ -92,7 +81,7 @@ const ComparisonCard = ({ label, beforeValue, afterValue, format = "number", ico
         </div>
         {diff !== 0 && (
           <div className={`text-center mt-2 text-xs ${improved ? 'text-green-400' : 'text-red-400'}`}>
-            {improved ? '↑' : '↓'} {Math.abs(diff).toFixed(format === "percent" ? 1 : 1)}{format === "percent" ? '%' : format === "minutes" ? 'm' : ''}
+            {improved ? '↑' : '↓'} {Math.abs(diff).toFixed(format === "percent" ? 1 : 0)}{format === "percent" ? '%' : format === "minutes" ? 'm' : ''}
             {' '}{improved ? 'improvement' : 'decline'}
           </div>
         )}
@@ -112,11 +101,6 @@ const TurnComparison = ({ beforeTurn, afterTurn, turnIndex }) => {
         <div className="flex items-center gap-2 mb-2">
           <Badge variant="outline" className="border-red-500 text-red-400">Before</Badge>
           <span className="text-xs text-muted-foreground">Turn {turnIndex + 1}</span>
-          {beforeTurn?.stage && (
-            <Badge variant="outline" className="border-zinc-600 text-zinc-300">
-              {beforeTurn.stage}
-            </Badge>
-          )}
         </div>
         {beforeTurn ? (
           <div className="space-y-2">
@@ -145,11 +129,6 @@ const TurnComparison = ({ beforeTurn, afterTurn, turnIndex }) => {
         <div className="flex items-center gap-2 mb-2">
           <Badge variant="outline" className="border-green-500 text-green-400">After</Badge>
           <span className="text-xs text-muted-foreground">Turn {turnIndex + 1}</span>
-          {afterTurn?.stage && (
-            <Badge variant="outline" className="border-zinc-600 text-zinc-300">
-              {afterTurn.stage}
-            </Badge>
-          )}
         </div>
         {afterTurn ? (
           <div className="space-y-2">
@@ -183,36 +162,11 @@ const BattleReplay = () => {
   const [currentTurn, setCurrentTurn] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState([1]);
+  const [syncPlayback, setSyncPlayback] = useState(true);
   const playbackRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const brcFileRef = useRef(null);
-  const [brcFile, setBrcFile] = useState(null);
-  const [brcValidation, setBrcValidation] = useState(null);
-  const [brcPreview, setBrcPreview] = useState(null);
-  const [isValidatingBrc, setIsValidatingBrc] = useState(false);
-  const [isPreviewingBrc, setIsPreviewingBrc] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [stageTeamFilter, setStageTeamFilter] = useState("all");
-  const [stageAgentFilter, setStageAgentFilter] = useState("all");
-  const [registrySnapshot, setRegistrySnapshot] = useState(null);
-  const [activeReplaySession, setActiveReplaySession] = useState(null);
-  const [isReevaluating, setIsReevaluating] = useState(false);
-  const [isRerunning, setIsRerunning] = useState(false);
-  const [postmortemData, setPostmortemData] = useState(null);
-  const [showPostmortem, setShowPostmortem] = useState(false);
-  const [isGeneratingPostmortem, setIsGeneratingPostmortem] = useState(false);
 
   useEffect(() => {
     loadBattles();
-    const loadRegistry = async () => {
-      try {
-        const response = await agentAPI.getRegistry();
-        setRegistrySnapshot(response?.data || null);
-      } catch (error) {
-        setRegistrySnapshot(null);
-      }
-    };
-    loadRegistry();
     return () => {
       if (playbackRef.current) clearInterval(playbackRef.current);
     };
@@ -293,198 +247,18 @@ const BattleReplay = () => {
     toast.success("Share link copied");
   };
 
-  const handleImportBrc = async (event) => {
-    const file = event?.target?.files?.[0] || brcFile;
-    if (!file) return;
-    setIsImporting(true);
-    try {
-      if (!brcFile) {
-        setBrcFile(file);
-      }
-      
-      // First validation
-      const validateForm = new FormData();
-      validateForm.append("file", file);
-      const validateResponse = await brcAPI.validate(validateForm);
-      setBrcValidation(validateResponse.data);
-      if (!validateResponse.data?.valid) {
-        toast.error("BRC validation failed");
-        setIsImporting(false);
-        return;
-      }
-
-      // Start replay session + import
-      const replayForm = new FormData();
-      replayForm.append("file", file);
-      replayForm.append("mode", "read_only");
-      const sessionResponse = await brcAPI.startReplay(replayForm);
-      setActiveReplaySession(sessionResponse.data);
-
-      const importForm = new FormData();
-      importForm.append("file", file);
-      const response = await battleAPI.importBrc(importForm);
-      
-      toast.success("BRC imported and session started");
-      await loadBattles();
-      
-      if (response?.data) {
-        setAfterBattle(response.data);
-        // If no before battle, set this one
-        setBeforeBattle((prev) => prev || response.data);
-      }
-    } catch (error) {
-      toast.error("Failed to import BRC");
-      console.error(error);
-    } finally {
-      setIsImporting(false);
-      if (event?.target) event.target.value = "";
-    }
-  };
-
-  const handleSelectBrcFile = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setBrcFile(file);
-    setBrcValidation(null);
-    setBrcPreview(null);
-  };
-
-  const handleValidateBrc = async () => {
-    if (!brcFile) return;
-    setIsValidatingBrc(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", brcFile);
-      const response = await brcAPI.validate(formData);
-      setBrcValidation(response.data);
-      if (response.data?.valid) {
-        toast.success("BRC validation passed");
-      } else {
-        toast.error("BRC validation failed");
-      }
-    } catch (error) {
-      toast.error("Failed to validate BRC");
-    } finally {
-      setIsValidatingBrc(false);
-    }
-  };
-
-  const handlePreviewBrc = async () => {
-    if (!brcFile) return;
-    setIsPreviewingBrc(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", brcFile);
-      const response = await brcAPI.preview(formData);
-      setBrcPreview(response.data);
-      toast.success("BRC preview ready");
-    } catch (error) {
-      toast.error("Failed to preview BRC");
-    } finally {
-      setIsPreviewingBrc(false);
-    }
-  };
-
-  const handleReevaluate = async () => {
-    if (!activeReplaySession) {
-      toast.error("No active session. Please import a BRC first.");
-      return;
-    }
-    setIsReevaluating(true);
-    try {
-      const response = await brcAPI.reevaluate(activeReplaySession.session_id);
-      
-      if (response.data?.improved) {
-        toast.success("Re-evaluation complete: Improvement detected!");
-        // Update afterBattle metrics
-        setAfterBattle(prev => ({
-          ...prev,
-          metrics: { 
-            ...prev.metrics, 
-            ...response.data.new_scorecard.score,
-            time_to_immunity: response.data.new_scorecard.score.mitigation_time_s / 60
-          }
-        }));
-      } else {
-        toast.info("Re-evaluation complete: No significant improvement.");
-      }
-    } catch (error) {
-      toast.error("Re-evaluation failed");
-      console.error(error);
-    } finally {
-      setIsReevaluating(false);
-    }
-  };
-
-  const handleRerunDefense = async () => {
-    if (!activeReplaySession) {
-      toast.error("No active session. Please import a BRC first.");
-      return;
-    }
-    setIsRerunning(true);
-    try {
-      const response = await brcAPI.rerunDefense(activeReplaySession.session_id, 0.15); // 15% improvement
-      
-      if (response.data?.improved) {
-        toast.success("Defense rerun complete: Improvement verified in sandbox!");
-        setAfterBattle(prev => ({
-          ...prev,
-          metrics: { 
-            ...prev.metrics, 
-            ...response.data.simulated_scorecard.score,
-            time_to_immunity: response.data.simulated_scorecard.score.mitigation_time_s / 60
-          }
-        }));
-      } else {
-        toast.info("Defense rerun finished.");
-      }
-    } catch (error) {
-      toast.error("Rerun failed");
-      console.error(error);
-    } finally {
-      setIsRerunning(false);
-    }
-  };
-
-  const handleGeneratePostmortem = async () => {
-    if (!brcFile && !activeReplaySession) return;
-    setIsGeneratingPostmortem(true);
-    try {
-      let data;
-      // If we have a file, send it
-      if (brcFile) {
-        const formData = new FormData();
-        formData.append("file", brcFile);
-        const response = await brcAPI.generatePostmortem(formData);
-        data = response.data;
-      } else if (afterBattle) {
-        // If loaded from existing
-        const response = await brcAPI.getBattlePostmortem(afterBattle.id);
-        data = response.data;
-      }
-
-      setPostmortemData(data);
-      setShowPostmortem(true);
-      toast.success("Postmortem generated");
-    } catch (error) {
-      toast.error("Failed to generate postmortem");
-    } finally {
-      setIsGeneratingPostmortem(false);
-    }
-  };
-
   const handleDownloadSummary = () => {
     const summary = {
       generated_at: new Date().toISOString(),
       before: {
         id: beforeBattle?.id,
         scenario: beforeBattle?.scenario_name,
-        metrics: beforeBattle?.metrics,
+        metrics: beforeFinalMetrics,
       },
       after: {
         id: afterBattle?.id,
         scenario: afterBattle?.scenario_name,
-        metrics: afterBattle?.metrics,
+        metrics: afterFinalMetrics,
       },
     };
     const blob = new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" });
@@ -506,41 +280,6 @@ const BattleReplay = () => {
 
   const beforeTurn = beforeBattle?.turns?.[currentTurn];
   const afterTurn = afterBattle?.turns?.[currentTurn];
-  const renderStagePayload = (payload) => {
-    if (!payload) return "No output captured.";
-    try {
-      return JSON.stringify(payload, null, 2);
-    } catch (error) {
-      return String(payload);
-    }
-  };
-
-  const buildStageEntries = (turn) => {
-    if (!turn?.stage_outputs) return [];
-    return Object.entries(turn.stage_outputs)
-      .filter(([team]) => team)
-      .map(([team, payload]) => ({
-        team,
-        agent: payload?.agent || payload?.agent_id || payload?.agent_name || "",
-        payload,
-      }));
-  };
-
-  const filterStageEntries = (entries) => {
-    return entries.filter((entry) => {
-      if (stageTeamFilter !== "all" && entry.team !== stageTeamFilter) return false;
-      if (stageAgentFilter !== "all" && entry.agent !== stageAgentFilter) return false;
-      return true;
-    });
-  };
-
-  const rawBeforeEntries = buildStageEntries(beforeTurn);
-  const rawAfterEntries = buildStageEntries(afterTurn);
-  const beforeEntries = filterStageEntries(rawBeforeEntries);
-  const afterEntries = filterStageEntries(rawAfterEntries);
-  const availableAgents = Array.from(
-    new Set([...rawBeforeEntries, ...rawAfterEntries].map((entry) => entry.agent).filter(Boolean))
-  );
 
   // Calculate final metrics
   const beforeFinalMetrics = beforeBattle?.metrics || {};
@@ -558,56 +297,35 @@ const BattleReplay = () => {
             </h1>
             <p className="text-sm text-muted-foreground">Compare battle performance before and after rule changes</p>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".brc,application/octet-stream"
-              className="hidden"
-              onChange={handleImportBrc}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isImporting}
-              data-testid="import-brc-btn"
-            >
-              <FileUp className="h-4 w-4 mr-2" />
-              Import BRC
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" data-testid="share-replay-btn">
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Share
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Share Options</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleCopyShareLink}>
-                  <Link2 className="h-4 w-4 mr-2" />
-                  Copy replay link
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportGif}>
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Export highlight GIF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDownloadSummary}>
-                  <FileDown className="h-4 w-4 mr-2" />
-                  Download summary JSON
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="share-replay-btn">
+                <Share2 className="h-4 w-4 mr-2" />
+                Share
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Share Options</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleCopyShareLink}>
+                <Link2 className="h-4 w-4 mr-2" />
+                Copy replay link
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportGif}>
+                <Share2 className="h-4 w-4 mr-2" />
+                Export highlight GIF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleDownloadSummary}>
+                <FileDown className="h-4 w-4 mr-2" />
+                Download summary JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="space-y-6">
-          {/* Battle Selection */}
-          <div className="grid grid-cols-2 gap-4 p-4 border-b border-border bg-zinc-900/50">
+      {/* Battle Selection */}
+      <div className="grid grid-cols-2 gap-4 p-4 border-b border-border bg-zinc-900/50">
         <div>
           <Label className="text-xs text-muted-foreground mb-2 block">Before (Baseline)</Label>
           <Select
@@ -652,179 +370,56 @@ const BattleReplay = () => {
         </div>
       </div>
 
-      {/* Replay Actions Card - NEW */}
-      <div className="px-4 pb-4 border-b border-border bg-zinc-900/50">
-        <Card className="border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Zap className="h-4 w-4 text-yellow-400" />
-              Replay Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-4">
-               <div className="flex gap-2">
-                  <Button 
-                    size="sm" 
-                    variant="default"
-                    onClick={handleReevaluate}
-                    disabled={!activeReplaySession || isReevaluating}
-                    className="gap-2"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isReevaluating ? 'animate-spin' : ''}`} />
-                    Re-evaluate Score
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="secondary"
-                    onClick={handleRerunDefense}
-                    disabled={!activeReplaySession || isRerunning}
-                    className="gap-2"
-                  >
-                    <Shield className={`h-4 w-4 ${isRerunning ? 'animate-pulse' : ''}`} />
-                    Rerun Defense
-                  </Button>
-                </div>
-                <div className="border-l border-zinc-700 pl-4">
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={handleGeneratePostmortem}
-                    disabled={(!brcFile && !activeReplaySession && !afterBattle) || isGeneratingPostmortem}
-                    className="gap-2"
-                  >
-                    <BookOpen className="h-4 w-4" />
-                    Generate Postmortem
-                  </Button>
-                </div>
-            </div>
-            
-            {activeReplaySession && (
-              <div className="mt-2 text-xs text-muted-foreground">
-                Session Active: <span className="text-emerald-400 font-mono">{activeReplaySession.session_id}</span>
-                <span className="mx-2">•</span>
-                Mode: <span className="capitalize text-zinc-300">{activeReplaySession.mode.replace('_', ' ')}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="p-4 border-b border-border bg-zinc-900/50">
-        <Card className="border-border mb-4">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-400" />
-              BRC Validation & Preview
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <input
-              ref={brcFileRef}
-              type="file"
-              accept=".brc,application/octet-stream"
-              className="hidden"
-              onChange={handleSelectBrcFile}
+      {/* Playback Controls */}
+      <div className="flex items-center justify-center gap-4 p-4 border-b border-border">
+        <Button variant="ghost" size="icon" onClick={reset} data-testid="replay-reset">
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={stepBackward} disabled={currentTurn === 0}>
+          <SkipBack className="h-4 w-4" />
+        </Button>
+        <Button
+          variant={isPlaying ? "destructive" : "default"}
+          size="lg"
+          onClick={togglePlayback}
+          disabled={maxTurns === 0}
+          data-testid="replay-play"
+        >
+          {isPlaying ? <Pause className="h-5 w-5 mr-2" /> : <Play className="h-5 w-5 mr-2" />}
+          {isPlaying ? "Pause" : "Play"}
+        </Button>
+        <Button variant="ghost" size="icon" onClick={stepForward} disabled={currentTurn >= maxTurns - 1}>
+          <SkipForward className="h-4 w-4" />
+        </Button>
+        
+        <div className="h-6 w-px bg-border mx-2" />
+        
+        <div className="flex items-center gap-2">
+          <Rewind className="h-4 w-4 text-muted-foreground" />
+          <div className="w-24">
+            <Slider
+              value={playbackSpeed}
+              onValueChange={setPlaybackSpeed}
+              min={0.5}
+              max={3}
+              step={0.5}
             />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => brcFileRef.current?.click()}
-              >
-                <FileUp className="h-4 w-4 mr-2" />
-                Choose BRC
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                {brcFile ? brcFile.name : "No file selected"}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleValidateBrc}
-                disabled={!brcFile || isValidatingBrc}
-              >
-                Validate
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePreviewBrc}
-                disabled={!brcFile || isPreviewingBrc}
-              >
-                Preview
-              </Button>
-            </div>
-            {brcValidation && (
-              <div className="text-xs space-y-2">
-                <div className="flex items-center gap-2">
-                  <Badge className={brcValidation.valid ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}>
-                    {brcValidation.valid ? "Valid" : "Invalid"}
-                  </Badge>
-                  {brcValidation.warnings?.length ? (
-                    <Badge className="bg-amber-500/20 text-amber-400">Warnings {brcValidation.warnings.length}</Badge>
-                  ) : null}
-                </div>
-                {brcValidation.errors?.length ? (
-                  <ul className="list-disc list-inside text-red-400">
-                    {brcValidation.errors.map((error) => (
-                      <li key={error}>{error}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                {brcValidation.warnings?.length ? (
-                  <ul className="list-disc list-inside text-amber-400">
-                    {brcValidation.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            )}
-            {brcPreview && (
-              <div className="text-xs text-muted-foreground space-y-1">
-                <div>Artifacts: {brcPreview.artifact_count || 0}</div>
-                <div>Stage files: {brcPreview.stage_files?.length || 0}</div>
-                <div>Battle type: {brcPreview.manifest?.battle_type || "—"}</div>
-                <div>Run ID: {brcPreview.manifest?.run_id || "—"}</div>
-                {brcPreview.stage_summary && (
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(brcPreview.stage_summary).map(([stage, count]) => (
-                      <Badge key={stage} variant="outline" className="border-zinc-700 text-zinc-300">
-                        {stage}: {count}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          </div>
+          <FastForward className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground w-8">{playbackSpeed[0]}x</span>
+        </div>
+
+        <div className="h-6 w-px bg-border mx-2" />
+
+        <div className="flex items-center gap-2">
+          <Switch checked={syncPlayback} onCheckedChange={setSyncPlayback} id="sync-playback" />
+          <Label htmlFor="sync-playback" className="text-sm">Sync</Label>
+        </div>
       </div>
 
       {/* Progress Bar */}
       <div className="px-4 py-2 bg-zinc-900/30">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={togglePlayback}
-            className="h-8 w-8 hover:text-blue-400 hover:bg-blue-400/10"
-          >
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={reset}
-            className="h-8 w-8"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-
           <span className="text-sm font-mono w-20">Turn {currentTurn + 1}/{maxTurns}</span>
           <Slider
             value={[currentTurn]}
@@ -895,111 +490,6 @@ const BattleReplay = () => {
             />
           </div>
 
-          {/* Stage Outputs */}
-          <Card className="border-border">
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-400" />
-                  Stage Outputs Detail
-                </CardTitle>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select value={stageTeamFilter} onValueChange={setStageTeamFilter}>
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue placeholder="Team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All teams</SelectItem>
-                      <SelectItem value="red">Red</SelectItem>
-                      <SelectItem value="blue">Blue</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={stageAgentFilter}
-                    onValueChange={setStageAgentFilter}
-                    disabled={!availableAgents.length}
-                  >
-                    <SelectTrigger className="w-[160px]">
-                      <SelectValue placeholder="Agent" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All agents</SelectItem>
-                      {availableAgents.map((agent) => (
-                        <SelectItem key={agent} value={agent}>
-                          {agent}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-lg border border-border bg-zinc-900/40 p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <Badge className="bg-red-500/20 text-red-400">Before</Badge>
-                  <Badge variant="outline" className="border-zinc-600 text-zinc-300">
-                    {beforeTurn?.stage || "Stage"}
-                  </Badge>
-                </div>
-                <div className="grid gap-3">
-                  {beforeEntries.length ? (
-                    beforeEntries.map((entry, idx) => (
-                      <Collapsible key={`${entry.team}-${idx}`} defaultOpen={idx === 0}>
-                        <CollapsibleTrigger className="flex w-full items-center justify-between rounded border border-border bg-black/30 px-2 py-1 text-xs">
-                          <span className="text-muted-foreground capitalize">
-                            {entry.team} {entry.agent ? `• ${entry.agent}` : ""}
-                          </span>
-                          <ChevronDown className="h-3 w-3" />
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <ScrollArea className="h-32 rounded border border-border bg-black/40 p-2 mt-2">
-                            <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                              {renderStagePayload(entry.payload)}
-                            </pre>
-                          </ScrollArea>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    ))
-                  ) : (
-                    <div className="text-xs text-muted-foreground">No outputs for filters.</div>
-                  )}
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-zinc-900/40 p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <Badge className="bg-blue-500/20 text-blue-300">After</Badge>
-                  <Badge variant="outline" className="border-zinc-600 text-zinc-300">
-                    {afterTurn?.stage || "Stage"}
-                  </Badge>
-                </div>
-                <div className="grid gap-3">
-                  {afterEntries.length ? (
-                    afterEntries.map((entry, idx) => (
-                      <Collapsible key={`${entry.team}-${idx}`} defaultOpen={idx === 0}>
-                        <CollapsibleTrigger className="flex w-full items-center justify-between rounded border border-border bg-black/30 px-2 py-1 text-xs">
-                          <span className="text-muted-foreground capitalize">
-                            {entry.team} {entry.agent ? `• ${entry.agent}` : ""}
-                          </span>
-                          <ChevronDown className="h-3 w-3" />
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <ScrollArea className="h-32 rounded border border-border bg-black/40 p-2 mt-2">
-                            <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                              {renderStagePayload(entry.payload)}
-                            </pre>
-                          </ScrollArea>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    ))
-                  ) : (
-                    <div className="text-xs text-muted-foreground">No outputs for filters.</div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Learning Progress */}
           {(beforeBattle || afterBattle) && (
             <Card className="border-border">
@@ -1067,41 +557,6 @@ const BattleReplay = () => {
           )}
         </div>
       </ScrollArea>
-
-      {/* Postmortem Dialog */}
-      <Dialog open={showPostmortem} onOpenChange={setShowPostmortem}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Battle Postmortem & Lessons Distilled</DialogTitle>
-            <DialogDescription>
-              Detailed analysis of battle outcomes, lessons learned, and recommended rule patches.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="mt-4">
-             {postmortemData?.postmortem_md ? (
-               <article className="prose prose-invert prose-sm max-w-none">
-                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{postmortemData.postmortem_md}</ReactMarkdown>
-               </article>
-             ) : (
-               <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
-                 <Zap className="h-12 w-12 mb-4 opacity-50" />
-                 <p>Generating insights...</p>
-               </div>
-             )}
-          </div>
-          
-          <DialogFooter>
-             <Button variant="outline" onClick={() => setShowPostmortem(false)}>Close</Button>
-             <Button variant="default" onClick={() => {
-               toast.success("Lessons exported to AMC (mock)");
-               setShowPostmortem(false);
-             }}>
-               Export to AMC
-             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

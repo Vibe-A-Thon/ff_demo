@@ -5,13 +5,12 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import { ScrollArea } from "../components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../components/ui/sheet";
 import { Switch } from "../components/ui/switch";
 import { Progress } from "../components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { knowledgeAPI, ragAPI, settingsAPI, agentAPI, graphAPI, evidenceAPI, amcAPI, pepAPI, brainSurgeryAPI } from "../lib/api";
+import { knowledgeAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   Plus,
@@ -27,8 +26,6 @@ import {
   Lock,
   Lightbulb,
   AlertTriangle,
-  Upload,
-  FileDiff,
 } from "lucide-react";
 
 const nodeColors = {
@@ -74,61 +71,9 @@ const BrainSurgery = () => {
   const [perfImpact, setPerfImpact] = useState(18);
   const [perfLatency, setPerfLatency] = useState(6);
   const [perfCpu, setPerfCpu] = useState(4);
-  const [ragGraphQuality, setRagGraphQuality] = useState(null);
-  const [ragSettings, setRagSettings] = useState(null);
-  const [lineageArtifactId, setLineageArtifactId] = useState("");
-  const [lineageLoading, setLineageLoading] = useState(false);
-  const [lineagePayload, setLineagePayload] = useState(null);
-  const [lineageRunId, setLineageRunId] = useState("");
-  const [evidencePacks, setEvidencePacks] = useState([]);
-  const [selectedPackId, setSelectedPackId] = useState("");
-  const [lineageGraphData, setLineageGraphData] = useState({ nodes: [], links: [] });
-  const [lineageGraphLoading, setLineageGraphLoading] = useState(false);
-  const [lineageViewEnabled, setLineageViewEnabled] = useState(false);
-  const [lineageTypeFilters, setLineageTypeFilters] = useState({
-    run: true,
-    stage: true,
-    task: true,
-    agent: true,
-    artifact: true,
-    evidence_pack: true,
-  });
-  const [lineageGroupByType, setLineageGroupByType] = useState(true);
-  const [amcFile, setAmcFile] = useState(null);
-  const [amcValidation, setAmcValidation] = useState(null);
-  const [amcPreview, setAmcPreview] = useState(null);
-  const [amcBaseline, setAmcBaseline] = useState(null);
-  const [amcMerged, setAmcMerged] = useState(null);
-  const [amcTeamId, setAmcTeamId] = useState("blue");
-  const [amcActivationBlocked, setAmcActivationBlocked] = useState(null);
-  const [amcMode, setAmcMode] = useState("merge");
-  const [amcImporting, setAmcImporting] = useState(false);
-  const [amcActivate, setAmcActivate] = useState(false);
-  const [pepFile, setPepFile] = useState(null);
-  const [pepPreview, setPepPreview] = useState(null);
-  const [pepImporting, setPepImporting] = useState(false);
-  
-  // Brain Surgery Session State
-  const [surgerySession, setSurgerySession] = useState(null);
-  const [surgerySessionLoading, setSurgerySessionLoading] = useState(false);
-  const [surgeryConflicts, setSurgeryConflicts] = useState([]);
-  const [surgerySandboxResults, setSurgerySandboxResults] = useState(null);
-  const [surgeryHotSwapReady, setSurgeryHotSwapReady] = useState(false);
-  const [surgeryHotSwapExecuting, setSurgeryHotSwapExecuting] = useState(false);
-  const [surgeryRollbackExecuting, setSurgeryRollbackExecuting] = useState(false);
-  const [rollbackSnapshots, setRollbackSnapshots] = useState([]);
-  const [hotSwapMode, setHotSwapMode] = useState("hot_swap");
-  const [knowledgeMergeGraph, setKnowledgeMergeGraph] = useState(null);
-  
   const graphRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
-
-  const baselineFrame = {
-    name: "Baseline",
-    summary: "Current production knowledge snapshot.",
-    details: { status: "active", team: "baseline", notes: "Sandbox baseline loaded" },
-  };
 
   const patches = [
     { id: "patch-ato-01", name: "ATO Patch v1.2", risk: "low", coverage: "+12%" },
@@ -164,10 +109,9 @@ const BrainSurgery = () => {
     
     const updateDimensions = () => {
       if (containerRef.current) {
-        const height = containerRef.current.offsetHeight;
         setDimensions({
           width: containerRef.current.offsetWidth,
-          height: Math.max(height, 420),
+          height: containerRef.current.offsetHeight - 120, // Account for toolbar
         });
       }
     };
@@ -175,54 +119,9 @@ const BrainSurgery = () => {
     updateDimensions();
     window.addEventListener("resize", updateDimensions);
     return () => window.removeEventListener("resize", updateDimensions);
-  }, [loadNodes]);
-
-  useEffect(() => {
-    const loadEvidencePacks = async () => {
-      try {
-        const response = await evidenceAPI.getAll();
-        const packs = response?.data || [];
-        setEvidencePacks(packs);
-        if (packs.length > 0 && !selectedPackId) {
-          setSelectedPackId(packs[0].id);
-        }
-      } catch (error) {
-        setEvidencePacks([]);
-      }
-    };
-    loadEvidencePacks();
-  }, [selectedPackId]);
-
-  useEffect(() => {
-    const loadRagQuality = async () => {
-      try {
-        const [historyRes, settingsRes] = await Promise.all([
-          ragAPI.evaluationHistory({ limit: 1 }),
-          settingsAPI.get(),
-        ]);
-        setRagGraphQuality(historyRes?.data?.items?.[0] || null);
-        setRagSettings(settingsRes?.data?.rag || null);
-      } catch (error) {
-        setRagGraphQuality(null);
-        setRagSettings(null);
-      }
-    };
-    loadRagQuality();
   }, []);
 
-  useEffect(() => {
-    const loadAmcBaseline = async () => {
-      try {
-        const response = await amcAPI.baseline(amcTeamId);
-        setAmcBaseline(response?.data || baselineFrame);
-      } catch (error) {
-        setAmcBaseline(baselineFrame);
-      }
-    };
-    loadAmcBaseline();
-  }, [amcTeamId]);
-
-  const loadNodes = useCallback(async () => {
+  const loadNodes = async () => {
     setGraphLoading(true);
     try {
       const response = await knowledgeAPI.getNodes();
@@ -255,7 +154,7 @@ const BrainSurgery = () => {
     } finally {
       setGraphLoading(false);
     }
-  }, []);
+  };
 
   const handleNodeClick = useCallback((node) => {
     if (connectMode && connectSource) {
@@ -269,9 +168,9 @@ const BrainSurgery = () => {
     } else {
       setSelectedNode(node);
     }
-  }, [connectMode, connectSource, handleConnectNodes]);
+  }, [connectMode, connectSource]);
 
-  const handleConnectNodes = useCallback(async (sourceId, targetId) => {
+  const handleConnectNodes = async (sourceId, targetId) => {
     if (sourceId === targetId) {
       toast.error("Cannot connect node to itself");
       return;
@@ -283,7 +182,7 @@ const BrainSurgery = () => {
     } catch (error) {
       toast.error("Failed to connect nodes");
     }
-  }, [loadNodes]);
+  };
 
   const handleCreateNode = async () => {
     if (!newNodeName.trim()) {
@@ -315,111 +214,6 @@ const BrainSurgery = () => {
       toast.error("Failed to delete node");
     }
   };
-
-  const loadLineage = useCallback(async (artifactIdOverride) => {
-    const artifactId = (artifactIdOverride || lineageArtifactId).trim();
-    if (!artifactId) {
-      toast.error("Enter an artifact id to load lineage");
-      return;
-    }
-    setLineageLoading(true);
-    try {
-      const response = await agentAPI.getLineage(artifactId);
-      setLineagePayload(response?.data || null);
-      toast.success("Lineage loaded");
-    } catch (error) {
-      setLineagePayload(null);
-      toast.error("Failed to load lineage");
-    } finally {
-      setLineageLoading(false);
-    }
-  }, [lineageArtifactId]);
-
-  const loadLineageGraph = useCallback(async () => {
-    if (!lineageRunId.trim()) {
-      toast.error("Enter a run id to load lineage graph");
-      return;
-    }
-    setLineageGraphLoading(true);
-    try {
-      const response = await graphAPI.getRunLineage(lineageRunId.trim());
-      const graph = response?.data?.graph || response?.data || { nodes: [], edges: [] };
-      setLineageGraphData({
-        nodes: graph.nodes || [],
-        links: graph.edges || [],
-      });
-      toast.success("Lineage graph loaded");
-    } catch (error) {
-      setLineageGraphData({ nodes: [], links: [] });
-      toast.error("Failed to load lineage graph");
-    } finally {
-      setLineageGraphLoading(false);
-    }
-  }, [lineageRunId]);
-
-  const loadEvidenceLineageGraph = useCallback(async (packId) => {
-    if (!packId) return;
-    setLineageGraphLoading(true);
-    try {
-      const response = await graphAPI.getEvidenceLineage(packId);
-      const graph = response?.data?.graph || response?.data || { nodes: [], edges: [] };
-      const nodes = graph.nodes || [];
-      const edges = graph.edges || [];
-      const filteredNodes = nodes.filter((node) => lineageTypeFilters[node.type] ?? true);
-      const allowedIds = new Set(filteredNodes.map((node) => node.id));
-      const filteredLinks = edges.filter((edge) => allowedIds.has(edge.source) && allowedIds.has(edge.target));
-
-      if (lineageGroupByType) {
-        const typeOrder = ["run", "stage", "task", "agent", "artifact", "evidence_pack"];
-        const columns = new Map(typeOrder.map((type, index) => [type, index]));
-        const columnCounts = new Map(typeOrder.map((type) => [type, 0]));
-        const groupedNodes = filteredNodes.map((node) => {
-          const columnIndex = columns.get(node.type) ?? 0;
-          const rowIndex = columnCounts.get(node.type) ?? 0;
-          columnCounts.set(node.type, rowIndex + 1);
-          return {
-            ...node,
-            fx: 120 + columnIndex * 120,
-            fy: 40 + rowIndex * 40,
-          };
-        });
-        setLineageGraphData({ nodes: groupedNodes, links: filteredLinks });
-      } else {
-        setLineageGraphData({ nodes: filteredNodes, links: filteredLinks });
-      }
-      if (!lineageViewEnabled) {
-        setLineageViewEnabled(true);
-      }
-    } catch (error) {
-      setLineageGraphData({ nodes: [], links: [] });
-    } finally {
-      setLineageGraphLoading(false);
-    }
-  }, [lineageGroupByType, lineageTypeFilters, lineageViewEnabled]);
-
-  const deriveArtifactId = useCallback((node) => {
-    if (!node) return "";
-    return (
-      node?.data?.artifact_id ||
-      node?.data?.artifactId ||
-      node?.data?.artifact ||
-      ""
-    );
-  }, []);
-
-  useEffect(() => {
-    const artifactId = deriveArtifactId(selectedNode);
-    if (artifactId && artifactId !== lineageArtifactId) {
-      setLineageArtifactId(artifactId);
-      loadLineage(artifactId);
-    }
-  }, [selectedNode, deriveArtifactId, lineageArtifactId, loadLineage]);
-
-  useEffect(() => {
-    if (selectedPackId) {
-      loadEvidenceLineageGraph(selectedPackId);
-    }
-  }, [selectedPackId, loadEvidenceLineageGraph]);
 
   const handleZoom = (direction) => {
     if (graphRef.current) {
@@ -501,342 +295,6 @@ const BrainSurgery = () => {
     setPerfCpu(Math.max(1, Math.round(next / 4)));
   };
 
-  const handleAmcValidate = async () => {
-    if (!amcFile) {
-      toast.error("Upload an AMC file first.");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", amcFile);
-    try {
-      const response = await amcAPI.validate(formData);
-      setAmcValidation(response?.data || null);
-      toast.success("AMC validation complete.");
-    } catch (error) {
-      toast.error("AMC validation failed.");
-    }
-  };
-
-  const handleAmcPreview = async () => {
-    if (!amcFile) {
-      toast.error("Upload an AMC file first.");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", amcFile);
-    try {
-      const response = await amcAPI.preview(formData);
-      const payload = response?.data || null;
-      const previewTeamId = payload?.import?.manifest?.team_id || payload?.preview?.manifest?.team_id;
-      if (previewTeamId) {
-        setAmcTeamId(previewTeamId);
-      }
-      setAmcPreview(payload?.import || payload?.preview || payload);
-      if (payload?.baseline) {
-        setAmcBaseline(payload.baseline);
-      }
-      if (payload?.merged) {
-        setAmcMerged(payload.merged);
-      }
-      toast.success("AMC preview ready.");
-    } catch (error) {
-      toast.error("AMC preview failed.");
-    }
-  };
-
-  const handleAmcImport = async () => {
-    if (!amcFile) {
-      toast.error("Upload an AMC file first.");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", amcFile);
-    formData.append("mode", amcMode);
-    formData.append("activate", amcActivate);
-    setAmcImporting(true);
-    try {
-      const response = await amcAPI.import(formData);
-      const payload = response?.data?.preview || response?.data || null;
-      setAmcActivationBlocked(response?.data?.activation_blocked || null);
-      const previewTeamId = payload?.import?.manifest?.team_id || payload?.preview?.manifest?.team_id;
-      if (previewTeamId) {
-        setAmcTeamId(previewTeamId);
-      }
-      setAmcPreview(payload?.import || payload?.preview || payload);
-      if (payload?.baseline) {
-        setAmcBaseline(payload.baseline);
-      }
-      if (payload?.merged) {
-        setAmcMerged(payload.merged);
-      }
-      if (response?.data?.activation_blocked) {
-        toast.warning(response.data.activation_blocked);
-      }
-      toast.success("AMC imported into sandbox.");
-    } catch (error) {
-      toast.error("AMC import failed.");
-    } finally {
-      setAmcImporting(false);
-    }
-  };
-
-  const handlePepPreview = async () => {
-    if (!pepFile) {
-      toast.error("Upload a PEP file first.");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", pepFile);
-    try {
-      const response = await pepAPI.preview(formData);
-      setPepPreview(response?.data || null);
-      toast.success("PEP preview ready.");
-    } catch (error) {
-      toast.error("PEP preview failed.");
-    }
-  };
-
-  const handlePepImport = async () => {
-    if (!pepFile) {
-      toast.error("Upload a PEP file first.");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", pepFile);
-    setPepImporting(true);
-    try {
-      const response = await pepAPI.import(formData);
-      const payload = response?.data || null;
-      setPepPreview(payload);
-      const firstImported = payload?.imports?.find((item) => item.status === "imported");
-      if (firstImported?.preview) {
-        setAmcPreview(firstImported.preview);
-      }
-      toast.success("PEP imported into sandbox.");
-    } catch (error) {
-      toast.error("PEP import failed.");
-    } finally {
-      setPepImporting(false);
-    }
-  };
-
-  // ============ BRAIN SURGERY HANDLERS ============
-
-  // Start a new Brain Surgery session with optional AMC file
-  const handleStartSurgerySession = async () => {
-    if (!amcTeamId) {
-      toast.error("Select a team first.");
-      return;
-    }
-    setSurgerySessionLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append("team_id", amcTeamId);
-      if (amcFile) {
-        formData.append("file", amcFile);
-      }
-      const response = await brainSurgeryAPI.startSession(formData);
-      const session = response?.data || null;
-      setSurgerySession(session);
-      setSurgeryConflicts(session?.conflicts || []);
-      setSurgeryHotSwapReady(session?.hot_swap_ready || false);
-      
-      if (session?.baseline) {
-        setAmcBaseline(session.baseline);
-      }
-      if (session?.import_preview) {
-        setAmcPreview(session.import_preview);
-      }
-      if (session?.merged_preview) {
-        setAmcMerged(session.merged_preview);
-      }
-      if (session?.validation) {
-        setAmcValidation(session.validation);
-      }
-      
-      toast.success(`Brain Surgery session started: ${session?.session_id || "new"}`);
-      
-      // Load rollback snapshots
-      await loadRollbackSnapshots();
-      
-      // Load knowledge merge graph if session exists
-      if (session?.session_id) {
-        await loadKnowledgeMergeGraph(session.session_id);
-      }
-    } catch (error) {
-      toast.error("Failed to start Brain Surgery session.");
-    } finally {
-      setSurgerySessionLoading(false);
-    }
-  };
-
-  // Load rollback snapshots for the current team
-  const loadRollbackSnapshots = async () => {
-    try {
-      const response = await brainSurgeryAPI.listRollbackSnapshots(amcTeamId, 10);
-      setRollbackSnapshots(response?.data || []);
-    } catch (error) {
-      setRollbackSnapshots([]);
-    }
-  };
-
-  // Load knowledge graph for merge visualization
-  const loadKnowledgeMergeGraph = async (sessionId) => {
-    try {
-      const response = await brainSurgeryAPI.getKnowledgeGraph(sessionId);
-      setKnowledgeMergeGraph(response?.data || null);
-    } catch (error) {
-      setKnowledgeMergeGraph(null);
-    }
-  };
-
-  // Resolve a conflict in the surgery session
-  const handleResolveSurgeryConflict = async (conflictId, resolution) => {
-    if (!surgerySession?.session_id) {
-      toast.error("No active surgery session.");
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append("conflict_id", conflictId);
-      formData.append("resolution", resolution);
-      const response = await brainSurgeryAPI.resolveConflict(surgerySession.session_id, formData);
-      const session = response?.data || null;
-      setSurgerySession(session);
-      setSurgeryConflicts(session?.conflicts || []);
-      toast.success(`Conflict ${conflictId} resolved.`);
-    } catch (error) {
-      toast.error("Failed to resolve conflict.");
-    }
-  };
-
-  // Run sandbox validation on the merged state
-  const handleRunSurgerySandbox = async () => {
-    if (!surgerySession?.session_id) {
-      toast.error("Start a surgery session first.");
-      return;
-    }
-    setSandboxStatus("running");
-    setSandboxLogs((prev) => [
-      ...prev,
-      `[${new Date().toLocaleTimeString()}] Running sandbox validation for session ${surgerySession.session_id}...`,
-    ]);
-    try {
-      const response = await brainSurgeryAPI.runSandbox(surgerySession.session_id);
-      const session = response?.data || null;
-      setSurgerySession(session);
-      setSurgerySandboxResults(session?.sandbox_results || null);
-      setSurgeryHotSwapReady(session?.hot_swap_ready || false);
-      
-      // Update sandbox cases from results
-      const tests = session?.sandbox_results?.tests || [];
-      setSandboxCases(tests.map((test) => ({
-        id: test.id,
-        name: test.name,
-        status: test.status,
-      })));
-      
-      setSandboxStatus(session?.sandbox_results?.passed ? "passed" : "failed");
-      setSandboxLogs((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] Sandbox validation completed: ${session?.status || "unknown"}`,
-        ...tests.flatMap((t) => t.logs || []),
-      ]);
-      
-      if (session?.sandbox_results?.passed) {
-        toast.success("Sandbox validation passed! Ready for hot-swap.");
-      } else {
-        toast.warning("Sandbox validation failed. Review results before proceeding.");
-      }
-    } catch (error) {
-      setSandboxStatus("failed");
-      setSandboxLogs((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] Sandbox error: ${error.message}`,
-      ]);
-      toast.error("Sandbox validation failed.");
-    }
-  };
-
-  // Execute hot-swap
-  const handleExecuteHotSwap = async () => {
-    if (!surgerySession?.session_id) {
-      toast.error("No active surgery session.");
-      return;
-    }
-    if (!surgeryHotSwapReady) {
-      toast.error("Run sandbox validation first.");
-      return;
-    }
-    setSurgeryHotSwapExecuting(true);
-    try {
-      const formData = new FormData();
-      formData.append("mode", hotSwapMode);
-      const response = await brainSurgeryAPI.executeHotSwap(surgerySession.session_id, formData);
-      const session = response?.data || null;
-      setSurgerySession(session);
-      
-      toast.success(`Hot-swap executed successfully in ${hotSwapMode} mode!`);
-      
-      // Refresh rollback snapshots
-      await loadRollbackSnapshots();
-    } catch (error) {
-      const errorMsg = error.response?.data?.detail || "Hot-swap failed.";
-      if (errorMsg.includes("SoD")) {
-        toast.error("SoD violation: You cannot execute the hot-swap for your own session.");
-      } else {
-        toast.error(errorMsg);
-      }
-    } finally {
-      setSurgeryHotSwapExecuting(false);
-    }
-  };
-
-  // Execute rollback
-  const handleExecuteRollback = async (snapshotId = null) => {
-    setSurgeryRollbackExecuting(true);
-    try {
-      const formData = new FormData();
-      formData.append("team_id", amcTeamId);
-      if (snapshotId) {
-        formData.append("snapshot_id", snapshotId);
-      }
-      const response = await brainSurgeryAPI.rollback(formData);
-      const result = response?.data || null;
-      
-      if (result?.restored_snapshot) {
-        setAmcBaseline(result.restored_snapshot.baseline_snapshot);
-      }
-      
-      toast.success("Rollback executed successfully!");
-      
-      // Refresh rollback snapshots
-      await loadRollbackSnapshots();
-      
-      // Reload baseline
-      const baselineResponse = await amcAPI.baseline(amcTeamId);
-      setAmcBaseline(baselineResponse?.data || null);
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Rollback failed.");
-    } finally {
-      setSurgeryRollbackExecuting(false);
-    }
-  };
-
-  // Load team state
-  const handleLoadTeamState = async () => {
-    try {
-      const response = await brainSurgeryAPI.getTeamState(amcTeamId);
-      const state = response?.data || null;
-      if (state?.active_snapshot) {
-        setAmcBaseline(state.active_snapshot);
-      }
-      toast.success(`Loaded active state for team ${amcTeamId}`);
-    } catch (error) {
-      toast.error("Failed to load team state.");
-    }
-  };
-
   const getSafetyBadge = (risk) => {
     if (risk === "low") return { label: "SAFE TO MERGE", className: "status-success" };
     if (risk === "medium") return { label: "REQUIRES REVIEW", className: "status-warning" };
@@ -858,7 +316,7 @@ const BrainSurgery = () => {
   );
 
   return (
-    <div className="h-full flex flex-col bg-background relative" data-testid="brain-surgery">
+    <div ref={containerRef} className="h-full flex flex-col bg-background" data-testid="brain-surgery">
       {/* Floating Toolbar */}
       <div className="absolute top-20 left-72 right-4 z-10 flex items-center justify-between glass rounded-lg px-4 py-3">
         <div className="flex items-center gap-4">
@@ -908,52 +366,6 @@ const BrainSurgery = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <Select value={selectedPackId} onValueChange={setSelectedPackId}>
-            <SelectTrigger className="w-44" data-testid="lineage-pack-select">
-              <SelectValue placeholder="Evidence pack" />
-            </SelectTrigger>
-            <SelectContent>
-              {evidencePacks.map((pack) => (
-                <SelectItem key={pack.id} value={pack.id}>
-                  {pack.id.slice(0, 8)}...
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            value={lineageRunId}
-            onChange={(event) => setLineageRunId(event.target.value)}
-            placeholder="Run id"
-            className="w-40"
-            data-testid="lineage-run-id"
-          />
-          <Button
-            variant="outline"
-            onClick={loadLineageGraph}
-            disabled={lineageGraphLoading}
-            data-testid="lineage-load-graph"
-          >
-            {lineageGraphLoading ? "Loading" : "Load Lineage"}
-          </Button>
-          <Button
-            variant={lineageViewEnabled ? "default" : "outline"}
-            onClick={() => setLineageViewEnabled((prev) => !prev)}
-            data-testid="lineage-toggle-view"
-          >
-            {lineageViewEnabled ? "Graph View" : "Lineage View"}
-          </Button>
-          <Badge
-            className={(() => {
-              const value = ragGraphQuality?.metrics?.avg_faithfulness;
-              const warn = Number(ragSettings?.faithfulness_warn ?? 0.75);
-              if (value === undefined || value === null) return "bg-zinc-800 text-zinc-300 border border-zinc-700";
-              if (value < warn) return "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30";
-              return "bg-green-500/15 text-green-400 border border-green-500/30";
-            })()}
-            data-testid="brain-rag-quality"
-          >
-            GraphRAG Quality: {ragGraphQuality?.metrics?.avg_faithfulness?.toFixed?.(3) ?? "—"}
-          </Badge>
           <Button variant="ghost" size="icon" onClick={() => handleZoom("in")} data-testid="zoom-in-btn">
             <ZoomIn className="h-4 w-4" />
           </Button>
@@ -966,382 +378,8 @@ const BrainSurgery = () => {
         </div>
       </div>
 
-      <ScrollArea className="flex-1 pt-24" data-testid="brain-surgery-scroll">
-        <div className="flex flex-col gap-6 pb-6">
-          {/* AMC Import (3-frame) */}
-          <div className="px-6" data-testid="amc-import-panel">
-            <Card className="border-border">
-              <CardHeader>
-                <CardTitle className="text-sm">AMC Import (3-Frame Merge View)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground">Upload AMC</label>
-                    <Input
-                      type="file"
-                      accept=".amc,.zip"
-                      onChange={(event) => setAmcFile(event.target.files?.[0] || null)}
-                      data-testid="amc-upload"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">Import Mode</label>
-                    <Select value={amcMode} onValueChange={setAmcMode}>
-                      <SelectTrigger className="w-full" data-testid="amc-mode-trigger">
-                        <SelectValue placeholder="Select mode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="merge">Merge</SelectItem>
-                        <SelectItem value="replace">Replace</SelectItem>
-                        <SelectItem value="merge_calibrate">Merge + Calibrate</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <Button variant="outline" onClick={handleAmcValidate} data-testid="amc-validate-btn">
-                      <Shield className="h-4 w-4 mr-2" /> Validate
-                    </Button>
-                    <Button variant="outline" onClick={handleAmcPreview} data-testid="amc-preview-btn">
-                      <FileDiff className="h-4 w-4 mr-2" /> Preview
-                    </Button>
-                    <Button onClick={handleAmcImport} disabled={amcImporting} data-testid="amc-import-btn">
-                      <Upload className="h-4 w-4 mr-2" /> {amcImporting ? "Importing" : "Import"}
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <Button
-                    variant={amcActivate ? "default" : "outline"}
-                    onClick={() => setAmcActivate((prev) => !prev)}
-                    data-testid="amc-activate-toggle"
-                  >
-                    {amcActivate ? "Activate After Import" : "Activate Later"}
-                  </Button>
-                  {amcActivationBlocked && (
-                    <Badge variant="outline" className="status-warning">
-                      {amcActivationBlocked}
-                    </Badge>
-                  )}
-                  {amcValidation && (
-                    <Badge variant="outline" className={amcValidation.valid ? "status-success" : "status-error"}>
-                      {amcValidation.valid ? "Validation Passed" : "Validation Failed"}
-                    </Badge>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <Card className="border-border bg-black/20" data-testid="amc-frame-baseline">
-                    <CardHeader>
-                      <CardTitle className="text-xs">Baseline</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                        {JSON.stringify(amcBaseline || baselineFrame, null, 2)}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border bg-black/20" data-testid="amc-frame-import">
-                    <CardHeader>
-                      <CardTitle className="text-xs">AMC Import</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                        {JSON.stringify(amcPreview || { status: "Awaiting preview" }, null, 2)}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border bg-black/20" data-testid="amc-frame-merged">
-                    <CardHeader>
-                      <CardTitle className="text-xs">Merged (Sandbox)</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                        {JSON.stringify(
-                          amcMerged
-                            ? { ...amcMerged, activation: amcActivate ? "pending" : "manual" }
-                            : { status: "Awaiting import" },
-                          null,
-                          2
-                        )}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="px-6" data-testid="pep-import-panel">
-            <Card className="border-border">
-              <CardHeader>
-                <CardTitle className="text-sm">PEP Import (Portable Evolution Pack)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground">Upload PEP</label>
-                    <Input
-                      type="file"
-                      accept=".pep.zip,.zip"
-                      onChange={(event) => setPepFile(event.target.files?.[0] || null)}
-                      data-testid="pep-upload"
-                    />
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <Button variant="outline" onClick={handlePepPreview} data-testid="pep-preview-btn">
-                      <FileDiff className="h-4 w-4 mr-2" /> Preview
-                    </Button>
-                    <Button onClick={handlePepImport} disabled={pepImporting} data-testid="pep-import-btn">
-                      <Upload className="h-4 w-4 mr-2" /> {pepImporting ? "Importing" : "Import"}
-                    </Button>
-                  </div>
-                </div>
-                <Card className="border-border bg-black/20" data-testid="pep-preview-frame">
-                  <CardHeader>
-                    <CardTitle className="text-xs">PEP Preview</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                      {JSON.stringify(pepPreview || { status: "Awaiting preview" }, null, 2)}
-                    </pre>
-                  </CardContent>
-                </Card>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Brain Surgery Operations Panel */}
-          <div className="px-6" data-testid="brain-surgery-ops-panel">
-            <Card className="border-border bg-gradient-to-br from-purple-900/10 to-blue-900/10">
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-purple-400" />
-                  Brain Surgery Operations
-                  {surgerySession && (
-                    <Badge variant="outline" className="text-xs ml-2">
-                      Session: {surgerySession.session_id?.slice(0, 12)}...
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Session Controls */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <div>
-                    <label className="text-xs text-muted-foreground">Target Team</label>
-                    <Select value={amcTeamId} onValueChange={setAmcTeamId}>
-                      <SelectTrigger className="w-full" data-testid="surgery-team-select">
-                        <SelectValue placeholder="Select team" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="blue">Blue Team</SelectItem>
-                        <SelectItem value="red">Red Team</SelectItem>
-                        <SelectItem value="purple">Purple Team</SelectItem>
-                        <SelectItem value="green">Green Team</SelectItem>
-                        <SelectItem value="black">Black Team</SelectItem>
-                        <SelectItem value="orange">Orange Team</SelectItem>
-                        <SelectItem value="gold">Gold Team</SelectItem>
-                        <SelectItem value="white">White Team</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">Hot-Swap Mode</label>
-                    <Select value={hotSwapMode} onValueChange={setHotSwapMode}>
-                      <SelectTrigger className="w-full" data-testid="hotswap-mode-select">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="hot_swap">Immediate</SelectItem>
-                        <SelectItem value="gradual">Gradual Rollout</SelectItem>
-                        <SelectItem value="shadow">Shadow Mode</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <Button 
-                      onClick={handleStartSurgerySession} 
-                      disabled={surgerySessionLoading}
-                      data-testid="start-surgery-btn"
-                    >
-                      {surgerySessionLoading ? "Starting..." : "Start Surgery Session"}
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={handleLoadTeamState}
-                      data-testid="load-state-btn"
-                    >
-                      Load State
-                    </Button>
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <Button 
-                      onClick={handleRunSurgerySandbox} 
-                      disabled={!surgerySession}
-                      variant="outline"
-                      data-testid="run-sandbox-btn"
-                    >
-                      <Play className="h-4 w-4 mr-2" />
-                      Run Sandbox
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Session Status */}
-                {surgerySession && (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <Card className="border-border bg-black/20">
-                      <CardHeader className="py-2">
-                        <CardTitle className="text-xs flex items-center justify-between">
-                          <span>Session Status</span>
-                          <Badge 
-                            className={
-                              surgerySession.status === "hot_swap_active" ? "status-success" :
-                              surgerySession.status?.includes("failed") ? "status-error" :
-                              surgerySession.status === "ready_for_merge" ? "status-success" :
-                              "status-warning"
-                            }
-                          >
-                            {surgerySession.status}
-                          </Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="text-xs space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Started</span>
-                          <span>{surgerySession.started_at?.slice(0, 19)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Hot-Swap Ready</span>
-                          <Badge variant="outline" className={surgeryHotSwapReady ? "status-success" : "status-warning"}>
-                            {surgeryHotSwapReady ? "Ready" : "Not Ready"}
-                          </Badge>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Conflicts</span>
-                          <Badge variant="outline">
-                            {surgeryConflicts.filter(c => !c.resolution).length} unresolved
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    
-                    <Card className="border-border bg-black/20">
-                      <CardHeader className="py-2">
-                        <CardTitle className="text-xs">Hot-Swap & Rollback</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="flex gap-2">
-                          <Button 
-                            onClick={handleExecuteHotSwap} 
-                            disabled={!surgeryHotSwapReady || surgeryHotSwapExecuting}
-                            className="flex-1"
-                            data-testid="execute-hotswap-btn"
-                          >
-                            {surgeryHotSwapExecuting ? "Executing..." : "Execute Hot-Swap"}
-                          </Button>
-                          <Button 
-                            variant="destructive"
-                            onClick={() => handleExecuteRollback()}
-                            disabled={surgeryRollbackExecuting || rollbackSnapshots.length === 0}
-                            data-testid="rollback-btn"
-                          >
-                            <RefreshCw className="h-4 w-4 mr-1" />
-                            {surgeryRollbackExecuting ? "Rolling back..." : "Rollback"}
-                          </Button>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {rollbackSnapshots.length} rollback snapshot(s) available
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
-
-                {/* Conflicts Panel */}
-                {surgeryConflicts.length > 0 && (
-                  <Card className="border-border bg-black/20">
-                    <CardHeader className="py-2">
-                      <CardTitle className="text-xs flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-yellow-400" />
-                        Detected Conflicts ({surgeryConflicts.length})
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {surgeryConflicts.map((conflict) => (
-                        <div 
-                          key={conflict.id} 
-                          className={`rounded-md border p-2 ${
-                            conflict.resolution 
-                              ? "border-green-500/30 bg-green-500/5" 
-                              : "border-yellow-500/30 bg-yellow-500/5"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="text-xs font-medium">{conflict.title}</div>
-                              <div className="text-xs text-muted-foreground">{conflict.detail}</div>
-                            </div>
-                            <div className="flex gap-1">
-                              {(conflict.options || ["keep_existing", "accept_import"]).map((option) => (
-                                <Button
-                                  key={option}
-                                  size="sm"
-                                  variant={conflict.resolution === option ? "default" : "outline"}
-                                  className="text-xs h-7"
-                                  onClick={() => handleResolveSurgeryConflict(conflict.id, option)}
-                                  data-testid={`resolve-${conflict.id}-${option}`}
-                                >
-                                  {option.replace(/_/g, " ")}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Sandbox Results */}
-                {surgerySandboxResults && (
-                  <Card className="border-border bg-black/20">
-                    <CardHeader className="py-2">
-                      <CardTitle className="text-xs flex items-center justify-between">
-                        <span>Sandbox Validation Results</span>
-                        <Badge className={surgerySandboxResults.passed ? "status-success" : "status-error"}>
-                          {surgerySandboxResults.passed ? "PASSED" : "FAILED"}
-                        </Badge>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                        <div className="p-2 rounded bg-black/30">
-                          <div className="text-lg font-bold">{surgerySandboxResults.summary?.total || 0}</div>
-                          <div className="text-muted-foreground">Total</div>
-                        </div>
-                        <div className="p-2 rounded bg-green-500/10">
-                          <div className="text-lg font-bold text-green-400">{surgerySandboxResults.summary?.passed || 0}</div>
-                          <div className="text-muted-foreground">Passed</div>
-                        </div>
-                        <div className="p-2 rounded bg-yellow-500/10">
-                          <div className="text-lg font-bold text-yellow-400">{surgerySandboxResults.summary?.warnings || 0}</div>
-                          <div className="text-muted-foreground">Warnings</div>
-                        </div>
-                        <div className="p-2 rounded bg-red-500/10">
-                          <div className="text-lg font-bold text-red-400">{surgerySandboxResults.summary?.failed || 0}</div>
-                          <div className="text-muted-foreground">Failed</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Graph Canvas */}
-          <div ref={containerRef} className="relative min-h-[520px]">
+      {/* Graph Canvas */}
+      <div className="flex-1 relative">
         {graphLoading && (
           <div className="absolute inset-0 z-10 bg-background/60 backdrop-blur-sm flex items-center justify-center">
             <div className="w-2/3 space-y-3">
@@ -1351,94 +389,55 @@ const BrainSurgery = () => {
             </div>
           </div>
         )}
-        {!lineageViewEnabled && (
-          <ForceGraph2D
-            ref={graphRef}
-            graphData={graphData}
-            width={dimensions.width}
-            height={dimensions.height}
-            backgroundColor="#09090B"
-            nodeLabel={(node) => node.name}
-            nodeColor={(node) => node.color}
-            nodeVal={(node) => node.size}
-            linkColor={(link) => link.color || "#F87171"}
-            linkWidth={2}
-            linkDirectionalArrowLength={6}
-            linkDirectionalArrowRelPos={1}
-            onNodeClick={handleNodeClick}
-            nodeCanvasObject={(node, ctx, globalScale) => {
-              const label = node.name;
-              const fontSize = 12 / globalScale;
-              ctx.font = `${fontSize}px JetBrains Mono`;
-              ctx.fillStyle = node.color;
+        <ForceGraph2D
+          ref={graphRef}
+          graphData={graphData}
+          width={dimensions.width}
+          height={dimensions.height}
+          backgroundColor="#09090B"
+          nodeLabel={(node) => node.name}
+          nodeColor={(node) => node.color}
+          nodeVal={(node) => node.size}
+          linkColor={(link) => link.color || "#F87171"}
+          linkWidth={2}
+          linkDirectionalArrowLength={6}
+          linkDirectionalArrowRelPos={1}
+          onNodeClick={handleNodeClick}
+          nodeCanvasObject={(node, ctx, globalScale) => {
+            const label = node.name;
+            const fontSize = 12 / globalScale;
+            ctx.font = `${fontSize}px JetBrains Mono`;
+            ctx.fillStyle = node.color;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, node.size, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Draw label below node
+            ctx.fillStyle = "#A1A1AA";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillText(label, node.x, node.y + node.size + 4);
+
+            // Draw ROOT badge for root nodes
+            if (node.type === "root") {
+              ctx.fillStyle = "#FAFAFA";
+              ctx.fillRect(node.x - 20, node.y - 8, 40, 16);
+              ctx.fillStyle = "#09090B";
+              ctx.font = `bold ${10 / globalScale}px Manrope`;
+              ctx.fillText("ROOT", node.x, node.y - 4);
+            }
+
+            if (conflictNodeIds.has(node.id)) {
+              ctx.fillStyle = "#EF4444";
               ctx.beginPath();
-              ctx.arc(node.x, node.y, node.size, 0, 2 * Math.PI);
+              ctx.arc(node.x + node.size - 4, node.y - node.size + 4, 5, 0, 2 * Math.PI);
               ctx.fill();
-
-              // Draw label below node
-              ctx.fillStyle = "#A1A1AA";
-              ctx.textAlign = "center";
-              ctx.textBaseline = "top";
-              ctx.fillText(label, node.x, node.y + node.size + 4);
-
-              // Draw ROOT badge for root nodes
-              if (node.type === "root") {
-                ctx.fillStyle = "#FAFAFA";
-                ctx.fillRect(node.x - 20, node.y - 8, 40, 16);
-                ctx.fillStyle = "#09090B";
-                ctx.font = `bold ${10 / globalScale}px Manrope`;
-                ctx.fillText("ROOT", node.x, node.y - 4);
-              }
-
-              if (conflictNodeIds.has(node.id)) {
-                ctx.fillStyle = "#EF4444";
-                ctx.beginPath();
-                ctx.arc(node.x + node.size - 4, node.y - node.size + 4, 5, 0, 2 * Math.PI);
-                ctx.fill();
-              }
-            }}
-            cooldownTicks={100}
-            d3AlphaDecay={0.02}
-            d3VelocityDecay={0.3}
-          />
-        )}
-        {lineageViewEnabled && (
-          <div className="relative h-full w-full">
-            {lineageGraphLoading && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-                <div className="text-sm text-muted-foreground">Loading lineage graph...</div>
-              </div>
-            )}
-            {!lineageGraphLoading && lineageGraphData.nodes.length === 0 && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center text-sm text-muted-foreground">
-                Load a run lineage graph to visualize.
-              </div>
-            )}
-            <ForceGraph2D
-              ref={graphRef}
-              graphData={lineageGraphData}
-              width={dimensions.width}
-              height={dimensions.height}
-              backgroundColor="#09090B"
-              nodeLabel={(node) => node.label || node.id}
-              nodeColor={(node) => {
-                if (node.type === "stage") return "#F59E0B";
-                if (node.type === "artifact") return "#38BDF8";
-                if (node.type === "evidence_pack") return "#A78BFA";
-                if (node.type === "task") return "#10B981";
-                if (node.type === "agent") return "#F97316";
-                return "#64748B";
-              }}
-              linkColor={() => "#475569"}
-              linkWidth={2}
-              linkDirectionalArrowLength={6}
-              linkDirectionalArrowRelPos={1}
-              cooldownTicks={100}
-              d3AlphaDecay={0.02}
-              d3VelocityDecay={0.3}
-            />
-          </div>
-        )}
+            }
+          }}
+          cooldownTicks={100}
+          d3AlphaDecay={0.02}
+          d3VelocityDecay={0.3}
+        />
 
         {/* Legend */}
         <div className="absolute bottom-4 left-4 glass rounded-lg p-4">
@@ -1466,169 +465,6 @@ const BrainSurgery = () => {
           </div>
         )}
       </div>
-
-          {/* Brain Surgery Control Deck */}
-          <div className="border-t border-border bg-zinc-900/70 px-6 py-4">
-            <div className="grid grid-cols-4 gap-4">
-              <Card className="border-border">
-                <CardHeader>
-                  <CardTitle className="text-sm">Patch Library</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {patches.map((patch) => (
-                    <div
-                      key={patch.id}
-                      draggable
-                      onDragStart={handlePatchDragStart(patch)}
-                      className="p-3 rounded-lg border border-border bg-black/30 cursor-move hover:border-zinc-600"
-                      data-testid={`patch-${patch.id}`}
-                    >
-                      <div className="text-sm font-medium">{patch.name}</div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-xs capitalize">
-                          {patch.risk} risk
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          Coverage {patch.coverage}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card className="border-border">
-                <CardHeader>
-                  <CardTitle className="text-sm">Agent Mapping</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {agents.map((agent) => (
-                    <div
-                      key={agent.id}
-                      onDrop={handleAgentDrop(agent.id)}
-                      onDragOver={handleAgentDragOver}
-                      className="p-3 rounded-lg border border-dashed border-border bg-black/20"
-                      data-testid={`agent-drop-${agent.id}`}
-                    >
-                      <div className="text-xs text-muted-foreground">{agent.name}</div>
-                      <div className="text-sm font-medium mt-1">
-                        {patchAssignments[agent.id]?.name || "Drop patch here"}
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card className="border-border">
-                <CardHeader>
-                  <CardTitle className="text-sm">Sandbox & Safety</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Sandbox Status</span>
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {sandboxStatus}
-                    </Badge>
-                  </div>
-                  <Button variant="outline" onClick={runSandboxTest} data-testid="sandbox-run-btn">
-                    <Play className="h-4 w-4 mr-2" />
-                    Run Sandbox
-                  </Button>
-                  <div className="space-y-2">
-                    {patches.map((patch) => {
-                      const badge = getSafetyBadge(patch.risk);
-                      return (
-                        <div key={patch.id} className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{patch.name}</span>
-                          <Badge className={badge.className}>{badge.label}</Badge>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="space-y-2" data-testid="sandbox-cases">
-                    {sandboxCases.map((testCase) => {
-                      const badge = getSandboxBadge(testCase.status);
-                      return (
-                        <div key={testCase.id} className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{testCase.name}</span>
-                          <Badge className={badge.className}>{badge.label}</Badge>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="rounded-md border border-border bg-black/30 p-2 text-xs font-mono h-24 overflow-auto" data-testid="sandbox-log">
-                    {sandboxLogs.length === 0 ? (
-                      <div className="text-muted-foreground">Sandbox logs will appear here.</div>
-                    ) : (
-                      sandboxLogs.map((log, index) => (
-                        <div key={`${log}-${index}`} className="text-muted-foreground">
-                          {log}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border">
-                <CardHeader>
-                  <CardTitle className="text-sm">Deployment Controls</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Hot-Swap</span>
-                    <Switch checked={hotSwapEnabled} onCheckedChange={setHotSwapEnabled} data-testid="hotswap-toggle" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Rollback Window</span>
-                    <Badge variant="outline" className="text-xs">15 min</Badge>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Performance Impact</span>
-                      <span>{perfImpact}%</span>
-                    </div>
-                    <Progress value={perfImpact} className="h-2" />
-                    <Input
-                      type="range"
-                      min="5"
-                      max="45"
-                      step="1"
-                      value={perfImpact}
-                      onChange={(e) => handlePerfImpactChange(e.target.value)}
-                      className="mt-2"
-                      data-testid="perf-impact-slider"
-                    />
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                      <div className="flex items-center justify-between">
-                        <span>Latency Δ</span>
-                        <span>+{perfLatency}ms</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>CPU Δ</span>
-                        <span>+{perfCpu}%</span>
-                      </div>
-                    </div>
-                  </div>
-                  <Button onClick={handleMergeDeploy} data-testid="merge-deploy-btn">
-                    <Shield className="h-4 w-4 mr-2" />
-                    Merge & Deploy
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={() => setConflictOpen(true)} data-testid="conflict-resolve-btn">
-                      <FileText className="h-4 w-4 mr-2" />
-                      Resolve Conflicts
-                    </Button>
-                    <Button variant="ghost" size="icon" data-testid="rollback-btn">
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </div>
-      </ScrollArea>
 
       {/* Node Inspector Sheet */}
       <Sheet open={!!selectedNode} onOpenChange={(open) => !open && setSelectedNode(null)}>
@@ -1701,137 +537,6 @@ const BrainSurgery = () => {
               </div>
             )}
 
-            <div>
-              <label className="text-sm text-muted-foreground">Lineage Explorer</label>
-              <div className="mt-2 space-y-2">
-                <details className="rounded-md border border-border bg-black/30 p-2" open>
-                  <summary className="cursor-pointer text-xs text-muted-foreground">Lineage controls</summary>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {[
-                      { key: "run", label: "Run" },
-                      { key: "stage", label: "Stage" },
-                      { key: "task", label: "Task" },
-                      { key: "agent", label: "Agent" },
-                      { key: "artifact", label: "Artifact" },
-                      { key: "evidence_pack", label: "Evidence" },
-                    ].map((item) => (
-                      <Button
-                        key={item.key}
-                        size="sm"
-                        variant={lineageTypeFilters[item.key] ? "default" : "outline"}
-                        onClick={() =>
-                          setLineageTypeFilters((prev) => ({
-                            ...prev,
-                            [item.key]: !prev[item.key],
-                          }))
-                        }
-                        data-testid={`brain-lineage-filter-${item.key}`}
-                      >
-                        {item.label}
-                      </Button>
-                    ))}
-                  </div>
-                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>Group by type</span>
-                    <Switch
-                      checked={lineageGroupByType}
-                      onCheckedChange={setLineageGroupByType}
-                      data-testid="brain-lineage-group-toggle"
-                    />
-                  </div>
-                </details>
-                <Input
-                  placeholder="Artifact id"
-                  value={lineageArtifactId}
-                  onChange={(event) => setLineageArtifactId(event.target.value)}
-                  data-testid="lineage-artifact-input"
-                />
-                <Button
-                  variant="outline"
-                  onClick={loadLineage}
-                  disabled={lineageLoading}
-                  data-testid="lineage-load-btn"
-                >
-                  {lineageLoading ? "Loading" : "Load Lineage"}
-                </Button>
-                {!lineageLoading && !lineagePayload && (
-                  <div className="text-xs text-muted-foreground">
-                    Enter an artifact id to visualize lineage.
-                  </div>
-                )}
-                {lineagePayload && (
-                  <div className="space-y-3 rounded-md border border-border bg-black/30 p-3 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Parents</span>
-                      <Badge variant="outline">{(lineagePayload.parents || []).length}</Badge>
-                    </div>
-                    {(lineagePayload.parents || []).slice(0, 4).map((item) => (
-                      <div key={item.artifact_id} className="text-xs">
-                        <div>{item.artifact_type} • {item.artifact_id}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {(item.team_id || item.team || "team").toUpperCase()} · {item.agent_id || item.agent || "agent"}
-                          {item.trace_id ? ` · ${item.trace_id}` : ""}
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-muted-foreground">Children</span>
-                      <Badge variant="outline">{(lineagePayload.children || []).length}</Badge>
-                    </div>
-                    {(lineagePayload.children || []).slice(0, 4).map((item) => (
-                      <div key={item.artifact_id} className="text-xs">
-                        <div>{item.artifact_type} • {item.artifact_id}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {(item.team_id || item.team || "team").toUpperCase()} · {item.agent_id || item.agent || "agent"}
-                          {item.trace_id ? ` · ${item.trace_id}` : ""}
-                        </div>
-                      </div>
-                    ))}
-                    <div className="pt-2">
-                      <div className="text-xs font-semibold text-muted-foreground mb-2">Lineage Graph</div>
-                      <div className="rounded-md border border-border bg-black/40 p-2">
-                        <svg viewBox="0 0 260 140" className="w-full h-28">
-                          {(() => {
-                            const parents = lineagePayload.parents || [];
-                            const children = lineagePayload.children || [];
-                            const parentCount = Math.max(parents.length, 1);
-                            const childCount = Math.max(children.length, 1);
-                            const parentSpacing = 120 / (parentCount + 1);
-                            const childSpacing = 120 / (childCount + 1);
-                            const centerX = 130;
-                            const centerY = 70;
-                            return (
-                              <>
-                                {parents.map((item, idx) => {
-                                  const y = 10 + parentSpacing * (idx + 1);
-                                  return (
-                                    <g key={`parent-${item.artifact_id}`}>
-                                      <line x1="40" y1={y} x2={centerX - 20} y2={centerY} stroke="#475569" strokeWidth="1" />
-                                      <circle cx="40" cy={y} r="6" fill="#38BDF8" />
-                                    </g>
-                                  );
-                                })}
-                                {children.map((item, idx) => {
-                                  const y = 10 + childSpacing * (idx + 1);
-                                  return (
-                                    <g key={`child-${item.artifact_id}`}>
-                                      <line x1={centerX + 20} y1={centerY} x2="220" y2={y} stroke="#475569" strokeWidth="1" />
-                                      <circle cx="220" cy={y} r="6" fill="#A78BFA" />
-                                    </g>
-                                  );
-                                })}
-                                <circle cx={centerX} cy={centerY} r="10" fill="#FACC15" />
-                              </>
-                            );
-                          })()}
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
             <div className="flex gap-2 pt-4 border-t border-border">
               <Button
                 variant="outline"
@@ -1858,6 +563,167 @@ const BrainSurgery = () => {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Brain Surgery Control Deck */}
+      <div className="border-t border-border bg-zinc-900/70 px-6 py-4">
+        <div className="grid grid-cols-4 gap-4">
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Patch Library</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {patches.map((patch) => (
+                <div
+                  key={patch.id}
+                  draggable
+                  onDragStart={handlePatchDragStart(patch)}
+                  className="p-3 rounded-lg border border-border bg-black/30 cursor-move hover:border-zinc-600"
+                  data-testid={`patch-${patch.id}`}
+                >
+                  <div className="text-sm font-medium">{patch.name}</div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {patch.risk} risk
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      Coverage {patch.coverage}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Agent Mapping</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {agents.map((agent) => (
+                <div
+                  key={agent.id}
+                  onDrop={handleAgentDrop(agent.id)}
+                  onDragOver={handleAgentDragOver}
+                  className="p-3 rounded-lg border border-dashed border-border bg-black/20"
+                  data-testid={`agent-drop-${agent.id}`}
+                >
+                  <div className="text-xs text-muted-foreground">{agent.name}</div>
+                  <div className="text-sm font-medium mt-1">
+                    {patchAssignments[agent.id]?.name || "Drop patch here"}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Sandbox & Safety</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Sandbox Status</span>
+                <Badge variant="outline" className="text-xs capitalize">
+                  {sandboxStatus}
+                </Badge>
+              </div>
+              <Button variant="outline" onClick={runSandboxTest} data-testid="sandbox-run-btn">
+                <Play className="h-4 w-4 mr-2" />
+                Run Sandbox
+              </Button>
+              <div className="space-y-2">
+                {patches.map((patch) => {
+                  const badge = getSafetyBadge(patch.risk);
+                  return (
+                    <div key={patch.id} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{patch.name}</span>
+                      <Badge className={badge.className}>{badge.label}</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="space-y-2" data-testid="sandbox-cases">
+                {sandboxCases.map((testCase) => {
+                  const badge = getSandboxBadge(testCase.status);
+                  return (
+                    <div key={testCase.id} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{testCase.name}</span>
+                      <Badge className={badge.className}>{badge.label}</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="rounded-md border border-border bg-black/30 p-2 text-xs font-mono h-24 overflow-auto" data-testid="sandbox-log">
+                {sandboxLogs.length === 0 ? (
+                  <div className="text-muted-foreground">Sandbox logs will appear here.</div>
+                ) : (
+                  sandboxLogs.map((log, index) => (
+                    <div key={`${log}-${index}`} className="text-muted-foreground">
+                      {log}
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Deployment Controls</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Hot-Swap</span>
+                <Switch checked={hotSwapEnabled} onCheckedChange={setHotSwapEnabled} data-testid="hotswap-toggle" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Rollback Window</span>
+                <Badge variant="outline" className="text-xs">15 min</Badge>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Performance Impact</span>
+                  <span>{perfImpact}%</span>
+                </div>
+                <Progress value={perfImpact} className="h-2" />
+                <Input
+                  type="range"
+                  min="5"
+                  max="45"
+                  step="1"
+                  value={perfImpact}
+                  onChange={(e) => handlePerfImpactChange(e.target.value)}
+                  className="mt-2"
+                  data-testid="perf-impact-slider"
+                />
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>Latency Δ</span>
+                    <span>+{perfLatency}ms</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>CPU Δ</span>
+                    <span>+{perfCpu}%</span>
+                  </div>
+                </div>
+              </div>
+              <Button onClick={handleMergeDeploy} data-testid="merge-deploy-btn">
+                <Shield className="h-4 w-4 mr-2" />
+                Merge & Deploy
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setConflictOpen(true)} data-testid="conflict-resolve-btn">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Resolve Conflicts
+                </Button>
+                <Button variant="ghost" size="icon" data-testid="rollback-btn">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       <Dialog open={conflictOpen} onOpenChange={setConflictOpen}>
         <DialogContent className="bg-card border-border" data-testid="conflict-dialog">
