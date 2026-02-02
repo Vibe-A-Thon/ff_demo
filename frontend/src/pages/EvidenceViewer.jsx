@@ -11,69 +11,74 @@ import { Label } from "../components/ui/label";
 import { evidenceAPI, battleAPI, agentAPI, runAPI, ragAPI, settingsAPI, graphAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
-  FileSearch,
-  Download,
-  FileText,
-  Shield,
+  AlertTriangle,
+  CheckCircle2,
   Clock,
-  Hash,
+  Copy,
+  Download,
+  Eraser,
   Eye,
-    if (format === "pdf") {
+  FileDown,
+  FileJson,
+  FileSearch,
+  FileText,
+  Folder,
+  GitCompare,
+  Hash,
+  Search,
+  Shield,
+} from "lucide-react";
+
+const EvidenceViewer = () => {
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [evidencePacks, setEvidencePacks] = useState([]);
+  const [selectedPack, setSelectedPack] = useState(null);
+  const [battles, setBattles] = useState([]);
+  const [runs, setRuns] = useState([]);
+  const [selectedBattle, setSelectedBattle] = useState("");
+  const [selectedRun, setSelectedRun] = useState("");
+  const [packFilter, setPackFilter] = useState(null);
+  const [artifactFilter, setArtifactFilter] = useState(null);
+  const [selectedArtifact, setSelectedArtifact] = useState(null);
+  const [artifactApprovals, setArtifactApprovals] = useState([]);
+  const [artifactDrawerOpen, setArtifactDrawerOpen] = useState(false);
+  const [redactionEnabled, setRedactionEnabled] = useState(false);
+  const [redactEmails, setRedactEmails] = useState(true);
+  const [redactAccounts, setRedactAccounts] = useState(true);
+  const [redactPhones, setRedactPhones] = useState(true);
+  const [ragEvalSummary, setRagEvalSummary] = useState(null);
+  const [ragAlerts, setRagAlerts] = useState([]);
+  const [ragSettings, setRagSettings] = useState(null);
+  const [registrySnapshot, setRegistrySnapshot] = useState(null);
+  const [lineageGraph, setLineageGraph] = useState(null);
+  const [lineageLoading, setLineageLoading] = useState(false);
+  const [lineageTypeFilters, setLineageTypeFilters] = useState({
+    run: true,
+    stage: true,
+    task: true,
+    agent: true,
+    artifact: true,
+    evidence_pack: true,
+  });
+  const [lineageGroupByType, setLineageGroupByType] = useState(false);
+  const [expandedStages, setExpandedStages] = useState({});
+  const [testStatusFilter, setTestStatusFilter] = useState("all");
+  const [testQuery, setTestQuery] = useState("");
+  const [logQuery, setLogQuery] = useState("");
+  const [comparePackId, setComparePackId] = useState("");
+
+  useEffect(() => {
+    const loadRegistry = async () => {
       try {
-        const response = await evidenceAPI.export(selectedPack.id, { format: "pdf" });
-        const blob = new Blob([response.data], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `evidence-pack-${selectedPack.id}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast.success("Evidence pack PDF exported!");
+        const response = await agentAPI.getRegistry();
+        setRegistrySnapshot(response?.data || null);
       } catch (error) {
-        toast.error("PDF export failed");
+        setRegistrySnapshot(null);
       }
-      return;
-    }
-    if (format === "story") {
-      try {
-        const response = await evidenceAPI.export(selectedPack.id, { format: "story" });
-        const data = response.data;
-        const content = data?.data || "";
-        const blob = new Blob([content], { type: "text/markdown" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = data?.filename || `evidence-story-${selectedPack.id}.md`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast.success("Story report exported!");
-      } catch (error) {
-        toast.error("Story report export failed");
-      }
-      return;
-    }
-    if (format === "story_pdf") {
-      try {
-        const response = await evidenceAPI.export(selectedPack.id, { format: "story_pdf" });
-        const blob = new Blob([response.data], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `evidence-story-${selectedPack.id}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast.success("Story report PDF exported!");
-      } catch (error) {
-        toast.error("Story report PDF export failed");
-      }
-      return;
-    }
+    };
+    loadRegistry();
+  }, []);
 
   useEffect(() => {
     const loadRagSummary = async () => {
@@ -135,6 +140,10 @@ import {
     }
   };
 
+  useEffect(() => {
+    loadData();
+  }, []);
+
   const generateEvidencePack = async () => {
     if (!selectedBattle) {
       toast.error("Please select a battle");
@@ -171,84 +180,65 @@ import {
     }
   };
 
+  const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const refreshSelectedPack = async () => {
+    if (!selectedPack?.id) return;
+    try {
+      const response = await evidenceAPI.get(selectedPack.id);
+      const updatedPack = response?.data || null;
+      if (!updatedPack) return;
+      setSelectedPack(updatedPack);
+      setEvidencePacks((prev) =>
+        prev.map((pack) => (pack.id === updatedPack.id ? updatedPack : pack))
+      );
+    } catch (error) {
+      // no-op
+    }
+  };
+
   const exportPackAs = async (format) => {
     if (!selectedPack) return;
-    if (format === "pdf") {
-      const reportWindow = window.open("", "_blank", "noopener,noreferrer");
-      if (!reportWindow) {
-        toast.error("Popup blocked. Allow popups to export PDF.");
+    try {
+      if (format === "pdf" || format === "story_pdf") {
+        const response = await evidenceAPI.export(selectedPack.id, { format });
+        const filename =
+          format === "pdf"
+            ? `evidence-pack-${selectedPack.id}.pdf`
+            : `evidence-story-${selectedPack.id}.pdf`;
+        downloadBlob(new Blob([response.data], { type: "application/pdf" }), filename);
+        toast.success(format === "pdf" ? "Evidence pack PDF exported!" : "Story report PDF exported!");
+        await refreshSelectedPack();
         return;
       }
-      const redactedNarrative = applyRedaction(selectedPack.narrative || "");
-      const logEntries = normalizeLogs(selectedPack);
-      const logsText = logEntries.map((entry) => applyRedaction(formatLogEntry(entry))).join("\n\n");
-      const tests = normalizeTests(selectedPack);
-      const approvals = normalizeApprovals(selectedPack);
-      reportWindow.document.write(`
-        <html>
-          <head>
-            <title>Evidence Pack Report</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 24px; }
-              h1, h2 { margin-bottom: 8px; }
-              pre { background: #f4f4f4; padding: 12px; white-space: pre-wrap; }
-              .section { margin-bottom: 20px; }
-              table { width: 100%; border-collapse: collapse; }
-              td, th { border: 1px solid #ddd; padding: 8px; }
-              th { background: #f0f0f0; text-align: left; }
-            </style>
-          </head>
-          <body>
-            <h1>Evidence Pack Report</h1>
-            <div class="section">
-              <h2>Pack Metadata</h2>
-              <table>
-                <tr><th>ID</th><td>${selectedPack.id}</td></tr>
-                <tr><th>Battle</th><td>${selectedPack.battle_id || "N/A"}</td></tr>
-                <tr><th>Run</th><td>${selectedPack.run_id || "N/A"}</td></tr>
-                <tr><th>Created</th><td>${new Date(selectedPack.created_at).toLocaleString()}</td></tr>
-                <tr><th>Confidence</th><td>${Math.round(selectedPack.confidence * 100)}%</td></tr>
-              </table>
-            </div>
-            <div class="section">
-              <h2>XAI Narrative</h2>
-              <p>${redactedNarrative}</p>
-            </div>
-            <div class="section">
-              <h2>Approvals</h2>
-              <pre>${approvals.map((item) => `${item.stage || item.role || "Approval"}: ${item.approver_id || item.approver || "Unknown"} (${item.status || "approved"})`).join("\n")}</pre>
-            </div>
-            <div class="section">
-              <h2>Tests</h2>
-              <pre>${tests.map((test) => `${test.name || test.id || "Test"} - ${test.status || "unknown"}`).join("\n")}</pre>
-            </div>
-            <div class="section">
-              <h2>Logs</h2>
-              <pre>${logsText}</pre>
-            </div>
-          </body>
-        </html>
-      `);
-      reportWindow.document.close();
-      reportWindow.focus();
-      reportWindow.print();
-      toast.success("PDF export opened. Save as PDF from the print dialog.");
-      return;
-    }
-    try {
-      const response = await evidenceAPI.export(selectedPack.id);
-      const data = response.data;
-      const exportData = data?.pack ? data.pack : data;
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = data?.filename || `evidence-pack-${selectedPack.id}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+
+      if (format === "story") {
+        const response = await evidenceAPI.export(selectedPack.id, { format: "story" });
+        const data = response.data || {};
+        const content = data?.data || "";
+        const filename = data?.filename || `evidence-story-${selectedPack.id}.md`;
+        downloadBlob(new Blob([content], { type: data?.content_type || "text/markdown" }), filename);
+        toast.success("Story report exported!");
+        await refreshSelectedPack();
+        return;
+      }
+
+      const response = await evidenceAPI.export(selectedPack.id, { format: "json" });
+      const data = response.data || {};
+      const exportData = data?.data ?? data?.pack ?? data;
+      const filename = data?.filename || `evidence-pack-${selectedPack.id}.json`;
+      downloadBlob(new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" }), filename);
       toast.success("Evidence pack exported!");
+      await refreshSelectedPack();
     } catch (error) {
       toast.error("Export failed");
     }
@@ -258,6 +248,15 @@ import {
     if (selectedPack?.checksum) {
       navigator.clipboard.writeText(selectedPack.checksum);
       toast.success("Checksum copied to clipboard!");
+    }
+  };
+
+  const copyChecksumChain = () => {
+    if (selectedPack?.checksum_chain?.length) {
+      navigator.clipboard.writeText(JSON.stringify(selectedPack.checksum_chain, null, 2));
+      toast.success("Checksum chain copied to clipboard!");
+    } else {
+      toast.error("No checksum chain entries to copy");
     }
   };
 
@@ -487,6 +486,9 @@ import {
   });
 
   const approvalChain = normalizeApprovals(effectivePack);
+  const checksumChain = Array.isArray(effectivePack?.checksum_chain)
+    ? effectivePack.checksum_chain
+    : [];
   const approvalsByStage = approvalChain.reduce((acc, approval) => {
     const stage = approval.stage || approval.action || approval.approval_action;
     if (!stage) return acc;
@@ -1132,6 +1134,50 @@ import {
                           <Copy className="h-4 w-4" />
                         </Button>
                       </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm text-muted-foreground">Signed checksum chain</label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={copyChecksumChain}
+                          disabled={!checksumChain.length}
+                          data-testid="copy-checksum-chain-btn"
+                        >
+                          <Copy className="h-3 w-3 mr-1" />
+                          Copy chain
+                        </Button>
+                      </div>
+                      {checksumChain.length ? (
+                        <div className="mt-2 space-y-2">
+                          {checksumChain
+                            .slice(-3)
+                            .reverse()
+                            .map((entry, idx) => (
+                              <div
+                                key={`${entry.payload_hash}-${idx}`}
+                                className="rounded-md border border-border bg-black/30 p-2"
+                              >
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-mono text-foreground">
+                                    {entry.payload_hash?.slice(0, 12)}…
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {entry.created_at ? new Date(entry.created_at).toLocaleString() : ""}
+                                  </span>
+                                </div>
+                                <div className="mt-1 text-[11px] text-muted-foreground">
+                                  {entry.context?.action || "signed"} • signer {entry.signer_id || "system"}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          No checksum chain entries yet. Export the pack to create a signed entry.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="text-sm text-muted-foreground">Battle Reference</label>

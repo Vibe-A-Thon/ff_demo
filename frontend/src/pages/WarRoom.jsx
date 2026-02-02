@@ -320,6 +320,7 @@ const WarRoom = () => {
   const demoRef = useRef(null);
   const redStreamRef = useRef("");
   const blueStreamRef = useRef("");
+  const demoModeRef = useRef(false);
   
   const { checkMetrics, alertsEnabled, setAlertsEnabled } = useAlerts();
 
@@ -341,6 +342,165 @@ const WarRoom = () => {
       console.error("Failed to load LLM telemetry:", error);
     }
   }, []);
+
+  const buildDemoTurns = useCallback(() => ([
+    {
+      stage: "red_simulate_attack",
+      red_team: { action: "Credential stuffing wave", success: true },
+      blue_team: { action: "Baseline model flags anomalies", blocked: false },
+    },
+    {
+      stage: "blue_detect_respond",
+      red_team: { action: "Session hijack attempt", success: false },
+      blue_team: { action: "Velocity guardrail blocks", blocked: true },
+    },
+    {
+      stage: "purple_tune_models",
+      red_team: { action: "Device spoof rotation", success: false },
+      blue_team: { action: "GraphRAG correlation", blocked: true },
+    },
+    {
+      stage: "green_deploy_hotfix",
+      red_team: { action: "ACH mule fan-out", success: false },
+      blue_team: { action: "Hotfix policy enforced", blocked: true },
+    },
+    {
+      stage: "orange_review_approve",
+      red_team: { action: "BEClike wire attempt", success: false },
+      blue_team: { action: "Approval gate holds", blocked: true },
+    },
+    {
+      stage: "gold_monitor_metrics",
+      red_team: { action: "Repeat attack replay", success: false },
+      blue_team: { action: "Immunity reached", blocked: true },
+    },
+  ]), []);
+
+  const buildDemoRunEvents = useCallback((seedId) => {
+    const now = Date.now();
+    return [
+      {
+        event_type: "orchestrator.output",
+        created_at: new Date(now - 900000).toISOString(),
+        payload: { stage: "red_simulate_attack", team: "red", summary: "ATO burst launched", seed: seedId },
+      },
+      {
+        event_type: "agent.output",
+        created_at: new Date(now - 840000).toISOString(),
+        payload: { stage: "blue_detect_respond", team: "blue", agent: "Sentinel-Blue", decision: "block", confidence: 0.92 },
+      },
+      {
+        event_type: "agent.output",
+        created_at: new Date(now - 780000).toISOString(),
+        payload: { stage: "purple_tune_models", team: "purple", agent: "ModelTuner", update: "threshold -12%" },
+      },
+      {
+        event_type: "agent.output",
+        created_at: new Date(now - 720000).toISOString(),
+        payload: { stage: "green_deploy_hotfix", team: "green", agent: "DeployOps", change: "Hotfix RSB-492" },
+      },
+      {
+        event_type: "orchestrator.output",
+        created_at: new Date(now - 660000).toISOString(),
+        payload: { stage: "orange_review_approve", team: "orange", decision: "approved" },
+      },
+      {
+        event_type: "agent.output",
+        created_at: new Date(now - 600000).toISOString(),
+        payload: { stage: "gold_monitor_metrics", team: "gold", agent: "Gold-Analyst", tti: "3.1m" },
+      },
+      {
+        event_type: "orchestrator.output",
+        created_at: new Date(now - 540000).toISOString(),
+        payload: { stage: "white_compliance_audit", team: "white", status: "SAFE_TO_PROCEED" },
+      },
+    ];
+  }, []);
+
+  const buildDemoWorkflow = useCallback(() => {
+    const now = Date.now();
+    return [
+      { state: "incident_created", timestamp: new Date(now - 1200000).toISOString() },
+      { state: "red_simulate_attack", timestamp: new Date(now - 1080000).toISOString() },
+      { state: "blue_detect_respond", timestamp: new Date(now - 960000).toISOString() },
+      { state: "purple_tune_models", timestamp: new Date(now - 840000).toISOString() },
+      { state: "green_deploy_hotfix", timestamp: new Date(now - 720000).toISOString() },
+      { state: "orange_review_approve", timestamp: new Date(now - 600000).toISOString() },
+      { state: "gold_monitor_metrics", timestamp: new Date(now - 480000).toISOString() },
+      { state: "white_compliance_audit", timestamp: new Date(now - 360000).toISOString() },
+    ];
+  }, []);
+
+  const startDemoSession = useCallback((source = "toggle") => {
+    const demoId = `demo-${Date.now().toString(36)}`;
+    const demoTurns = buildDemoTurns();
+    const demoBattle = {
+      id: demoId,
+      scenario_name: "⚡ ATO Burst — Demo Run",
+      status: "running",
+      turns: demoTurns,
+      metrics: {
+        success_rate: 92,
+        false_positive_rate: 2,
+        time_to_immunity: 3.1,
+        money_saved: 1250000,
+        patterns_learned: 18,
+        alerts_blocked: 47,
+      },
+    };
+
+    demoModeRef.current = true;
+    setDemoMode(true);
+    setAutoPlay(false);
+    setIsRunning(true);
+    setWsConnected(false);
+    if (wsRef.current) wsRef.current.close();
+
+    setBattles([demoBattle]);
+    setSelectedBattle(demoBattle);
+    setCurrentTurn(demoTurns.length - 1);
+    setRunEvents(buildDemoRunEvents(demoId));
+    setWorkflowRunId(`demo-run-${demoId.slice(-6)}`);
+    setWorkflowState("white_compliance_audit");
+    setWorkflowStatus("completed");
+    setWorkflowApprovalRequired(false);
+    setGovernanceStatus({ status: "SAFE_TO_PROCEED" });
+    setWorkflowHistory(buildDemoWorkflow());
+    setWorkflowApprovals([
+      { status: "approved", team: "orange", approver: "Compliance Lead" },
+      { status: "approved", team: "white", approver: "Risk Officer" },
+    ]);
+    setRedThinking("\n--- Demo Run ---\nRecon → Ideation → Evaluation → Action\nAttack burst launched with synthetic payload.");
+    setBlueThinking("\n--- Demo Run ---\nThreat triaged → Auto-blocked → Policy tuned\nTime-to-immunity trending down.");
+    setRunSummary({
+      battle: demoBattle.scenario_name,
+      turns: demoBattle.turns.length,
+      successRate: demoBattle.metrics.success_rate,
+      moneySaved: demoBattle.metrics.money_saved,
+      timeToImmunity: demoBattle.metrics.time_to_immunity,
+      patterns: demoBattle.metrics.patterns_learned,
+    });
+
+    triggerBlockedEffect(demoTurns.length);
+    toast.success(source === "wow" ? "Wow Factor demo activated" : "Demo mode engaged");
+  }, [buildDemoTurns, buildDemoRunEvents, buildDemoWorkflow, triggerBlockedEffect]);
+
+  const stopDemoSession = useCallback(async () => {
+    demoModeRef.current = false;
+    setDemoMode(false);
+    setIsRunning(false);
+    setAutoPlay(false);
+    setRunEvents([]);
+    setWorkflowRunId("");
+    setWorkflowState("incident_created");
+    setWorkflowStatus("idle");
+    setWorkflowHistory([]);
+    setWorkflowApprovals([]);
+    setGovernanceStatus(null);
+    setSelectedStageKey("");
+    setBlockedBursts([]);
+    await loadBattles();
+  }, [loadBattles]);
 
   const saveLlmOverrides = useCallback(
     async (nextOverrides) => {
@@ -415,6 +575,7 @@ const WarRoom = () => {
   );
 
   const loadBattles = useCallback(async () => {
+    if (demoModeRef.current) return;
     try {
       const response = await battleAPI.getAll();
       setBattles(response.data);
@@ -476,6 +637,7 @@ const WarRoom = () => {
     if (!selectedBattle?.id) return;
     let isCancelled = false;
     const refreshBattle = async () => {
+      if (demoModeRef.current) return;
       try {
         const response = await battleAPI.get(selectedBattle.id);
         if (!isCancelled && response?.data) {
@@ -654,6 +816,10 @@ const WarRoom = () => {
 
   const startBattle = useCallback(async () => {
     if (!selectedBattle) return;
+    if (demoModeRef.current || demoMode) {
+      startDemoSession("start");
+      return;
+    }
     try {
       await battleAPI.start(selectedBattle.id);
       setIsRunning(true);
@@ -666,10 +832,15 @@ const WarRoom = () => {
     } catch (error) {
       toast.error("Failed to start battle");
     }
-  }, [selectedBattle, connectWebSocket]);
+  }, [selectedBattle, connectWebSocket, demoMode, startDemoSession]);
 
   const stopBattle = async () => {
     if (!selectedBattle) return;
+    if (demoModeRef.current) {
+      await stopDemoSession();
+      toast.success("Demo session ended");
+      return;
+    }
     try {
       await battleAPI.stop(selectedBattle.id);
       setIsRunning(false);
@@ -691,6 +862,10 @@ const WarRoom = () => {
       toast.error("Failed to stop battle");
     }
   };
+
+  const runWowFactor = useCallback(() => {
+    startDemoSession("wow");
+  }, [startDemoSession]);
 
   // Streaming AI thinking simulation
   const streamThinking = useCallback(async (team, turnNum) => {
@@ -1430,11 +1605,14 @@ const WarRoom = () => {
             <Switch
               checked={demoMode}
               onCheckedChange={(checked) => {
-                setDemoMode(checked);
-                if (checked) setAutoPlay(false);
+                if (checked) {
+                  setAutoPlay(false);
+                  startDemoSession("toggle");
+                } else {
+                  stopDemoSession();
+                }
               }}
               id="demo-mode"
-              disabled={!isRunning}
               data-testid="demo-toggle"
             />
             <Label htmlFor="demo-mode" className="text-sm">Demo</Label>

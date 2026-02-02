@@ -44,6 +44,8 @@ from app.routes import (
     settings,
     llm,
     websocket,
+    brain_surgery,
+    lessons,
 )
 
 setup_logging(APP_NAME)
@@ -95,6 +97,8 @@ protected_routers = [
     evaluation.router,
     settings.router,
     llm.router,
+    brain_surgery.router,
+    lessons.router,
 ]
 
 for router in public_routers:

@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fraudforge.io/schemas/brc/orchestrator_output.json",
+  "title": "BRC Orchestrator Output Schema",
+  "description": "Schema for stage orchestrator output",
+  "type": "object",
+  "required": ["battle_run_id", "stage", "started_at", "status"],
+  "properties": {
+    "battle_run_id": {
+      "type": "string",
+      "description": "Battle run identifier"
+    },
+    "stage": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "name": {
+          "type": "string",
+          "enum": ["prepare", "plan", "simulate", "detect", "mitigate", "patch_rules", "evaluate", "postmortem"]
+        }
+      }
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "running", "completed", "failed", "skipped"]
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ref": {"type": "string"}
+        }
+      }
+    },
+    "participants": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "type"],
+        "properties": {
+          "ref": {"type": "string"},
+          "type": {
+            "type": "string",
+            "enum": ["team_output", "xai", "artifact", "scorecard"]
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Stage-specific metrics"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Human-readable stage notes"
+    }
+  }
+}

@@ -80,6 +80,9 @@ async def get_rsb_package(
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
+
+    if package.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot apply own patch")
     await record_audit(
         current_user.get("id", "unknown"),
         "rsb.package.read",
@@ -310,6 +313,8 @@ async def validate_rsb_package(
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
+    if package.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot export own package")
 
     storage_path = package.get("storage_path")
     if not storage_path or not Path(storage_path).exists():

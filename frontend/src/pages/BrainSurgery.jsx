@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../c
 import { Switch } from "../components/ui/switch";
 import { Progress } from "../components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { knowledgeAPI, ragAPI, settingsAPI, agentAPI, graphAPI, evidenceAPI, amcAPI, pepAPI } from "../lib/api";
+import { knowledgeAPI, ragAPI, settingsAPI, agentAPI, graphAPI, evidenceAPI, amcAPI, pepAPI, brainSurgeryAPI } from "../lib/api";
 import { toast } from "sonner";
 import {
   Plus,
@@ -97,12 +97,29 @@ const BrainSurgery = () => {
   const [amcFile, setAmcFile] = useState(null);
   const [amcValidation, setAmcValidation] = useState(null);
   const [amcPreview, setAmcPreview] = useState(null);
+  const [amcBaseline, setAmcBaseline] = useState(null);
+  const [amcMerged, setAmcMerged] = useState(null);
+  const [amcTeamId, setAmcTeamId] = useState("blue");
+  const [amcActivationBlocked, setAmcActivationBlocked] = useState(null);
   const [amcMode, setAmcMode] = useState("merge");
   const [amcImporting, setAmcImporting] = useState(false);
   const [amcActivate, setAmcActivate] = useState(false);
   const [pepFile, setPepFile] = useState(null);
   const [pepPreview, setPepPreview] = useState(null);
   const [pepImporting, setPepImporting] = useState(false);
+  
+  // Brain Surgery Session State
+  const [surgerySession, setSurgerySession] = useState(null);
+  const [surgerySessionLoading, setSurgerySessionLoading] = useState(false);
+  const [surgeryConflicts, setSurgeryConflicts] = useState([]);
+  const [surgerySandboxResults, setSurgerySandboxResults] = useState(null);
+  const [surgeryHotSwapReady, setSurgeryHotSwapReady] = useState(false);
+  const [surgeryHotSwapExecuting, setSurgeryHotSwapExecuting] = useState(false);
+  const [surgeryRollbackExecuting, setSurgeryRollbackExecuting] = useState(false);
+  const [rollbackSnapshots, setRollbackSnapshots] = useState([]);
+  const [hotSwapMode, setHotSwapMode] = useState("hot_swap");
+  const [knowledgeMergeGraph, setKnowledgeMergeGraph] = useState(null);
+  
   const graphRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -192,6 +209,18 @@ const BrainSurgery = () => {
     };
     loadRagQuality();
   }, []);
+
+  useEffect(() => {
+    const loadAmcBaseline = async () => {
+      try {
+        const response = await amcAPI.baseline(amcTeamId);
+        setAmcBaseline(response?.data || baselineFrame);
+      } catch (error) {
+        setAmcBaseline(baselineFrame);
+      }
+    };
+    loadAmcBaseline();
+  }, [amcTeamId]);
 
   const loadNodes = useCallback(async () => {
     setGraphLoading(true);
@@ -497,7 +526,18 @@ const BrainSurgery = () => {
     formData.append("file", amcFile);
     try {
       const response = await amcAPI.preview(formData);
-      setAmcPreview(response?.data || null);
+      const payload = response?.data || null;
+      const previewTeamId = payload?.import?.manifest?.team_id || payload?.preview?.manifest?.team_id;
+      if (previewTeamId) {
+        setAmcTeamId(previewTeamId);
+      }
+      setAmcPreview(payload?.import || payload?.preview || payload);
+      if (payload?.baseline) {
+        setAmcBaseline(payload.baseline);
+      }
+      if (payload?.merged) {
+        setAmcMerged(payload.merged);
+      }
       toast.success("AMC preview ready.");
     } catch (error) {
       toast.error("AMC preview failed.");
@@ -516,7 +556,22 @@ const BrainSurgery = () => {
     setAmcImporting(true);
     try {
       const response = await amcAPI.import(formData);
-      setAmcPreview(response?.data?.preview || null);
+      const payload = response?.data?.preview || response?.data || null;
+      setAmcActivationBlocked(response?.data?.activation_blocked || null);
+      const previewTeamId = payload?.import?.manifest?.team_id || payload?.preview?.manifest?.team_id;
+      if (previewTeamId) {
+        setAmcTeamId(previewTeamId);
+      }
+      setAmcPreview(payload?.import || payload?.preview || payload);
+      if (payload?.baseline) {
+        setAmcBaseline(payload.baseline);
+      }
+      if (payload?.merged) {
+        setAmcMerged(payload.merged);
+      }
+      if (response?.data?.activation_blocked) {
+        toast.warning(response.data.activation_blocked);
+      }
       toast.success("AMC imported into sandbox.");
     } catch (error) {
       toast.error("AMC import failed.");
@@ -562,6 +617,223 @@ const BrainSurgery = () => {
       toast.error("PEP import failed.");
     } finally {
       setPepImporting(false);
+    }
+  };
+
+  // ============ BRAIN SURGERY HANDLERS ============
+
+  // Start a new Brain Surgery session with optional AMC file
+  const handleStartSurgerySession = async () => {
+    if (!amcTeamId) {
+      toast.error("Select a team first.");
+      return;
+    }
+    setSurgerySessionLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("team_id", amcTeamId);
+      if (amcFile) {
+        formData.append("file", amcFile);
+      }
+      const response = await brainSurgeryAPI.startSession(formData);
+      const session = response?.data || null;
+      setSurgerySession(session);
+      setSurgeryConflicts(session?.conflicts || []);
+      setSurgeryHotSwapReady(session?.hot_swap_ready || false);
+      
+      if (session?.baseline) {
+        setAmcBaseline(session.baseline);
+      }
+      if (session?.import_preview) {
+        setAmcPreview(session.import_preview);
+      }
+      if (session?.merged_preview) {
+        setAmcMerged(session.merged_preview);
+      }
+      if (session?.validation) {
+        setAmcValidation(session.validation);
+      }
+      
+      toast.success(`Brain Surgery session started: ${session?.session_id || "new"}`);
+      
+      // Load rollback snapshots
+      await loadRollbackSnapshots();
+      
+      // Load knowledge merge graph if session exists
+      if (session?.session_id) {
+        await loadKnowledgeMergeGraph(session.session_id);
+      }
+    } catch (error) {
+      toast.error("Failed to start Brain Surgery session.");
+    } finally {
+      setSurgerySessionLoading(false);
+    }
+  };
+
+  // Load rollback snapshots for the current team
+  const loadRollbackSnapshots = async () => {
+    try {
+      const response = await brainSurgeryAPI.listRollbackSnapshots(amcTeamId, 10);
+      setRollbackSnapshots(response?.data || []);
+    } catch (error) {
+      setRollbackSnapshots([]);
+    }
+  };
+
+  // Load knowledge graph for merge visualization
+  const loadKnowledgeMergeGraph = async (sessionId) => {
+    try {
+      const response = await brainSurgeryAPI.getKnowledgeGraph(sessionId);
+      setKnowledgeMergeGraph(response?.data || null);
+    } catch (error) {
+      setKnowledgeMergeGraph(null);
+    }
+  };
+
+  // Resolve a conflict in the surgery session
+  const handleResolveSurgeryConflict = async (conflictId, resolution) => {
+    if (!surgerySession?.session_id) {
+      toast.error("No active surgery session.");
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append("conflict_id", conflictId);
+      formData.append("resolution", resolution);
+      const response = await brainSurgeryAPI.resolveConflict(surgerySession.session_id, formData);
+      const session = response?.data || null;
+      setSurgerySession(session);
+      setSurgeryConflicts(session?.conflicts || []);
+      toast.success(`Conflict ${conflictId} resolved.`);
+    } catch (error) {
+      toast.error("Failed to resolve conflict.");
+    }
+  };
+
+  // Run sandbox validation on the merged state
+  const handleRunSurgerySandbox = async () => {
+    if (!surgerySession?.session_id) {
+      toast.error("Start a surgery session first.");
+      return;
+    }
+    setSandboxStatus("running");
+    setSandboxLogs((prev) => [
+      ...prev,
+      `[${new Date().toLocaleTimeString()}] Running sandbox validation for session ${surgerySession.session_id}...`,
+    ]);
+    try {
+      const response = await brainSurgeryAPI.runSandbox(surgerySession.session_id);
+      const session = response?.data || null;
+      setSurgerySession(session);
+      setSurgerySandboxResults(session?.sandbox_results || null);
+      setSurgeryHotSwapReady(session?.hot_swap_ready || false);
+      
+      // Update sandbox cases from results
+      const tests = session?.sandbox_results?.tests || [];
+      setSandboxCases(tests.map((test) => ({
+        id: test.id,
+        name: test.name,
+        status: test.status,
+      })));
+      
+      setSandboxStatus(session?.sandbox_results?.passed ? "passed" : "failed");
+      setSandboxLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Sandbox validation completed: ${session?.status || "unknown"}`,
+        ...tests.flatMap((t) => t.logs || []),
+      ]);
+      
+      if (session?.sandbox_results?.passed) {
+        toast.success("Sandbox validation passed! Ready for hot-swap.");
+      } else {
+        toast.warning("Sandbox validation failed. Review results before proceeding.");
+      }
+    } catch (error) {
+      setSandboxStatus("failed");
+      setSandboxLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Sandbox error: ${error.message}`,
+      ]);
+      toast.error("Sandbox validation failed.");
+    }
+  };
+
+  // Execute hot-swap
+  const handleExecuteHotSwap = async () => {
+    if (!surgerySession?.session_id) {
+      toast.error("No active surgery session.");
+      return;
+    }
+    if (!surgeryHotSwapReady) {
+      toast.error("Run sandbox validation first.");
+      return;
+    }
+    setSurgeryHotSwapExecuting(true);
+    try {
+      const formData = new FormData();
+      formData.append("mode", hotSwapMode);
+      const response = await brainSurgeryAPI.executeHotSwap(surgerySession.session_id, formData);
+      const session = response?.data || null;
+      setSurgerySession(session);
+      
+      toast.success(`Hot-swap executed successfully in ${hotSwapMode} mode!`);
+      
+      // Refresh rollback snapshots
+      await loadRollbackSnapshots();
+    } catch (error) {
+      const errorMsg = error.response?.data?.detail || "Hot-swap failed.";
+      if (errorMsg.includes("SoD")) {
+        toast.error("SoD violation: You cannot execute the hot-swap for your own session.");
+      } else {
+        toast.error(errorMsg);
+      }
+    } finally {
+      setSurgeryHotSwapExecuting(false);
+    }
+  };
+
+  // Execute rollback
+  const handleExecuteRollback = async (snapshotId = null) => {
+    setSurgeryRollbackExecuting(true);
+    try {
+      const formData = new FormData();
+      formData.append("team_id", amcTeamId);
+      if (snapshotId) {
+        formData.append("snapshot_id", snapshotId);
+      }
+      const response = await brainSurgeryAPI.rollback(formData);
+      const result = response?.data || null;
+      
+      if (result?.restored_snapshot) {
+        setAmcBaseline(result.restored_snapshot.baseline_snapshot);
+      }
+      
+      toast.success("Rollback executed successfully!");
+      
+      // Refresh rollback snapshots
+      await loadRollbackSnapshots();
+      
+      // Reload baseline
+      const baselineResponse = await amcAPI.baseline(amcTeamId);
+      setAmcBaseline(baselineResponse?.data || null);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Rollback failed.");
+    } finally {
+      setSurgeryRollbackExecuting(false);
+    }
+  };
+
+  // Load team state
+  const handleLoadTeamState = async () => {
+    try {
+      const response = await brainSurgeryAPI.getTeamState(amcTeamId);
+      const state = response?.data || null;
+      if (state?.active_snapshot) {
+        setAmcBaseline(state.active_snapshot);
+      }
+      toast.success(`Loaded active state for team ${amcTeamId}`);
+    } catch (error) {
+      toast.error("Failed to load team state.");
     }
   };
 
@@ -746,6 +1018,11 @@ const BrainSurgery = () => {
                   >
                     {amcActivate ? "Activate After Import" : "Activate Later"}
                   </Button>
+                  {amcActivationBlocked && (
+                    <Badge variant="outline" className="status-warning">
+                      {amcActivationBlocked}
+                    </Badge>
+                  )}
                   {amcValidation && (
                     <Badge variant="outline" className={amcValidation.valid ? "status-success" : "status-error"}>
                       {amcValidation.valid ? "Validation Passed" : "Validation Failed"}
@@ -759,7 +1036,7 @@ const BrainSurgery = () => {
                     </CardHeader>
                     <CardContent>
                       <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                        {JSON.stringify(baselineFrame, null, 2)}
+                        {JSON.stringify(amcBaseline || baselineFrame, null, 2)}
                       </pre>
                     </CardContent>
                   </Card>
@@ -780,8 +1057,8 @@ const BrainSurgery = () => {
                     <CardContent>
                       <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
                         {JSON.stringify(
-                          amcPreview
-                            ? { ...amcPreview, merge_mode: amcMode, activation: amcActivate ? "pending" : "manual" }
+                          amcMerged
+                            ? { ...amcMerged, activation: amcActivate ? "pending" : "manual" }
                             : { status: "Awaiting import" },
                           null,
                           2
@@ -829,6 +1106,236 @@ const BrainSurgery = () => {
                     </pre>
                   </CardContent>
                 </Card>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Brain Surgery Operations Panel */}
+          <div className="px-6" data-testid="brain-surgery-ops-panel">
+            <Card className="border-border bg-gradient-to-br from-purple-900/10 to-blue-900/10">
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-purple-400" />
+                  Brain Surgery Operations
+                  {surgerySession && (
+                    <Badge variant="outline" className="text-xs ml-2">
+                      Session: {surgerySession.session_id?.slice(0, 12)}...
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Session Controls */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Target Team</label>
+                    <Select value={amcTeamId} onValueChange={setAmcTeamId}>
+                      <SelectTrigger className="w-full" data-testid="surgery-team-select">
+                        <SelectValue placeholder="Select team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="blue">Blue Team</SelectItem>
+                        <SelectItem value="red">Red Team</SelectItem>
+                        <SelectItem value="purple">Purple Team</SelectItem>
+                        <SelectItem value="green">Green Team</SelectItem>
+                        <SelectItem value="black">Black Team</SelectItem>
+                        <SelectItem value="orange">Orange Team</SelectItem>
+                        <SelectItem value="gold">Gold Team</SelectItem>
+                        <SelectItem value="white">White Team</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Hot-Swap Mode</label>
+                    <Select value={hotSwapMode} onValueChange={setHotSwapMode}>
+                      <SelectTrigger className="w-full" data-testid="hotswap-mode-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hot_swap">Immediate</SelectItem>
+                        <SelectItem value="gradual">Gradual Rollout</SelectItem>
+                        <SelectItem value="shadow">Shadow Mode</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button 
+                      onClick={handleStartSurgerySession} 
+                      disabled={surgerySessionLoading}
+                      data-testid="start-surgery-btn"
+                    >
+                      {surgerySessionLoading ? "Starting..." : "Start Surgery Session"}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={handleLoadTeamState}
+                      data-testid="load-state-btn"
+                    >
+                      Load State
+                    </Button>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button 
+                      onClick={handleRunSurgerySandbox} 
+                      disabled={!surgerySession}
+                      variant="outline"
+                      data-testid="run-sandbox-btn"
+                    >
+                      <Play className="h-4 w-4 mr-2" />
+                      Run Sandbox
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Session Status */}
+                {surgerySession && (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Card className="border-border bg-black/20">
+                      <CardHeader className="py-2">
+                        <CardTitle className="text-xs flex items-center justify-between">
+                          <span>Session Status</span>
+                          <Badge 
+                            className={
+                              surgerySession.status === "hot_swap_active" ? "status-success" :
+                              surgerySession.status?.includes("failed") ? "status-error" :
+                              surgerySession.status === "ready_for_merge" ? "status-success" :
+                              "status-warning"
+                            }
+                          >
+                            {surgerySession.status}
+                          </Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="text-xs space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Started</span>
+                          <span>{surgerySession.started_at?.slice(0, 19)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Hot-Swap Ready</span>
+                          <Badge variant="outline" className={surgeryHotSwapReady ? "status-success" : "status-warning"}>
+                            {surgeryHotSwapReady ? "Ready" : "Not Ready"}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Conflicts</span>
+                          <Badge variant="outline">
+                            {surgeryConflicts.filter(c => !c.resolution).length} unresolved
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="border-border bg-black/20">
+                      <CardHeader className="py-2">
+                        <CardTitle className="text-xs">Hot-Swap & Rollback</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="flex gap-2">
+                          <Button 
+                            onClick={handleExecuteHotSwap} 
+                            disabled={!surgeryHotSwapReady || surgeryHotSwapExecuting}
+                            className="flex-1"
+                            data-testid="execute-hotswap-btn"
+                          >
+                            {surgeryHotSwapExecuting ? "Executing..." : "Execute Hot-Swap"}
+                          </Button>
+                          <Button 
+                            variant="destructive"
+                            onClick={() => handleExecuteRollback()}
+                            disabled={surgeryRollbackExecuting || rollbackSnapshots.length === 0}
+                            data-testid="rollback-btn"
+                          >
+                            <RefreshCw className="h-4 w-4 mr-1" />
+                            {surgeryRollbackExecuting ? "Rolling back..." : "Rollback"}
+                          </Button>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {rollbackSnapshots.length} rollback snapshot(s) available
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Conflicts Panel */}
+                {surgeryConflicts.length > 0 && (
+                  <Card className="border-border bg-black/20">
+                    <CardHeader className="py-2">
+                      <CardTitle className="text-xs flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-yellow-400" />
+                        Detected Conflicts ({surgeryConflicts.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {surgeryConflicts.map((conflict) => (
+                        <div 
+                          key={conflict.id} 
+                          className={`rounded-md border p-2 ${
+                            conflict.resolution 
+                              ? "border-green-500/30 bg-green-500/5" 
+                              : "border-yellow-500/30 bg-yellow-500/5"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-xs font-medium">{conflict.title}</div>
+                              <div className="text-xs text-muted-foreground">{conflict.detail}</div>
+                            </div>
+                            <div className="flex gap-1">
+                              {(conflict.options || ["keep_existing", "accept_import"]).map((option) => (
+                                <Button
+                                  key={option}
+                                  size="sm"
+                                  variant={conflict.resolution === option ? "default" : "outline"}
+                                  className="text-xs h-7"
+                                  onClick={() => handleResolveSurgeryConflict(conflict.id, option)}
+                                  data-testid={`resolve-${conflict.id}-${option}`}
+                                >
+                                  {option.replace(/_/g, " ")}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Sandbox Results */}
+                {surgerySandboxResults && (
+                  <Card className="border-border bg-black/20">
+                    <CardHeader className="py-2">
+                      <CardTitle className="text-xs flex items-center justify-between">
+                        <span>Sandbox Validation Results</span>
+                        <Badge className={surgerySandboxResults.passed ? "status-success" : "status-error"}>
+                          {surgerySandboxResults.passed ? "PASSED" : "FAILED"}
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                        <div className="p-2 rounded bg-black/30">
+                          <div className="text-lg font-bold">{surgerySandboxResults.summary?.total || 0}</div>
+                          <div className="text-muted-foreground">Total</div>
+                        </div>
+                        <div className="p-2 rounded bg-green-500/10">
+                          <div className="text-lg font-bold text-green-400">{surgerySandboxResults.summary?.passed || 0}</div>
+                          <div className="text-muted-foreground">Passed</div>
+                        </div>
+                        <div className="p-2 rounded bg-yellow-500/10">
+                          <div className="text-lg font-bold text-yellow-400">{surgerySandboxResults.summary?.warnings || 0}</div>
+                          <div className="text-muted-foreground">Warnings</div>
+                        </div>
+                        <div className="p-2 rounded bg-red-500/10">
+                          <div className="text-lg font-bold text-red-400">{surgerySandboxResults.summary?.failed || 0}</div>
+                          <div className="text-muted-foreground">Failed</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </CardContent>
             </Card>
           </div>

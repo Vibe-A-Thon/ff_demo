@@ -9,7 +9,7 @@ import zipfile
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import yaml
 from jsonschema import validate as jsonschema_validate
@@ -364,6 +364,204 @@ def _build_preview(zf: zipfile.ZipFile) -> Dict[str, Any]:
         "agent_count": len(agent_ids),
         "memory_counts": memory_counts,
     }
+
+
+def _build_import_snapshot(zf: zipfile.ZipFile) -> Dict[str, Any]:
+    preview = _build_preview(zf)
+    manifest = preview.get("manifest") or {}
+    memory_counts = preview.get("memory_counts", {})
+    file_names = _safe_members(zf)
+    agent_entries: List[Dict[str, Any]] = []
+    for agent_id in _parse_agent_ids(file_names):
+        profile_path = f"agents/{agent_id}/agent_profile.json"
+        profile: Dict[str, Any] = {}
+        if profile_path in file_names:
+            try:
+                with zf.open(profile_path) as handle:
+                    profile = json.loads(handle.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                profile = {}
+        counts = memory_counts.get(agent_id, {})
+        agent_entries.append(
+            {
+                "agent_id": agent_id,
+                "name": profile.get("name") or profile.get("agent_name"),
+                "role": profile.get("role"),
+                "semantic": counts.get("semantic", 0),
+                "episodic": counts.get("episodic", 0),
+            }
+        )
+
+    total_semantic = sum(item.get("semantic", 0) for item in memory_counts.values())
+    total_episodic = sum(item.get("episodic", 0) for item in memory_counts.values())
+    return {
+        "team_id": manifest.get("team_id"),
+        "team_name": manifest.get("team_name", manifest.get("team_id")),
+        "agent_count": preview.get("agent_count", len(agent_entries)),
+        "memory_counts": memory_counts,
+        "agents": agent_entries,
+        "totals": {"semantic": total_semantic, "episodic": total_episodic},
+        "manifest": manifest,
+        "source": "import",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _build_snapshot_from_agents(team: Dict[str, Any], agents: List[Dict[str, Any]], memory_counts: Dict[str, Dict[str, int]], agent_entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    total_semantic = sum(item.get("semantic", 0) for item in memory_counts.values())
+    total_episodic = sum(item.get("episodic", 0) for item in memory_counts.values())
+    return {
+        "team_id": team.get("team_id"),
+        "team_name": team.get("internal_name", team.get("team_id")),
+        "agent_count": len(agents),
+        "memory_counts": memory_counts,
+        "agents": agent_entries,
+        "totals": {"semantic": total_semantic, "episodic": total_episodic},
+        "source": "baseline",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _merge_snapshots(baseline: Dict[str, Any], imported: Dict[str, Any], mode: str) -> Dict[str, Any]:
+    merged_counts: Dict[str, Dict[str, int]] = {}
+    baseline_counts = baseline.get("memory_counts", {})
+    imported_counts = imported.get("memory_counts", {})
+    agent_ids = set(baseline_counts.keys()) | set(imported_counts.keys())
+
+    for agent_id in agent_ids:
+        base = baseline_counts.get(agent_id, {})
+        incoming = imported_counts.get(agent_id, {})
+        if mode == "replace":
+            merged_counts[agent_id] = {
+                "semantic": incoming.get("semantic", 0),
+                "episodic": incoming.get("episodic", 0),
+            }
+        else:
+            merged_counts[agent_id] = {
+                "semantic": base.get("semantic", 0) + incoming.get("semantic", 0),
+                "episodic": base.get("episodic", 0) + incoming.get("episodic", 0),
+            }
+
+    merged_agents: List[Dict[str, Any]] = []
+    for agent_id in sorted(agent_ids):
+        base_agent = next((agent for agent in baseline.get("agents", []) if agent.get("agent_id") == agent_id), {})
+        import_agent = next((agent for agent in imported.get("agents", []) if agent.get("agent_id") == agent_id), {})
+        counts = merged_counts.get(agent_id, {})
+        merged_agents.append(
+            {
+                "agent_id": agent_id,
+                "name": import_agent.get("name") or base_agent.get("name"),
+                "role": import_agent.get("role") or base_agent.get("role"),
+                "semantic": counts.get("semantic", 0),
+                "episodic": counts.get("episodic", 0),
+            }
+        )
+
+    total_semantic = sum(item.get("semantic", 0) for item in merged_counts.values())
+    total_episodic = sum(item.get("episodic", 0) for item in merged_counts.values())
+    merged = {
+        "team_id": imported.get("team_id") or baseline.get("team_id"),
+        "team_name": imported.get("team_name") or baseline.get("team_name"),
+        "agent_count": len(agent_ids),
+        "memory_counts": merged_counts,
+        "agents": merged_agents,
+        "totals": {"semantic": total_semantic, "episodic": total_episodic},
+        "merge_mode": mode,
+        "source": "merged",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if mode == "merge_calibrate":
+        merged["calibration_required"] = True
+    return merged
+
+
+async def build_baseline_snapshot(team_id: str) -> Dict[str, Any]:
+    team = await db.teams.find_one({"team_id": team_id}, {"_id": 0})
+    if not team:
+        team = next((t for t in default_team_payloads() if t["team_id"] == team_id), None)
+    if not team:
+        raise ValueError("Team not found")
+
+    agents = await db.agents.find({"team_id": team_id}, {"_id": 0}).to_list(200)
+    if not agents:
+        agents = [a for a in default_agent_payloads() if a["team_id"] == team_id]
+
+    memory_counts: Dict[str, Dict[str, int]] = {}
+    agent_entries: List[Dict[str, Any]] = []
+    for agent in agents:
+        artifacts = await db.agent_artifacts.find({"agent_id": agent.get("agent_id")}, {"_id": 0}).to_list(10)
+        tasks = await db.agent_tasks.find({"target_agent_id": agent.get("agent_id")}, {"_id": 0}).to_list(10)
+        semantic = _build_semantic_entries(agent, artifacts)
+        episodic = _build_episodic_entries(agent, tasks)
+        memory_counts[agent.get("agent_id")] = {
+            "semantic": len(semantic),
+            "episodic": len(episodic),
+        }
+        agent_entries.append(
+            {
+                "agent_id": agent.get("agent_id"),
+                "name": agent.get("agent_name"),
+                "role": agent.get("role"),
+                "semantic": len(semantic),
+                "episodic": len(episodic),
+            }
+        )
+
+    return _build_snapshot_from_agents(team, agents, memory_counts, agent_entries)
+
+
+async def build_amc_merge_preview(payload: bytes, mode: str = "merge") -> Dict[str, Any]:
+    with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+        import_snapshot = _build_import_snapshot(zf)
+    team_id = import_snapshot.get("team_id") or "blue"
+    baseline = await build_baseline_snapshot(team_id)
+    merged = _merge_snapshots(baseline, import_snapshot, mode)
+    return {
+        "baseline": baseline,
+        "import": import_snapshot,
+        "merged": merged,
+        "preview": {
+            "manifest": import_snapshot.get("manifest"),
+            "agent_count": import_snapshot.get("agent_count"),
+            "memory_counts": import_snapshot.get("memory_counts"),
+        },
+    }
+
+
+async def apply_amc_merge_state(
+    payload: bytes,
+    mode: str,
+    activate: bool,
+    actor_id: str,
+    package_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    preview = await build_amc_merge_preview(payload, mode=mode)
+    baseline = preview.get("baseline")
+    imported = preview.get("import")
+    merged = preview.get("merged")
+    team_id = merged.get("team_id")
+
+    state_update = {
+        "team_id": team_id,
+        "baseline_snapshot": baseline,
+        "import_snapshot": imported,
+        "merged_snapshot": merged,
+        "last_mode": mode,
+        "last_package_id": package_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if activate and package_id:
+        state_update.update(
+            {
+                "active_package_id": package_id,
+                "active_snapshot": merged,
+                "activated_by": actor_id,
+                "activated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+    await db.amc_states.update_one({"team_id": team_id}, {"$set": state_update}, upsert=True)
+    return preview
 
 
 async def export_amc(team_id: str, export_scope: Dict[str, Any], env_tag: str) -> Tuple[bytes, Dict[str, Any], str]:

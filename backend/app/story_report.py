@@ -110,6 +110,26 @@ def build_story_report(
     approvals: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     timeline = build_stage_timeline(events)
+    if not timeline:
+        summaries = pack.get("stage_summaries", []) or []
+        if summaries:
+            ordered = sorted(summaries, key=lambda item: _parse_ts(item.get("timestamp")).timestamp())
+            timeline = []
+            for idx, entry in enumerate(ordered):
+                started_at = entry.get("timestamp")
+                next_entry = ordered[idx + 1] if idx + 1 < len(ordered) else None
+                ended_at = next_entry.get("timestamp") if next_entry else None
+                timeline.append(
+                    {
+                        "stage": entry.get("stage"),
+                        "step": entry.get("step"),
+                        "started_at": started_at,
+                        "ended_at": ended_at,
+                        "event_count": entry.get("event_count", 0),
+                        "artifact_count": entry.get("artifact_count", 0),
+                        "triggered_rules": entry.get("triggered_rules", []) or [],
+                    }
+                )
     diffs = build_stage_diffs(timeline)
     workflow_history = (run or {}).get("workflow_history", [])
     return {

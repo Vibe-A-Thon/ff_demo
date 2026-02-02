@@ -1,0 +1,114 @@
+# BRC Prohibited Content Policy
+# This file defines content that must NOT appear in BRC archives
+
+version: "1.0"
+description: "Content restrictions for Battle Run Capsules to ensure bank-neutral, privacy-compliant exports"
+
+# Content that will cause validation failure
+prohibited_patterns:
+  # PII Patterns
+  - pattern: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    type: email
+    severity: critical
+    message: "Email addresses are not allowed in BRC"
+
+  - pattern: '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+    type: phone_us
+    severity: critical
+    message: "US phone numbers are not allowed in BRC"
+
+  - pattern: '\b\d{3}[-]?\d{2}[-]?\d{4}\b'
+    type: ssn
+    severity: critical
+    message: "Social Security Numbers are not allowed in BRC"
+
+  - pattern: '\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'
+    type: credit_card
+    severity: critical
+    message: "Credit card numbers are not allowed in BRC"
+
+  - pattern: '\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}([A-Z0-9]?){0,16}\b'
+    type: iban
+    severity: critical
+    message: "IBAN numbers are not allowed in BRC"
+
+  # Internal Infrastructure
+  - pattern: '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
+    type: ip_address
+    severity: high
+    message: "Internal IP addresses should be redacted"
+    exceptions:
+      - "0.0.0.0"
+      - "127.0.0.1"
+      - "localhost"
+
+  - pattern: '(?i)(internal|corp|bank|prod|staging)\.(company|bank|org)\.(com|net|io)'
+    type: internal_domain
+    severity: high
+    message: "Internal domain names are not allowed"
+
+  - pattern: '(?i)api[_-]?key["\s]*[=:]["\s]*[a-z0-9_-]{20,}'
+    type: api_key
+    severity: critical
+    message: "API keys must not be included"
+
+  - pattern: '(?i)password["\s]*[=:]["\s]*["\'`]?[^"\'\s]{4,}'
+    type: password
+    severity: critical
+    message: "Passwords must not be included"
+
+  # Bank-Specific Identifiers
+  - pattern: '(?i)(case|ticket|incident)[_-]?(id|number)?[:\s]*[a-z0-9_-]{8,}'
+    type: case_id
+    severity: high
+    message: "Internal case/ticket IDs should be anonymized"
+
+  - pattern: '(?i)customer[_-]?id[:\s]*[a-z0-9_-]{8,}'
+    type: customer_id
+    severity: high
+    message: "Real customer IDs must be anonymized"
+
+  - pattern: '(?i)account[_-]?number[:\s]*\d{8,}'
+    type: account_number
+    severity: critical
+    message: "Bank account numbers must not be included"
+
+  # Vendor/Partner Names
+  - pattern: '(?i)\b(acme|megacorp|competitor|vendor|partner)\b'
+    type: company_name
+    severity: medium
+    message: "Specific company names should be anonymized"
+
+# Allowed content classes
+allowed_content_classes:
+  - sanitized: "Data has been cleaned of identifying information"
+  - hashed: "Data is represented as cryptographic hashes only"
+  - aggregated: "Data is aggregated/bucketed (e.g., 'high', 'medium', 'low', 'p95')"
+  - redacted: "Sensitive portions have been replaced with placeholders"
+  - synthetic: "Data is purely synthetic/simulated"
+
+# File size limits
+size_limits:
+  max_total_size_mb: 100
+  max_file_size_mb: 10
+  max_files_count: 500
+
+# Required sanitization for specific paths
+path_requirements:
+  "inputs/*":
+    content_class: ["sanitized", "synthetic"]
+    notes: "Red simulation data must contain only synthetic entities"
+  
+  "telemetry/evidence_catalog.json":
+    content_class: ["hashed", "aggregated"]
+    notes: "Evidence must be hashed with bucket classifications only"
+  
+  "stages/*/team_*.json":
+    content_class: ["sanitized", "aggregated"]
+    notes: "Team outputs should contain sanitized summaries"
+
+# Audit requirements
+audit_requirements:
+  - "All exports must be logged with user_id and timestamp"
+  - "Import validation results must be persisted"
+  - "Prohibited content detections must generate security events"

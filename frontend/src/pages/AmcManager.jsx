@@ -47,6 +47,7 @@ const AmcManager = () => {
   const [importMode, setImportMode] = useState("merge");
   const [activateAfterImport, setActivateAfterImport] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [activationBlocked, setActivationBlocked] = useState(null);
 
   useEffect(() => {
     const loadTeams = async () => {
@@ -171,6 +172,10 @@ const AmcManager = () => {
     try {
       const response = await amcAPI.import(formData);
       setPreviewResult(response?.data?.preview || null);
+      setActivationBlocked(response?.data?.activation_blocked || null);
+      if (response?.data?.activation_blocked) {
+        toast.warning(response.data.activation_blocked);
+      }
       toast.success("AMC imported.");
       refreshCatalog();
     } catch (error) {
@@ -420,6 +425,11 @@ const AmcManager = () => {
                       {JSON.stringify(previewResult, null, 2)}
                     </pre>
                   </ScrollArea>
+                </div>
+              )}
+              {activationBlocked && (
+                <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-4 text-xs text-yellow-200" data-testid="amc-activation-blocked">
+                  {activationBlocked}
                 </div>
               )}
             </CardContent>

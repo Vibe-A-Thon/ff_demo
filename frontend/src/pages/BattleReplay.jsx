@@ -7,6 +7,7 @@ import { Slider } from "../components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../components/ui/collapsible";
 import { battleAPI, agentAPI, brcAPI } from "../lib/api";
@@ -36,13 +37,18 @@ import {
   FileDown,
   FileUp,
   ChevronDown,
+  RefreshCw,
+  Zap,
+  BookOpen,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // Comparison Card Component
 const ComparisonCard = ({ label, beforeValue, afterValue, format = "number", icon: Icon, color }) => {
   const formatValue = (val) => {
     if (format === "currency") return `$${val?.toLocaleString() || 0}`;
-    if (format === "percent") return `${val || 0}%`;
+    if (format === "percent") return `${(val * 100).toFixed(1)}%`;
     if (format === "minutes") return `${val || 0}m`;
     return val || 0;
   };
@@ -67,10 +73,12 @@ const ComparisonCard = ({ label, beforeValue, afterValue, format = "number", ico
             <p className="font-mono font-semibold">{formatValue(before)}</p>
           </div>
           <div className="text-center">
-            {improved ? (
-              <TrendingUp className="h-5 w-5 text-green-400 mx-auto" />
-            ) : diff < 0 ? (
-              <TrendingDown className="h-5 w-5 text-red-400 mx-auto" />
+            {diff !== 0 ? (
+              improved ? (
+                <TrendingUp className="h-5 w-5 text-green-400 mx-auto" />
+              ) : (
+                <TrendingDown className="h-5 w-5 text-red-400 mx-auto" />
+              )
             ) : (
               <span className="text-muted-foreground">—</span>
             )}
@@ -84,7 +92,7 @@ const ComparisonCard = ({ label, beforeValue, afterValue, format = "number", ico
         </div>
         {diff !== 0 && (
           <div className={`text-center mt-2 text-xs ${improved ? 'text-green-400' : 'text-red-400'}`}>
-            {improved ? '↑' : '↓'} {Math.abs(diff).toFixed(format === "percent" ? 1 : 0)}{format === "percent" ? '%' : format === "minutes" ? 'm' : ''}
+            {improved ? '↑' : '↓'} {Math.abs(diff).toFixed(format === "percent" ? 1 : 1)}{format === "percent" ? '%' : format === "minutes" ? 'm' : ''}
             {' '}{improved ? 'improvement' : 'decline'}
           </div>
         )}
@@ -175,9 +183,9 @@ const BattleReplay = () => {
   const [currentTurn, setCurrentTurn] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState([1]);
-  const [syncPlayback, setSyncPlayback] = useState(true);
   const playbackRef = useRef(null);
   const fileInputRef = useRef(null);
+  const brcFileRef = useRef(null);
   const [brcFile, setBrcFile] = useState(null);
   const [brcValidation, setBrcValidation] = useState(null);
   const [brcPreview, setBrcPreview] = useState(null);
@@ -187,7 +195,12 @@ const BattleReplay = () => {
   const [stageTeamFilter, setStageTeamFilter] = useState("all");
   const [stageAgentFilter, setStageAgentFilter] = useState("all");
   const [registrySnapshot, setRegistrySnapshot] = useState(null);
-  const brcFileRef = useRef(null);
+  const [activeReplaySession, setActiveReplaySession] = useState(null);
+  const [isReevaluating, setIsReevaluating] = useState(false);
+  const [isRerunning, setIsRerunning] = useState(false);
+  const [postmortemData, setPostmortemData] = useState(null);
+  const [showPostmortem, setShowPostmortem] = useState(false);
+  const [isGeneratingPostmortem, setIsGeneratingPostmortem] = useState(false);
 
   useEffect(() => {
     loadBattles();
@@ -288,31 +301,40 @@ const BattleReplay = () => {
       if (!brcFile) {
         setBrcFile(file);
       }
+      
+      // First validation
       const validateForm = new FormData();
       validateForm.append("file", file);
       const validateResponse = await brcAPI.validate(validateForm);
       setBrcValidation(validateResponse.data);
       if (!validateResponse.data?.valid) {
         toast.error("BRC validation failed");
+        setIsImporting(false);
         return;
       }
 
-      const previewForm = new FormData();
-      previewForm.append("file", file);
-      const previewResponse = await brcAPI.preview(previewForm);
-      setBrcPreview(previewResponse.data);
+      // Start replay session + import
+      const replayForm = new FormData();
+      replayForm.append("file", file);
+      replayForm.append("mode", "read_only");
+      const sessionResponse = await brcAPI.startReplay(replayForm);
+      setActiveReplaySession(sessionResponse.data);
 
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await battleAPI.importBrc(formData);
-      toast.success("BRC imported");
+      const importForm = new FormData();
+      importForm.append("file", file);
+      const response = await battleAPI.importBrc(importForm);
+      
+      toast.success("BRC imported and session started");
       await loadBattles();
+      
       if (response?.data) {
         setAfterBattle(response.data);
+        // If no before battle, set this one
         setBeforeBattle((prev) => prev || response.data);
       }
     } catch (error) {
       toast.error("Failed to import BRC");
+      console.error(error);
     } finally {
       setIsImporting(false);
       if (event?.target) event.target.value = "";
@@ -363,18 +385,106 @@ const BattleReplay = () => {
     }
   };
 
+  const handleReevaluate = async () => {
+    if (!activeReplaySession) {
+      toast.error("No active session. Please import a BRC first.");
+      return;
+    }
+    setIsReevaluating(true);
+    try {
+      const response = await brcAPI.reevaluate(activeReplaySession.session_id);
+      
+      if (response.data?.improved) {
+        toast.success("Re-evaluation complete: Improvement detected!");
+        // Update afterBattle metrics
+        setAfterBattle(prev => ({
+          ...prev,
+          metrics: { 
+            ...prev.metrics, 
+            ...response.data.new_scorecard.score,
+            time_to_immunity: response.data.new_scorecard.score.mitigation_time_s / 60
+          }
+        }));
+      } else {
+        toast.info("Re-evaluation complete: No significant improvement.");
+      }
+    } catch (error) {
+      toast.error("Re-evaluation failed");
+      console.error(error);
+    } finally {
+      setIsReevaluating(false);
+    }
+  };
+
+  const handleRerunDefense = async () => {
+    if (!activeReplaySession) {
+      toast.error("No active session. Please import a BRC first.");
+      return;
+    }
+    setIsRerunning(true);
+    try {
+      const response = await brcAPI.rerunDefense(activeReplaySession.session_id, 0.15); // 15% improvement
+      
+      if (response.data?.improved) {
+        toast.success("Defense rerun complete: Improvement verified in sandbox!");
+        setAfterBattle(prev => ({
+          ...prev,
+          metrics: { 
+            ...prev.metrics, 
+            ...response.data.simulated_scorecard.score,
+            time_to_immunity: response.data.simulated_scorecard.score.mitigation_time_s / 60
+          }
+        }));
+      } else {
+        toast.info("Defense rerun finished.");
+      }
+    } catch (error) {
+      toast.error("Rerun failed");
+      console.error(error);
+    } finally {
+      setIsRerunning(false);
+    }
+  };
+
+  const handleGeneratePostmortem = async () => {
+    if (!brcFile && !activeReplaySession) return;
+    setIsGeneratingPostmortem(true);
+    try {
+      let data;
+      // If we have a file, send it
+      if (brcFile) {
+        const formData = new FormData();
+        formData.append("file", brcFile);
+        const response = await brcAPI.generatePostmortem(formData);
+        data = response.data;
+      } else if (afterBattle) {
+        // If loaded from existing
+        const response = await brcAPI.getBattlePostmortem(afterBattle.id);
+        data = response.data;
+      }
+
+      setPostmortemData(data);
+      setShowPostmortem(true);
+      toast.success("Postmortem generated");
+    } catch (error) {
+      toast.error("Failed to generate postmortem");
+    } finally {
+      setIsGeneratingPostmortem(false);
+    }
+  };
+
   const handleDownloadSummary = () => {
     const summary = {
       generated_at: new Date().toISOString(),
       before: {
         id: beforeBattle?.id,
         scenario: beforeBattle?.scenario_name,
-        metrics: beforeFinalMetrics,
+        metrics: beforeBattle?.metrics,
       },
       after: {
         id: afterBattle?.id,
         scenario: afterBattle?.scenario_name,
-        metrics: afterFinalMetrics,
+        metrics: afterBattle?.metrics,
       },
     };
     const blob = new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" });
@@ -542,36 +652,64 @@ const BattleReplay = () => {
         </div>
       </div>
 
+      {/* Replay Actions Card - NEW */}
       <div className="px-4 pb-4 border-b border-border bg-zinc-900/50">
-        <Card className="border-border" data-testid="battle-replay-registry">
+        <Card className="border-border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Registry Snapshot</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-400" />
+              Replay Actions
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-xs text-muted-foreground">
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="border-border">
-                {registrySnapshot?.teams?.length || 0} teams
-              </Badge>
-              <Badge variant="outline" className="border-border">
-                {registrySnapshot?.agents?.length || 0} agents
-              </Badge>
-            </div>
-            <div className="grid gap-2 md:grid-cols-3">
-              {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
-                <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-2">
-                  <div className="text-white text-xs font-medium">{item.agent_name}</div>
-                  <div className="text-[11px] text-muted-foreground">{item.role}</div>
+          <CardContent>
+            <div className="flex flex-wrap gap-4">
+               <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="default"
+                    onClick={handleReevaluate}
+                    disabled={!activeReplaySession || isReevaluating}
+                    className="gap-2"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isReevaluating ? 'animate-spin' : ''}`} />
+                    Re-evaluate Score
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="secondary"
+                    onClick={handleRerunDefense}
+                    disabled={!activeReplaySession || isRerunning}
+                    className="gap-2"
+                  >
+                    <Shield className={`h-4 w-4 ${isRerunning ? 'animate-pulse' : ''}`} />
+                    Rerun Defense
+                  </Button>
                 </div>
-              ))}
-              {!registrySnapshot?.delegation_preview?.length && (
-                <div className="text-xs text-muted-foreground">Registry data not available.</div>
-              )}
+                <div className="border-l border-zinc-700 pl-4">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={handleGeneratePostmortem}
+                    disabled={(!brcFile && !activeReplaySession && !afterBattle) || isGeneratingPostmortem}
+                    className="gap-2"
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    Generate Postmortem
+                  </Button>
+                </div>
             </div>
+            
+            {activeReplaySession && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                Session Active: <span className="text-emerald-400 font-mono">{activeReplaySession.session_id}</span>
+                <span className="mx-2">•</span>
+                Mode: <span className="capitalize text-zinc-300">{activeReplaySession.mode.replace('_', ' ')}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Playback Controls */}
       <div className="p-4 border-b border-border bg-zinc-900/50">
         <Card className="border-border mb-4">
           <CardHeader className="pb-2">
@@ -664,56 +802,29 @@ const BattleReplay = () => {
             )}
           </CardContent>
         </Card>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">Before (Baseline)</Label>
-            <Select
-              value={beforeBattle?.id || ""}
-              onValueChange={(id) => {
-                setBeforeBattle(battles.find(b => b.id === id));
-                setCurrentTurn(0);
-              }}
-            >
-              <SelectTrigger data-testid="before-battle-select">
-                <SelectValue placeholder="Select baseline battle" />
-              </SelectTrigger>
-              <SelectContent>
-                {battles.map((battle) => (
-                  <SelectItem key={battle.id} value={battle.id} disabled={battle.id === afterBattle?.id}>
-                    {battle.scenario_name} ({battle.turns?.length || 0} turns)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">After (Updated)</Label>
-            <Select
-              value={afterBattle?.id || ""}
-              onValueChange={(id) => {
-                setAfterBattle(battles.find(b => b.id === id));
-                setCurrentTurn(0);
-              }}
-            >
-              <SelectTrigger data-testid="after-battle-select">
-                <SelectValue placeholder="Select updated battle" />
-              </SelectTrigger>
-              <SelectContent>
-                {battles.map((battle) => (
-                  <SelectItem key={battle.id} value={battle.id} disabled={battle.id === beforeBattle?.id}>
-                    {battle.scenario_name} ({battle.turns?.length || 0} turns)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        </div>
       </div>
 
       {/* Progress Bar */}
       <div className="px-4 py-2 bg-zinc-900/30">
         <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={togglePlayback}
+            className="h-8 w-8 hover:text-blue-400 hover:bg-blue-400/10"
+          >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={reset}
+            className="h-8 w-8"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+
           <span className="text-sm font-mono w-20">Turn {currentTurn + 1}/{maxTurns}</span>
           <Slider
             value={[currentTurn]}
@@ -956,6 +1067,41 @@ const BattleReplay = () => {
           )}
         </div>
       </ScrollArea>
+
+      {/* Postmortem Dialog */}
+      <Dialog open={showPostmortem} onOpenChange={setShowPostmortem}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Battle Postmortem & Lessons Distilled</DialogTitle>
+            <DialogDescription>
+              Detailed analysis of battle outcomes, lessons learned, and recommended rule patches.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mt-4">
+             {postmortemData?.postmortem_md ? (
+               <article className="prose prose-invert prose-sm max-w-none">
+                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{postmortemData.postmortem_md}</ReactMarkdown>
+               </article>
+             ) : (
+               <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
+                 <Zap className="h-12 w-12 mb-4 opacity-50" />
+                 <p>Generating insights...</p>
+               </div>
+             )}
+          </div>
+          
+          <DialogFooter>
+             <Button variant="outline" onClick={() => setShowPostmortem(false)}>Close</Button>
+             <Button variant="default" onClick={() => {
+               toast.success("Lessons exported to AMC (mock)");
+               setShowPostmortem(false);
+             }}>
+               Export to AMC
+             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

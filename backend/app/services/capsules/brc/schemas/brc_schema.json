@@ -1,13 +1,136 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "BRC Manifest",
+  "$id": "https://fraudforge.io/schemas/brc/manifest.json",
+  "title": "BRC Manifest Schema",
+  "description": "Schema for Battle Run Capsule manifest.json",
   "type": "object",
-  "required": ["battle_type", "run_id", "exported_at", "artifacts"],
+  "required": ["format", "brc_version", "battle_run_id", "battle_type", "created_at", "compatibility", "hashes"],
   "properties": {
-    "battle_type": {"type": "string"},
-    "run_id": {"type": "string"},
-    "exported_at": {"type": "string"},
-    "event_count": {"type": "integer"},
-    "artifacts": {"type": "array", "items": {"type": "string"}}
+    "format": {
+      "type": "string",
+      "const": "BRC",
+      "description": "Format identifier"
+    },
+    "brc_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "BRC format version"
+    },
+    "battle_run_id": {
+      "type": "string",
+      "description": "Unique battle run identifier"
+    },
+    "battle_type": {
+      "type": "string",
+      "description": "Type of battle (e.g., ato_mule_network, card_testing)"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when BRC was created"
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Random seed for reproducibility"
+    },
+    "participants": {
+      "type": "object",
+      "properties": {
+        "teams": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of team IDs"
+        },
+        "agents_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of agents"
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "required": ["fraud_forge_app_version", "schema_versions"],
+      "properties": {
+        "fraud_forge_app_version": {
+          "type": "string",
+          "description": "Fraud Forge app version that created this BRC"
+        },
+        "runtime_version": {
+          "type": "string",
+          "description": "Agent runtime version"
+        },
+        "schema_versions": {
+          "type": "object",
+          "properties": {
+            "brc_schema": {"type": "string"},
+            "orchestrator_output": {"type": "string"},
+            "stage_output": {"type": "string"},
+            "scorecard": {"type": "string"}
+          }
+        },
+        "prompt_manifest_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Hash of prompt manifest for compatibility checking"
+        },
+        "tool_registry_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Hash of tool registry for compatibility checking"
+        }
+      }
+    },
+    "artifact_index": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "type"],
+        "properties": {
+          "path": {"type": "string"},
+          "type": {
+            "type": "string",
+            "enum": ["input", "orchestrator_output", "team_output", "scorecard", "xai", "telemetry", "artifact"]
+          },
+          "content_class": {
+            "type": "string",
+            "enum": ["sanitized", "hashed", "aggregated", "redacted"],
+            "description": "Content classification for safety"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "required": ["pack_hash"],
+      "properties": {
+        "pack_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Hash of the entire pack_hashes.json"
+        }
+      }
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Legacy field for backward compatibility"
+    },
+    "exported_at": {
+      "type": "string",
+      "description": "Legacy field for backward compatibility"
+    },
+    "event_count": {
+      "type": "integer",
+      "description": "Total number of events in the battle"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "List of artifact paths (legacy)"
+    }
   }
 }

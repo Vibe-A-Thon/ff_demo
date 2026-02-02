@@ -9,6 +9,7 @@ from app.audit import record_audit
 from app.core.logging_config import get_logger
 from app.models import AMCExportRequest, AMCImportRequest
 from app.security import require_permission
+from app.db import db
 from app.services.capsules.amc.amc_service import (
     export_amc,
     validate_amc_bytes,
@@ -17,6 +18,9 @@ from app.services.capsules.amc.amc_service import (
     save_amc_package,
     list_catalog,
     activate_package,
+    build_amc_merge_preview,
+    build_baseline_snapshot,
+    apply_amc_merge_state,
 )
 
 router = APIRouter()
@@ -77,7 +81,7 @@ async def preview_amc_capsule(
 ):
     """Preview an AMC capsule."""
     payload = await file.read()
-    preview = preview_amc_bytes(payload)
+    preview = await build_amc_merge_preview(payload, mode="merge")
     await record_audit(
         current_user.get("id", "unknown"),
         "amc.previewed",
@@ -99,9 +103,8 @@ async def import_amc_capsule(
     validation = validate_amc_bytes(payload)
     if not validation.get("valid"):
         raise HTTPException(status_code=400, detail="AMC validation failed", headers={"X-AMC-Errors": ";".join(validation.get("errors", []))})
-
-    preview = preview_amc_bytes(payload)
-    manifest = preview.get("manifest") or {}
+    preview = await build_amc_merge_preview(payload, mode=mode)
+    manifest = preview.get("import", {}).get("manifest") or {}
     record = await save_amc_package(
         payload,
         manifest,
@@ -119,9 +122,33 @@ async def import_amc_capsule(
         package_id,
         metadata={"mode": mode, "team_id": record.get("team_id")},
     )
-    if activate and package_id != "unknown":
-        await activate_package(package_id, current_user.get("id", "unknown"))
-    return {"package": record, "preview": preview}
+    activation_blocked = None
+    if package_id != "unknown":
+        await apply_amc_merge_state(payload, mode, activate, current_user.get("id", "unknown"), package_id=package_id)
+        if activate and record.get("created_by") == current_user.get("id"):
+            activation_blocked = "SoD violation: requester cannot activate own import"
+        elif activate:
+            await activate_package(package_id, current_user.get("id", "unknown"))
+    response = {"package": record, "preview": preview}
+    if activation_blocked:
+        response["activation_blocked"] = activation_blocked
+    return response
+
+
+@router.get("/amc/baseline")
+async def amc_baseline_snapshot(
+    team_id: str,
+    current_user: dict = Depends(require_permission("amc:read")),
+):
+    """Fetch baseline AMC snapshot for Brain Surgery merge view."""
+    snapshot = await build_baseline_snapshot(team_id)
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "amc.baseline",
+        "amc_package",
+        team_id,
+    )
+    return snapshot
 
 
 @router.post("/amc/diff")
@@ -164,6 +191,11 @@ async def activate_amc_capsule(
     current_user: dict = Depends(require_permission("amc:approve")),
 ):
     """Activate an imported AMC package in sandbox."""
+    package_record = await db.amc_packages.find_one({"id": package_id}, {"_id": 0})
+    if not package_record:
+        raise HTTPException(status_code=404, detail="AMC package not found")
+    if package_record.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot activate own import")
     try:
         package = await activate_package(package_id, current_user.get("id", "unknown"))
     except ValueError as exc:

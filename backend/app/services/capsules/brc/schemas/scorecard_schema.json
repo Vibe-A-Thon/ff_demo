@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fraudforge.io/schemas/brc/scorecard.json",
+  "title": "BRC Scorecard Schema",
+  "description": "Schema for battle scorecard",
+  "type": "object",
+  "required": ["battle_run_id", "winner", "score"],
+  "properties": {
+    "battle_run_id": {
+      "type": "string"
+    },
+    "battle_type": {
+      "type": "string"
+    },
+    "winner": {
+      "type": "string",
+      "enum": ["TEAM-RED", "TEAM-BLUE", "DRAW"],
+      "description": "Winning team"
+    },
+    "score": {
+      "type": "object",
+      "required": ["attack_success_rate", "detection_recall"],
+      "properties": {
+        "attack_success_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Percentage of successful attacks"
+        },
+        "detection_recall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Percentage of attacks detected"
+        },
+        "false_positive_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Percentage of false positives"
+        },
+        "mitigation_time_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Average mitigation time in seconds"
+        },
+        "explainability_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "XAI quality score"
+        }
+      }
+    },
+    "highlights": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Key battle highlights"
+    },
+    "computed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

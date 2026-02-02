@@ -27,6 +27,8 @@ from app.agentic_rag import plan_agentic_steps, run_agentic_steps
 from app.rag_ingest import OCRUnavailableError, extract_text_from_upload
 from app.multimodal_embeddings import embed_image_bytes
 from app.rag_cache import cag_cache, get_persisted_cache, set_persisted_cache, hash_cache_key
+from app.cache_utils import TTLCache
+from time import perf_counter
 from app.rag_graph import graph_retrieve
 from app.graph_rag_neo4j import neo4j_graph_retrieve
 from app.rag_utils import (
@@ -55,6 +57,7 @@ from app.security import require_permission
 
 router = APIRouter()
 logger = get_logger(__name__)
+graph_context_cache = TTLCache(ttl_seconds=300, max_items=300)
 
 
 async def _record_cache_telemetry(
@@ -668,13 +671,24 @@ async def rag_query(
     avg_score = 0.0
     effective_query = request.query
     agentic_trace: List[Dict[str, Any]] = []
+    timing: Dict[str, Any] = {
+        "rewrite_ms": 0.0,
+        "retrieve_ms": 0.0,
+        "graph_ms": 0.0,
+        "llm_ms": 0.0,
+        "total_ms": 0.0,
+        "cache_layer": "none",
+    }
+    start_total = perf_counter()
 
     if rag_mode in {"advanced", "advanced-rag"}:
+        rewrite_start = perf_counter()
         rewritten = await rewrite_query(effective_query, llm_client)
         expanded = await expand_query(rewritten, llm_client)
         if expanded != effective_query:
             corrections.append("query_rewrite_expand")
             effective_query = expanded
+        timing["rewrite_ms"] = round((perf_counter() - rewrite_start) * 1000, 2)
 
     cache_key = json.dumps(
         {
@@ -703,6 +717,7 @@ async def rag_query(
             corrections.append("cache_hit")
             scored_docs = cached_payload.get("scored_docs", [])
             avg_score = float(cached_payload.get("avg_score", 0.0))
+            timing["cache_layer"] = cache_layer
             await _record_cache_telemetry(
                 db,
                 "hit",
@@ -720,6 +735,7 @@ async def rag_query(
             )
 
     if rag_mode == "agentic":
+        agentic_start = perf_counter()
         steps = await plan_agentic_steps(effective_query, llm_client)
         agentic_result = await run_agentic_steps(
             steps,
@@ -737,7 +753,9 @@ async def rag_query(
         agentic_trace = agentic_result.get("trace", [])
         avg_score = sum(doc.get("score", 0) for doc in scored_docs) / max(len(scored_docs), 1)
         corrections.append("agentic_planner")
+        timing["retrieve_ms"] += round((perf_counter() - agentic_start) * 1000, 2)
     elif rag_mode != "graph" and not cached_payload:
+        retrieve_start = perf_counter()
         scored_docs = await _retrieve_scored_docs(
             effective_query,
             request.collections,
@@ -749,6 +767,7 @@ async def rag_query(
             current_user.get("role"),
         )
         avg_score = sum(doc.get("score", 0) for doc in scored_docs) / max(len(scored_docs), 1)
+        timing["retrieve_ms"] += round((perf_counter() - retrieve_start) * 1000, 2)
 
     if rag_mode in {"advanced", "advanced-rag"} and scored_docs:
         scored_docs = rerank_hits_strong(effective_query, scored_docs)
@@ -762,6 +781,7 @@ async def rag_query(
 
     if avg_score < request.retrieval_threshold and (request.enable_crag or rag_mode == "crag"):
         corrections.append("broaden_collections")
+        fallback_start = perf_counter()
         fallback_docs = await _retrieve_scored_docs(
             request.query,
             None,
@@ -773,6 +793,7 @@ async def rag_query(
             current_user.get("role"),
         )
         fallback_score = sum(doc.get("score", 0) for doc in fallback_docs) / max(len(fallback_docs), 1)
+        timing["retrieve_ms"] += round((perf_counter() - fallback_start) * 1000, 2)
         if fallback_docs and fallback_score >= avg_score:
             scored_docs = fallback_docs
             used_fallback = True
@@ -786,6 +807,7 @@ async def rag_query(
                 llm_client,
             )
             if rewritten_query and rewritten_query != request.query:
+                rewritten_start = perf_counter()
                 rewritten_docs = await _retrieve_scored_docs(
                     rewritten_query,
                     request.collections,
@@ -797,6 +819,7 @@ async def rag_query(
                     current_user.get("role"),
                 )
                 rewritten_score = sum(doc.get("score", 0) for doc in rewritten_docs) / max(len(rewritten_docs), 1)
+                timing["retrieve_ms"] += round((perf_counter() - rewritten_start) * 1000, 2)
                 if rewritten_docs and rewritten_score >= avg_score:
                     scored_docs = rewritten_docs
                     avg_score = rewritten_score
@@ -811,12 +834,28 @@ async def rag_query(
         if cached_payload:
             graph_context = cached_payload.get("graph_context", [])
         else:
-            graph_context = await _graph_context(
-                request.query,
-                db,
-                request.top_k,
-                request.graph_hops,
+            graph_cache_key = json.dumps(
+                {
+                    "query": request.query,
+                    "top_k": request.top_k,
+                    "graph_hops": request.graph_hops,
+                    "synthetic_only": request.synthetic_only,
+                },
+                sort_keys=True,
             )
+            graph_context = graph_context_cache.get(graph_cache_key)
+            if graph_context:
+                corrections.append("graph_cache_hit")
+            else:
+                graph_start = perf_counter()
+                graph_context = await _graph_context(
+                    request.query,
+                    db,
+                    request.top_k,
+                    request.graph_hops,
+                )
+                timing["graph_ms"] += round((perf_counter() - graph_start) * 1000, 2)
+                graph_context_cache.set(graph_cache_key, graph_context)
         if graph_context and rag_mode == "crag" and avg_score < request.retrieval_threshold:
             corrections.append("graph_context")
         if not graph_context and rag_mode == "crag" and avg_score < request.retrieval_threshold:
@@ -843,6 +882,7 @@ async def rag_query(
         combined_context = context_snippets + graph_snippets
         if llm_client and combined_context:
             try:
+                llm_start = perf_counter()
                 system_prompt = "You are a fraud defense assistant. Use only the provided context. If context is insufficient, say so. Keep responses synthetic-only and avoid real identifiers."
                 prompt = format_context_prompt(combined_context, effective_query)
                 answer = await llm_client.chat_completions_create(
@@ -854,6 +894,7 @@ async def rag_query(
                     max_tokens=400,
                 )
                 generated_by = "openai"
+                timing["llm_ms"] += round((perf_counter() - llm_start) * 1000, 2)
             except Exception as exc:
                 __import__("logging").getLogger(__name__).error(f"RAG generation error: {exc}")
 
@@ -945,6 +986,20 @@ async def rag_query(
         verification_score=round(verification_score, 4),
         verification_passed=verification_passed,
         agentic_trace=agentic_trace,
+    )
+
+    timing["total_ms"] = round((perf_counter() - start_total) * 1000, 2)
+    timing["cache_layer"] = cache_layer
+    response.agentic_trace.append({"stage": "profile", "metrics": timing})
+    await db.rag_query_perf.insert_one(
+        {
+            "query": request.query,
+            "rag_mode": rag_mode,
+            "cache_layer": cache_layer,
+            "timing": timing,
+            "hits": len(response.hits),
+            "created_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        }
     )
 
     if request.run_id:

@@ -71,6 +71,7 @@ const MetricsDashboard = () => {
   const [ragEvalSeries, setRagEvalSeries] = useState([]);
   const [ragEvalLoading, setRagEvalLoading] = useState(false);
   const [ragSettings, setRagSettings] = useState(null);
+  const [perfMetrics, setPerfMetrics] = useState(null);
 
   useEffect(() => {
     loadMetrics();
@@ -125,8 +126,12 @@ const MetricsDashboard = () => {
   const loadMetrics = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await metricsAPI.getDashboard();
+      const [response, perfResponse] = await Promise.all([
+        metricsAPI.getDashboard(),
+        metricsAPI.getPerf(),
+      ]);
       setMetrics(response.data);
+      setPerfMetrics(perfResponse?.data || null);
     } catch (error) {
       console.error("Failed to load metrics:", error);
       // Use fallback data
@@ -141,6 +146,7 @@ const MetricsDashboard = () => {
         avg_time_to_immunity: 4.2,
         time_series: generateMockTimeSeries(),
       });
+      setPerfMetrics(null);
     } finally {
       setLoading(false);
     }
@@ -183,6 +189,8 @@ const MetricsDashboard = () => {
 
   const operational = metrics?.operational_kpis || {};
   const stageFailurePercent = Math.round((operational.stage_failure_rate || 0) * 100);
+  const ragPerf = perfMetrics?.rag || {};
+  const graphPerf = perfMetrics?.graph || {};
 
   const moneySaved = Math.round(((metrics?.avg_success_rate || 0) / 100) * 120000);
   const moneyAtRisk = Math.round(160000);
@@ -411,6 +419,32 @@ const MetricsDashboard = () => {
                 value={`${stageFailurePercent}%`}
                 icon={AlertTriangle}
                 color="#F97316"
+              />
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              <MetricCard
+                title="RAG Avg Latency"
+                value={`${Math.round(ragPerf.avg_total_ms || 0)}ms`}
+                icon={Brain}
+                color="#A855F7"
+              />
+              <MetricCard
+                title="RAG Cache Hit"
+                value={`${Math.round((ragPerf.cache_hit_rate || 0) * 100)}%`}
+                icon={Zap}
+                color="#8B5CF6"
+              />
+              <MetricCard
+                title="Graph Avg Latency"
+                value={`${Math.round(graphPerf.avg_total_ms || 0)}ms`}
+                icon={Activity}
+                color="#38BDF8"
+              />
+              <MetricCard
+                title="Graph Cache Hit"
+                value={`${Math.round((graphPerf.cache_hit_rate || 0) * 100)}%`}
+                icon={BarChart3}
+                color="#22C55E"
               />
             </div>
           </>

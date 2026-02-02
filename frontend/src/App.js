@@ -38,6 +38,7 @@ const Neo4jSyncDashboard = lazy(() => import("./pages/Neo4jSyncDashboard"));
 const RAGEvaluationDashboard = lazy(() => import("./pages/RAGEvaluationDashboard"));
 const LLMProviderSetup = lazy(() => import("./pages/LLMProviderSetup"));
 const AmcManager = lazy(() => import("./pages/AmcManager"));
+const AMCExplorer = lazy(() => import("./components/AMCExplorer"));
 
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
@@ -206,6 +207,7 @@ function AppRoutes() {
           <Route path="neo4j-sync" element={<RoleGate route="neo4j-sync"><SuspenseRoute><Neo4jSyncDashboard /></SuspenseRoute></RoleGate>} />
           <Route path="llm-setup" element={<RoleGate route="llm-setup"><SuspenseRoute><LLMProviderSetup /></SuspenseRoute></RoleGate>} />
           <Route path="amc-manager" element={<RoleGate route="amc-manager"><SuspenseRoute><AmcManager /></SuspenseRoute></RoleGate>} />
+          <Route path="amc-explorer" element={<RoleGate route="amc-manager"><SuspenseRoute><AMCExplorer /></SuspenseRoute></RoleGate>} />
           <Route path="settings" element={<RoleGate route="settings"><SuspenseRoute><SettingsConfiguration /></SuspenseRoute></RoleGate>} />
           <Route path="users" element={<RoleGate route="users"><SuspenseRoute><UserManagement /></SuspenseRoute></RoleGate>} />
         </Route>
