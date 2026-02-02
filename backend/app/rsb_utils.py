@@ -1,9 +1,11 @@
 import io
 import json
 import random
+import re
 import zipfile
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from hashlib import sha256
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def build_rsb_tree(file_names: List[str]) -> List[Dict[str, Any]]:
@@ -114,6 +116,118 @@ def validate_rsb_payload(
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def _read_zip_bytes(zf: zipfile.ZipFile, path: str) -> Optional[bytes]:
+    try:
+        with zf.open(path) as handle:
+            return handle.read()
+    except KeyError:
+        return None
+
+
+def compute_zip_hashes(zf: zipfile.ZipFile, file_names: List[str]) -> Dict[str, str]:
+    hashes: Dict[str, str] = {}
+    for name in file_names:
+        payload = _read_zip_bytes(zf, name)
+        if payload is None:
+            continue
+        hashes[name] = f"sha256:{sha256(payload).hexdigest()}"
+    return hashes
+
+
+def verify_pack_hashes(
+    pack_hashes: Dict[str, Any],
+    computed_hashes: Dict[str, str],
+) -> Tuple[List[str], List[str]]:
+    errors: List[str] = []
+    warnings: List[str] = []
+
+    files_map = None
+    if isinstance(pack_hashes, dict):
+        if isinstance(pack_hashes.get("files"), dict):
+            files_map = pack_hashes.get("files")
+        elif isinstance(pack_hashes.get("hashes"), dict):
+            files_map = pack_hashes.get("hashes")
+
+    if not isinstance(files_map, dict):
+        warnings.append("pack_hashes.json has no recognizable file hash map")
+        return errors, warnings
+
+    for path, expected in files_map.items():
+        actual = computed_hashes.get(path)
+        if actual is None:
+            errors.append(f"pack_hashes.json references missing file: {path}")
+            continue
+        expected_str = str(expected)
+        if expected_str.startswith("sha256:"):
+            expected_str = expected_str
+        else:
+            expected_str = f"sha256:{expected_str}"
+        if expected_str != actual:
+            errors.append(f"Hash mismatch for {path}")
+
+    return errors, warnings
+
+
+def scan_prohibited_content(zf: zipfile.ZipFile, file_names: List[str]) -> List[str]:
+    patterns = {
+        "email": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+        "phone": re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?(?:\(\d{2,3}\)|\d{2,3})[-.\s]?\d{3}[-.\s]?\d{4}\b"),
+        "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+        "credit_card": re.compile(r"\b(?:\d[ -]*?){13,19}\b"),
+    }
+    allowed_ext = {".md", ".json", ".py", ".txt", ".yaml", ".yml", ".csv", ".log"}
+    violations: List[str] = []
+
+    for name in file_names:
+        if not any(name.endswith(ext) for ext in allowed_ext):
+            continue
+        payload = _read_zip_bytes(zf, name)
+        if not payload:
+            continue
+        if len(payload) > 1024 * 1024:
+            continue
+        text = payload.decode("utf-8", errors="ignore")
+        for label, pattern in patterns.items():
+            if pattern.search(text):
+                violations.append(f"Potential {label} detected in {name}")
+
+    return violations
+
+
+def run_rsb_validation(
+    zf: zipfile.ZipFile,
+    file_names: List[str],
+    manifest: Optional[Dict[str, Any]],
+    rule_spec: Optional[Dict[str, Any]],
+    rule_def: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    validation = validate_rsb_payload(manifest, rule_spec, rule_def, file_names)
+
+    pack_hashes = read_zip_json(zf, "pack_hashes.json")
+    if pack_hashes is None:
+        validation["warnings"].append("pack_hashes.json missing; hash integrity not verified")
+    else:
+        computed_hashes = compute_zip_hashes(zf, file_names)
+        hash_errors, hash_warnings = verify_pack_hashes(pack_hashes, computed_hashes)
+        validation["errors"].extend(hash_errors)
+        validation["warnings"].extend(hash_warnings)
+        validation["hash_verification"] = {
+            "status": "failed" if hash_errors else "passed",
+            "checked": len(computed_hashes),
+        }
+
+    policy_violations = scan_prohibited_content(zf, file_names)
+    if policy_violations:
+        validation["errors"].extend(policy_violations)
+    validation["policy_scan"] = {
+        "status": "failed" if policy_violations else "passed",
+        "violations": policy_violations,
+    }
+
+    validation["valid"] = len(validation["errors"]) == 0
+    return validation
 
 
 def build_test_results(package_id: str, file_names: List[str]) -> Dict[str, Any]:

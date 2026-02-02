@@ -317,13 +317,23 @@ const RSBManager = () => {
     setValidationStatus("running");
     setValidationProgress(30);
     rsbAPI
-      .get(selectedPackage.id)
+      .validate(selectedPackage.id)
       .then((response) => {
         const validation = response.data.validation || { valid: true };
         setValidationProgress(100);
         setValidationStatus(validation.valid ? "passed" : "failed");
-        setSelectedPackage(response.data);
-        setPackages((prev) => prev.map((pkg) => (pkg.id === response.data.id ? response.data : pkg)));
+        setPackages((prev) =>
+          prev.map((pkg) =>
+            pkg.id === selectedPackage.id
+              ? { ...pkg, validation, status: response.data.status || pkg.status }
+              : pkg
+          )
+        );
+        setSelectedPackage((prev) => ({
+          ...prev,
+          validation,
+          status: response.data.status || prev.status,
+        }));
         toast[validation.valid ? "success" : "error"](
           validation.valid ? "Validation passed" : "Validation failed"
         );

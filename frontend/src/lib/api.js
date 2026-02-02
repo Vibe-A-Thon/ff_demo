@@ -106,6 +106,7 @@ export const rsbAPI = {
     api.post('/rsb-packages/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  validate: (id) => api.post(`/rsb-packages/${id}/validate`),
   test: (id) => api.post(`/rsb-packages/${id}/test`),
   getDiffs: (id) => api.get(`/rsb-packages/${id}/diffs`),
   applyPatch: (id, data) => api.post(`/rsb-packages/${id}/apply-patch`, data),

@@ -21,7 +21,7 @@ from app.rsb_utils import (
     read_zip_json,
     read_zip_text,
     find_first_match,
-    validate_rsb_payload,
+    run_rsb_validation,
     build_test_results,
     bump_patch_version,
     build_rsb_archive,
@@ -80,9 +80,6 @@ async def get_rsb_package(
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
-
-    if package.get("created_by") == current_user.get("id"):
-        raise HTTPException(status_code=403, detail="SoD violation: requester cannot approve own patch")
     await record_audit(
         current_user.get("id", "unknown"),
         "rsb.package.read",
@@ -209,7 +206,7 @@ async def upload_rsb_package(
                 else:
                     compliance_docs.append({"name": entry, "type": "text", "content": content})
 
-            validation = validate_rsb_payload(manifest, rule_spec, rule_def, file_names)
+            validation = run_rsb_validation(zf, file_names, manifest, rule_spec, rule_def)
             rule_id = None
             if manifest:
                 rule_id = manifest.get("rule_id")
@@ -290,6 +287,56 @@ async def upload_rsb_package(
         logger.exception("Invalid RSB archive", extra={"payload": {"filename": file.filename}})
         raise HTTPException(status_code=400, detail="Invalid ZIP archive") from exc
 
+
+@router.post("/rsb-packages/{package_id}/validate")
+async def validate_rsb_package(
+    package_id: str,
+    current_user: dict = Depends(require_permission("rsb:write")),
+    db: DatabaseClient = Depends(get_db),
+) -> Dict[str, Any]:
+    """Re-validate an RSB package using stored archive.
+
+    Args:
+        package_id: Package identifier.
+        current_user: Authorized user context.
+        db: Database client.
+
+    Returns:
+        Dict[str, Any]: Validation report.
+
+    Raises:
+        HTTPException: If package or archive is missing.
+    """
+    package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
+    if not package:
+        raise HTTPException(status_code=404, detail="RSB Package not found")
+
+    storage_path = package.get("storage_path")
+    if not storage_path or not Path(storage_path).exists():
+        raise HTTPException(status_code=404, detail="RSB archive not available")
+
+    payload = Path(storage_path).read_bytes()
+    with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+        file_names = [name for name in zf.namelist() if not name.endswith("/")]
+        manifest = read_zip_json(zf, "manifest.json")
+        rule_spec = read_zip_json(zf, "rule/specification.json")
+        rule_def = read_zip_json(zf, "rule/rule.json")
+        validation = run_rsb_validation(zf, file_names, manifest, rule_spec, rule_def)
+
+    status = "pending" if validation.get("valid") else "failed"
+    await db.rsb_packages.update_one(
+        {"id": package_id},
+        {"$set": {"validation": validation, "status": status, "updated_by": current_user.get("id", "unknown")}},
+    )
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.validated",
+        "rsb_package",
+        package_id,
+        metadata={"status": status},
+    )
+    return {"package_id": package_id, "validation": validation, "status": status}
+
 @router.post("/rsb-packages/{package_id}/test")
 async def test_rsb_package(
     package_id: str,
@@ -312,6 +359,9 @@ async def test_rsb_package(
     package = await db.rsb_packages.find_one({"id": package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="RSB Package not found")
+
+    if package.get("created_by") and package.get("created_by") == current_user.get("id"):
+        raise HTTPException(status_code=403, detail="SoD violation: requester cannot approve own patch")
 
     test_results = package.get("test_results")
     if not test_results:
@@ -632,7 +682,30 @@ async def export_rsb_package(
         )
         return response
 
-    raise HTTPException(status_code=404, detail="RSB archive not available")
+    archive_bytes = build_rsb_archive(
+        manifest=package.get("manifest") or {},
+        rule_spec=package.get("rule_spec") or {},
+        rule_def=package.get("rule_definition") or {},
+        description_md=package.get("description_md") or "",
+        patch_script=package.get("patch_script") or "",
+        code=package.get("code") or "",
+        code_patch=package.get("code_patch"),
+        test_results=package.get("test_results"),
+        compliance_docs={
+            doc.get("name"): doc.get("content")
+            for doc in package.get("compliance_docs", [])
+            if doc.get("name") and doc.get("content") is not None
+        },
+    )
+    response = StreamingResponse(io.BytesIO(archive_bytes), media_type="application/zip")
+    response.headers["Content-Disposition"] = f"attachment; filename={package.get('name','package')}.rsb"
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "rsb.package.exported",
+        "rsb_package",
+        package_id,
+    )
+    return response
 
 @router.delete("/rsb-packages/{package_id}")
 async def delete_rsb_package(
