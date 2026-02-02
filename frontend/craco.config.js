@@ -61,10 +61,69 @@ const webpackConfig = {
         ],
       };
 
+      // PRODUCTION OPTIMIZATIONS
+      if (process.env.NODE_ENV === 'production') {
+        // 1. Code Splitting - Split vendor and runtime chunks
+        webpackConfig.optimization = {
+          ...webpackConfig.optimization,
+          runtimeChunk: 'single',
+          splitChunks: {
+            chunks: 'all',
+            cacheGroups: {
+              // Vendor chunk for node_modules
+              vendor: {
+                test: /[\\/]node_modules[\\/]/,
+                name: 'vendors',
+                priority: 10,
+                reuseExistingChunk: true,
+              },
+              // Separate chunk for large libraries
+              radix: {
+                test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+                name: 'radix-ui',
+                priority: 20,
+              },
+              recharts: {
+                test: /[\\/]node_modules[\\/]recharts[\\/]/,
+                name: 'recharts',
+                priority: 20,
+              },
+              // Common chunk for shared code
+              common: {
+                minChunks: 2,
+                priority: 5,
+                reuseExistingChunk: true,
+                enforce: true,
+              },
+            },
+          },
+          // Minimize bundle size
+          minimize: true,
+          // Use TerserPlugin for better minification (already included by CRA)
+        };
+
+        // 2. Performance hints and budgets
+        webpackConfig.performance = {
+          hints: 'warning',
+          maxEntrypointSize: 512000, // 500 KB
+          maxAssetSize: 512000, // 500 KB
+        };
+
+        // 3. Source maps for production (smaller, remote debugging)
+        webpackConfig.devtool = 'source-map';
+
+        // 4. Module concatenation (webpack's ModuleConcatenationPlugin - already enabled by mode: 'production')
+        
+        // 5. Tree shaking (enabled by default in production mode)
+        webpackConfig.optimization.usedExports = true;
+        webpackConfig.optimization.sideEffects= true;
+      }
+
       // Add health check plugin to webpack if enabled
       if (config.enableHealthCheck && healthPluginInstance) {
         webpackConfig.plugins.push(healthPluginInstance);
       }
+      
       return webpackConfig;
     },
   },

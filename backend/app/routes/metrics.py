@@ -295,3 +295,162 @@ async def get_agent_effectiveness(current_user: dict = Depends(require_permissio
         })
 
     return sorted(payload, key=lambda x: x["tasks_total"], reverse=True)
+
+
+@router.get("/metrics/historical")
+async def get_historical_metrics(
+    days: int = 30,
+    granularity: str = "daily",
+    current_user: dict = Depends(require_permission("metrics:read")),
+):
+    """Get historical time-series metrics from MongoDB aggregations.
+
+    Args:
+        days: Number of days to include (default: 30)
+        granularity: Time bucket size - 'hourly', 'daily', or 'weekly' (default: 'daily')
+        current_user: Authenticated user
+
+    Returns:
+        Time-series data with aggregated metrics
+    """
+    from app.services.metrics.historical_aggregator import HistoricalMetricsAggregator
+
+    aggregator = HistoricalMetricsAggregator(db)
+    time_series = await aggregator.get_time_series_metrics(days=days, granularity=granularity)
+
+    logger.info(
+        "metrics.historical.generated",
+        extra={
+            "payload": {
+                "days": days,
+                "granularity": granularity,
+                "data_points": len(time_series),
+            }
+        },
+    )
+
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "metrics.historical.generated",
+        "metrics",
+        "historical",
+        metadata={"days": days, "granularity": granularity, "data_points": len(time_series)},
+    )
+
+    return {
+        "period_days": days,
+        "granularity": granularity,
+        "data_points": len(time_series),
+        "time_series": time_series,
+    }
+
+
+@router.get("/metrics/dashboard/v2")
+async def get_dashboard_metrics_v2(
+    days: int = 30,
+    current_user: dict = Depends(require_permission("metrics:read")),
+):
+    """Get enhanced dashboard metrics with historical aggregations.
+
+    This endpoint replaces /metrics/dashboard with true historical data
+    instead of fallback computations.
+
+    Args:
+        days: Number of days to aggregate (default: 30)
+        current_user: Authenticated user
+
+    Returns:
+        Complete dashboard metrics with time-series data
+    """
+    from app.services.metrics.historical_aggregator import HistoricalMetricsAggregator
+
+    aggregator = HistoricalMetricsAggregator(db)
+
+    # Get aggregated metrics
+    metrics = await aggregator.get_aggregated_dashboard_metrics(days=days)
+
+    # Get trend analysis
+    trends = await aggregator.get_trend_analysis(days=days)
+
+    # Get current rules count
+    rules = await db.rules.find({}, {"_id": 0}).to_list(100)
+
+    # Combine into payload
+    payload = {
+        "total_battles": metrics["total_battles"],
+        "completed_battles": metrics["completed_battles"],
+        "running_battles": 0,  # Real-time data from current state
+        "avg_success_rate": metrics["avg_success_rate"],
+        "total_rules": len(rules),
+        "active_rules": len([r for r in rules if r.get("status") == "active"]),
+        "patterns_learned": metrics["patterns_learned"],
+        "avg_time_to_immunity": metrics["avg_time_to_immunity"],
+        "time_series": metrics["time_series"],
+        "trends": trends,
+        "operational_kpis": {
+            "total_runs": metrics["total_battles"],
+            "completed_runs": metrics["completed_battles"],
+            "total_actions": metrics["total_actions"],
+            "blocked_actions": metrics["blocked_actions"],
+            "block_rate": metrics["block_rate"],
+            "period_days": days,
+        },
+    }
+
+    logger.info(
+        "metrics.dashboard.v2.generated",
+        extra={
+            "payload": {
+                "total_battles": payload["total_battles"],
+                "period_days": days,
+            }
+        },
+    )
+
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "metrics.dashboard.v2.generated",
+        "metrics",
+        "dashboard_v2",
+        metadata={"total_battles": payload["total_battles"], "period_days": days},
+    )
+
+    return payload
+
+
+@router.get("/metrics/trends")
+async def get_trend_analysis(
+    days: int = 30,
+    current_user: dict = Depends(require_permission("metrics:read")),
+):
+    """Get trend analysis for key metrics.
+
+    Args:
+        days: Number of days to analyze (default: 30)
+        current_user: Authenticated user
+
+    Returns:
+        Trend analysis with percentage changes
+    """
+    from app.services.metrics.historical_aggregator import HistoricalMetricsAggregator
+
+    aggregator = HistoricalMetricsAggregator(db)
+    trends = await aggregator.get_trend_analysis(days=days)
+
+    logger.info(
+        "metrics.trends.generated",
+        extra={"payload": {"days": days}},
+    )
+
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "metrics.trends.generated",
+        "metrics",
+        "trends",
+        metadata={"days": days},
+    )
+
+    return {
+        "period_days": days,
+        "trends": trends,
+    }

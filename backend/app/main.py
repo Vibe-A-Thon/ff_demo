@@ -46,7 +46,9 @@ from app.routes import (
     websocket,
     brain_surgery,
     lessons,
+    codegen,
 )
+
 
 setup_logging(APP_NAME)
 logger = get_logger(__name__)
@@ -99,7 +101,9 @@ protected_routers = [
     llm.router,
     brain_surgery.router,
     lessons.router,
+    codegen.router,
 ]
+
 
 for router in public_routers:
     app.include_router(router, prefix=API_PREFIX)
@@ -118,6 +122,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files for production React build
+# This should be done AFTER all API routes are registered
+# to avoid conflicts with API endpoints
+try:
+    from app.routes.static_files import mount_static_files
+    mount_static_files(app)
+except Exception as e:
+    logger.warning(f"Could not mount static files: {e}")
 
 register_exception_handlers(app)
 
