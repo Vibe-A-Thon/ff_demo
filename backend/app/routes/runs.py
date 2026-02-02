@@ -7,9 +7,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
-import io
-import json
-import zipfile
 from app.core.external_services import DatabaseClient
 from app.core.logging_config import get_logger
 from app.audit import record_audit
@@ -25,6 +22,7 @@ from app.workflow_service import (
     ensure_stage_approval,
 )
 from app.security import require_permission
+from app.services.capsules.brc.brc_service import build_brc_archive, persist_brc_package
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -396,68 +394,8 @@ async def export_brc(
         raise HTTPException(status_code=404, detail="Run not found")
 
     events = await db.run_events.find({"run_id": run_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    battle_type = run.get("scenario_id", "battle")
-    archive_name = f"{battle_type}_{run_id}_{timestamp}.brc"
-
-    red_simulation_payload = None
-    for event in events:
-        if event.get("event_type") != "agent.output":
-            continue
-        payload = event.get("payload", {})
-        if str(payload.get("team", "")).lower() == "red":
-            red_simulation_payload = payload
-            break
-
-    memory = io.BytesIO()
-    with zipfile.ZipFile(memory, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-        artifacts = ["manifest.json", "metadata.json"]
-        if red_simulation_payload:
-            artifacts.append("red_simulation_data.json")
-        manifest = {
-            "battle_type": battle_type,
-            "run_id": run_id,
-            "exported_at": timestamp,
-            "event_count": len(events),
-            "artifacts": artifacts,
-        }
-        archive.writestr("manifest.json", json.dumps(manifest, indent=2))
-
-        metadata = {
-            "battle_type": battle_type,
-            "run_id": run_id,
-            "seed": run.get("seed"),
-            "mode": run.get("mode"),
-            "current_stage": run.get("current_stage"),
-            "step_count": run.get("step_count"),
-            "exported_at": timestamp,
-            "schema_version": "1.1",
-        }
-        archive.writestr("metadata.json", json.dumps(metadata, indent=2, default=str))
-
-        if red_simulation_payload:
-            red_outputs = red_simulation_payload.get("outputs", {})
-            red_data = {
-                "team": red_simulation_payload.get("team"),
-                "agent": red_simulation_payload.get("agent"),
-                "simulate_transactions": red_outputs.get("simulate_transactions", {}),
-                "apply_attack": red_outputs.get("apply_attack", {}),
-                "attack_plan": red_outputs.get("attack_plan", {}),
-            }
-            archive.writestr("red_simulation_data.json", json.dumps(red_data, indent=2, default=str))
-
-        for event in events:
-            if event.get("event_type") not in {"agent.output", "orchestrator.output"}:
-                continue
-            payload = event.get("payload", {})
-            team = payload.get("team", "unknown")
-            team_name = str(team).title()
-            event_ts = event.get("created_at", timestamp)
-            safe_ts = event_ts.replace(":", "").replace("-", "").replace(".", "")
-            file_name = f"{team_name}_{run_id}_{safe_ts}.json"
-            archive.writestr(file_name, json.dumps(payload, indent=2, default=str))
-
-    memory.seek(0)
+    payload, manifest, archive_name = build_brc_archive(run, events)
+    await persist_brc_package(payload, manifest, current_user.get("id", "unknown"))
     headers = {"Content-Disposition": f"attachment; filename={archive_name}"}
     await record_audit(
         current_user.get("id", "unknown"),
@@ -466,4 +404,4 @@ async def export_brc(
         run_id,
         metadata={"archive": archive_name},
     )
-    return Response(content=memory.read(), media_type="application/octet-stream", headers=headers)
+    return Response(content=payload, media_type="application/octet-stream", headers=headers)

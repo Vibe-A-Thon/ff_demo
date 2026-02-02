@@ -10,6 +10,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../components/ui/collapsible";
 import { battleAPI, aiAPI, createBattleWebSocket, runAPI, workflowAPI, agentAPI, ragAPI, settingsAPI, llmAPI, evidenceAPI } from "../lib/api";
 import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
@@ -39,6 +40,7 @@ import {
   Sparkles,
   FileText,
   FileDown,
+  ChevronDown,
 } from "lucide-react";
 
 // Thinking Visualizer Component with Streaming
@@ -297,6 +299,9 @@ const WarRoom = () => {
   const [workflowApprovals, setWorkflowApprovals] = useState([]);
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [runEvents, setRunEvents] = useState([]);
+  const [selectedStageKey, setSelectedStageKey] = useState("");
+  const [stageTeamFilter, setStageTeamFilter] = useState("all");
+  const [stageAgentFilter, setStageAgentFilter] = useState("all");
   const [blockedBursts, setBlockedBursts] = useState([]);
   const [scenarioName, setScenarioName] = useState("Custom Scenario");
   const [scenarioSteps, setScenarioSteps] = useState([]);
@@ -1205,6 +1210,43 @@ const WarRoom = () => {
     [runEvents]
   );
 
+  const stageOutputsByStage = useMemo(() => {
+    return (runEvents || []).reduce((acc, event) => {
+      if (!["agent.output", "orchestrator.output"].includes(event.event_type)) return acc;
+      const payload = event.payload || {};
+      const stageKey = String(payload.stage || event.stage || "unknown");
+      const team = (payload.team || (event.event_type === "orchestrator.output" ? "orchestrator" : "system")).toLowerCase();
+      const agent = payload.agent || payload.agent_id || payload.agent_name || "";
+      if (!acc[stageKey]) acc[stageKey] = { items: [] };
+      acc[stageKey].items.push({
+        id: `${stageKey}-${acc[stageKey].items.length}`,
+        team,
+        agent,
+        payload,
+        eventType: event.event_type,
+        created_at: event.created_at,
+      });
+      return acc;
+    }, {});
+  }, [runEvents]);
+
+  const stageKeys = useMemo(() => Object.keys(stageOutputsByStage).sort(), [stageOutputsByStage]);
+
+  useEffect(() => {
+    if (!selectedStageKey && stageKeys.length) {
+      setSelectedStageKey(stageKeys[stageKeys.length - 1]);
+    }
+  }, [stageKeys, selectedStageKey]);
+
+  const selectedStageItems = stageOutputsByStage[selectedStageKey]?.items || [];
+  const availableStageTeams = Array.from(new Set(selectedStageItems.map((item) => item.team))).filter(Boolean);
+  const availableStageAgents = Array.from(new Set(selectedStageItems.map((item) => item.agent))).filter(Boolean);
+  const filteredStageItems = selectedStageItems.filter((item) => {
+    if (stageTeamFilter !== "all" && item.team !== stageTeamFilter) return false;
+    if (stageAgentFilter !== "all" && item.agent !== stageAgentFilter) return false;
+    return true;
+  });
+
   const latestOrchestratorByTeam = useMemo(() => {
     return orchestratorEvents.reduce((acc, event) => {
       const team = (event.payload?.team || "unknown").toLowerCase();
@@ -2085,6 +2127,93 @@ const WarRoom = () => {
             isStreaming={isStreaming} 
           />
         </div>
+      </div>
+
+      {/* Stage Outputs Detail */}
+      <div className="border-t border-border bg-card/40 px-6 py-4" data-testid="war-room-stage-outputs">
+        <Card className="border-border">
+          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              Stage Outputs Detail
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={selectedStageKey}
+                onValueChange={setSelectedStageKey}
+                disabled={!stageKeys.length}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stageKeys.map((stage) => (
+                    <SelectItem key={stage} value={stage}>
+                      {stage}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={stageTeamFilter} onValueChange={setStageTeamFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Team" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All teams</SelectItem>
+                  {availableStageTeams.map((team) => (
+                    <SelectItem key={team} value={team}>
+                      {team}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={stageAgentFilter}
+                onValueChange={setStageAgentFilter}
+                disabled={!availableStageAgents.length}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All agents</SelectItem>
+                  {availableStageAgents.map((agent) => (
+                    <SelectItem key={agent} value={agent}>
+                      {agent}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {filteredStageItems.length ? (
+              filteredStageItems.map((item, idx) => (
+                <Collapsible key={item.id} defaultOpen={idx === 0}>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded border border-border bg-black/30 px-2 py-1 text-xs">
+                    <span className="text-muted-foreground">
+                      {item.team} {item.agent ? `• ${item.agent}` : ""}
+                    </span>
+                    <ChevronDown className="h-3 w-3" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-40 rounded border border-border bg-black/40 p-2 mt-2">
+                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                        {formatOutput(item.payload)}
+                      </pre>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
+              ))
+            ) : (
+              <div className="text-xs text-muted-foreground">
+                {stageKeys.length
+                  ? "No outputs match the selected filters."
+                  : "Start a lifecycle run to capture orchestrator outputs per stage."}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Session Trace Viewer */}

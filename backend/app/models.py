@@ -543,6 +543,19 @@ class PEPPack(BaseModel):
     created_by: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
+
+class BRCPackage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    run_id: str
+    battle_type: str
+    status: str = "exported"
+    manifest: Dict[str, Any] = {}
+    validation: Dict[str, Any] = {}
+    storage_path: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
 class AgentRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
     request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))

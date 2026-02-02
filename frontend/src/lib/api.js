@@ -37,6 +37,22 @@ export const battleAPI = {
   delete: (id) => api.delete(`/battles/${id}`),
 };
 
+// BRC Capsule APIs
+export const brcAPI = {
+  validate: (formData) =>
+    api.post('/brc/validate', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  preview: (formData) =>
+    api.post('/brc/preview', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  import: (formData) =>
+    api.post('/brc/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
 // Run (War Loop) APIs
 export const runAPI = {
   getAll: () => api.get('/runs'),

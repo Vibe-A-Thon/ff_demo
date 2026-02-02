@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../components/ui/collapsible";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { battleAPI, runAPI, workflowAPI, agentAPI } from "../lib/api";
@@ -26,6 +27,7 @@ import {
   Snowflake,
   Undo2,
   RefreshCcw,
+  ChevronDown,
 } from "lucide-react";
 
 const SCENARIO_PRESETS = [
@@ -69,6 +71,10 @@ const WarPractice = () => {
   const [workflowApprovals, setWorkflowApprovals] = useState([]);
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [registrySnapshot, setRegistrySnapshot] = useState(null);
+  const [runEvents, setRunEvents] = useState([]);
+  const [selectedStageKey, setSelectedStageKey] = useState("");
+  const [stageTeamFilter, setStageTeamFilter] = useState("all");
+  const [stageAgentFilter, setStageAgentFilter] = useState("all");
 
   const estimatedRisk = useMemo(() => {
     const base = attackComplexity[0] * 6 + velocity[0] * 0.6 + muleDensity[0] * 7;
@@ -179,6 +185,16 @@ const WarPractice = () => {
     }
   };
 
+  const refreshRunEvents = useCallback(async (runId) => {
+    if (!runId) return;
+    try {
+      const response = await runAPI.get(runId);
+      setRunEvents(response?.data?.events || []);
+    } catch (error) {
+      console.error("Failed to load run events:", error);
+    }
+  }, []);
+
   const syncWorkflow = useCallback(async (runId) => {
     if (!runId) return;
     try {
@@ -198,10 +214,67 @@ const WarPractice = () => {
       setGovernanceStatus(statusData?.governance || null);
       const approvalsData = approvalsResponse?.data;
       setWorkflowApprovals(approvalsData?.approvals || []);
+      await refreshRunEvents(runId);
     } catch (error) {
       console.error("Failed to sync workflow:", error);
     }
-  }, []);
+  }, [refreshRunEvents]);
+
+  useEffect(() => {
+    if (!workflowRunId) return;
+    syncWorkflow(workflowRunId);
+    const interval = setInterval(() => {
+      syncWorkflow(workflowRunId);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [workflowRunId, syncWorkflow]);
+
+  const stageOutputsByStage = useMemo(() => {
+    return (runEvents || []).reduce((acc, event) => {
+      if (!["agent.output", "orchestrator.output"].includes(event.event_type)) return acc;
+      const payload = event.payload || {};
+      const stageKey = String(payload.stage || event.stage || "unknown");
+      const team = (payload.team || (event.event_type === "orchestrator.output" ? "orchestrator" : "system")).toLowerCase();
+      const agent = payload.agent || payload.agent_id || payload.agent_name || "";
+      if (!acc[stageKey]) acc[stageKey] = { items: [] };
+      acc[stageKey].items.push({
+        id: `${stageKey}-${acc[stageKey].items.length}`,
+        team,
+        agent,
+        payload,
+        eventType: event.event_type,
+        created_at: event.created_at,
+      });
+      return acc;
+    }, {});
+  }, [runEvents]);
+
+  const stageKeys = useMemo(() => Object.keys(stageOutputsByStage).sort(), [stageOutputsByStage]);
+
+  useEffect(() => {
+    if (!selectedStageKey && stageKeys.length) {
+      setSelectedStageKey(stageKeys[stageKeys.length - 1]);
+    }
+  }, [stageKeys, selectedStageKey]);
+
+  const selectedStageItems = stageOutputsByStage[selectedStageKey]?.items || [];
+  const availableStageTeams = Array.from(new Set(selectedStageItems.map((item) => item.team))).filter(Boolean);
+  const availableStageAgents = Array.from(new Set(selectedStageItems.map((item) => item.agent))).filter(Boolean);
+  const filteredStageItems = selectedStageItems.filter((item) => {
+    if (stageTeamFilter !== "all" && item.team !== stageTeamFilter) return false;
+    if (stageAgentFilter !== "all" && item.agent !== stageAgentFilter) return false;
+    return true;
+  });
+
+  const formatOutput = (outputs) => {
+    if (!outputs) return "No output yet.";
+    if (typeof outputs === "string") return outputs;
+    try {
+      return JSON.stringify(outputs, null, 2);
+    } catch (error) {
+      return String(outputs);
+    }
+  };
 
   const handleLifecycleAutoRun = async () => {
     setWorkflowBusy(true);
@@ -899,6 +972,87 @@ const WarPractice = () => {
                   ))}
                 </ul>
               </ScrollArea>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border" data-testid="war-practice-stage-outputs">
+            <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="text-base">Stage Outputs Detail</CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={selectedStageKey}
+                  onValueChange={setSelectedStageKey}
+                  disabled={!stageKeys.length}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select stage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stageKeys.map((stage) => (
+                      <SelectItem key={stage} value={stage}>
+                        {stage}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={stageTeamFilter} onValueChange={setStageTeamFilter}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All teams</SelectItem>
+                    {availableStageTeams.map((team) => (
+                      <SelectItem key={team} value={team}>
+                        {team}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={stageAgentFilter}
+                  onValueChange={setStageAgentFilter}
+                  disabled={!availableStageAgents.length}
+                >
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All agents</SelectItem>
+                    {availableStageAgents.map((agent) => (
+                      <SelectItem key={agent} value={agent}>
+                        {agent}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              {filteredStageItems.length ? (
+                filteredStageItems.map((item, idx) => (
+                  <Collapsible key={item.id} defaultOpen={idx === 0}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded border border-border bg-black/30 px-2 py-1 text-xs">
+                      <span className="text-muted-foreground">
+                        {item.team} {item.agent ? `• ${item.agent}` : ""}
+                      </span>
+                      <ChevronDown className="h-3 w-3" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <ScrollArea className="h-40 rounded border border-border bg-black/40 p-2 mt-2">
+                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                          {formatOutput(item.payload)}
+                        </pre>
+                      </ScrollArea>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  {stageKeys.length
+                    ? "No outputs match the selected filters."
+                    : "Start a lifecycle run to capture orchestrator outputs per stage."}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

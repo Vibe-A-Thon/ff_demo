@@ -6,14 +6,12 @@ Provides CRUD and import operations for battles.
 from datetime import datetime, timezone
 from typing import Dict, List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
-import io
-import json
-import zipfile
 from app.db import db
 from app.core.logging_config import get_logger
 from app.audit import record_audit
 from app.models import Battle, BattleCreate
 from app.security import require_permission
+from app.services.capsules.brc.brc_service import import_brc_bytes, persist_brc_package
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -194,44 +192,27 @@ async def import_brc(file: UploadFile = File(...), current_user: dict = Depends(
     """
     content = await file.read()
     try:
-        archive = zipfile.ZipFile(io.BytesIO(content))
-    except zipfile.BadZipFile as exc:
-        raise HTTPException(status_code=400, detail="Invalid BRC archive") from exc
+        import_report = import_brc_bytes(content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    manifest = {}
-    if "manifest.json" in archive.namelist():
-        manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+    manifest = import_report.get("manifest") or {}
+    battle_type = import_report.get("battle_type", "Imported Battle")
+    run_id = import_report.get("run_id", "imported")
 
-    battle_type = manifest.get("battle_type", "Imported Battle")
-    run_id = manifest.get("run_id", "imported")
+    await persist_brc_package(content, manifest, current_user.get("id", "unknown"), status="imported")
 
-    red_output = {}
-    blue_output = {}
-    for name in archive.namelist():
-        if not name.endswith(".json") or name == "manifest.json":
-            continue
-        data = json.loads(archive.read(name).decode("utf-8"))
-        team = (data.get("team") or "").lower()
-        if team == "red" and not red_output:
-            red_output = data
-        if team == "blue" and not blue_output:
-            blue_output = data
-
-    turn = {
-        "red_team": {
-            "action": (red_output.get("outputs") or {}).get("attack_plan", {}).get("campaign", "synthetic"),
-            "success": True,
-        },
-        "blue_team": {
-            "action": (blue_output.get("outputs") or {}).get("decision", {}).get("outcome", "review"),
-            "blocked": True,
-        },
-    }
+    turns = import_report.get("turns") or [
+        {
+            "red_team": {"action": "synthetic", "success": True},
+            "blue_team": {"action": "review", "blocked": True},
+        }
+    ]
 
     battle = Battle(
         scenario_name=battle_type,
         status="completed",
-        turns=[turn],
+        turns=turns,
         parameters={"imported_from": run_id, "source": "brc"},
         metrics={
             "success_rate": 100,

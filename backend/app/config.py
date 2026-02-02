@@ -64,4 +64,7 @@ AMC_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 PEP_STORAGE_DIR = ROOT_DIR / "data" / "pep_packs"
 PEP_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
+BRC_STORAGE_DIR = ROOT_DIR / "data" / "brc_exports"
+BRC_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+
 TRACE_ROOT = ROOT_DIR / "run_artifacts"
