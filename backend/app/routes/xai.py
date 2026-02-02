@@ -300,8 +300,8 @@ async def generate_commentary(
         )
 
     prompt = (
-        "You are The Commentor, an explainability agent. "
-        "Describe what is happening on the current screen in 2-3 concise sentences, present tense. "
+        "You are MIRA (Multi-purpose Intelligent Response Agent), the AI assistant for Fraud Forge. "
+        "Describe what is happening on the current screen in 2-3 concise sentences, confident and helpful tone. "
         "Do not invent sensitive identifiers or personal data. "
         f"{lesson_context}\n"
         f"Screen: {payload.screen}. Role: {payload.role}. "

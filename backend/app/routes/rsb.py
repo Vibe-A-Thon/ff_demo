@@ -21,11 +21,11 @@ from app.rsb_utils import (
     read_zip_json,
     read_zip_text,
     find_first_match,
-    run_rsb_validation,
     build_test_results,
     bump_patch_version,
     build_rsb_archive,
 )
+from app.services.capsules.rsb import run_full_validation, SandboxRunner
 from app.core.logging_config import get_logger
 from app.audit import record_audit
 
@@ -209,7 +209,7 @@ async def upload_rsb_package(
                 else:
                     compliance_docs.append({"name": entry, "type": "text", "content": content})
 
-            validation = run_rsb_validation(zf, file_names, manifest, rule_spec, rule_def)
+            validation = run_full_validation(zf)
             rule_id = None
             if manifest:
                 rule_id = manifest.get("rule_id")
@@ -326,7 +326,7 @@ async def validate_rsb_package(
         manifest = read_zip_json(zf, "manifest.json")
         rule_spec = read_zip_json(zf, "rule/specification.json")
         rule_def = read_zip_json(zf, "rule/rule.json")
-        validation = run_rsb_validation(zf, file_names, manifest, rule_spec, rule_def)
+        validation = run_full_validation(zf)
 
     status = "pending" if validation.get("valid") else "failed"
     await db.rsb_packages.update_one(
@@ -370,8 +370,21 @@ async def test_rsb_package(
 
     test_results = package.get("test_results")
     if not test_results:
-        file_names = package.get("manifest", {}).get("files_flat", [])
-        test_results = build_test_results(package_id, file_names)
+        # Phase 6: Sandbox Execution
+        archive_path = package.get("storage_path")
+        if archive_path and Path(archive_path).exists():
+            try:
+                payload = Path(archive_path).read_bytes()
+                sandbox = SandboxRunner()
+                real_results = sandbox.run_tests(payload)
+                if not real_results.get("error") and (real_results["unit_tests"]["total"] > 0 or real_results["integration_tests"]["total"] > 0):
+                    test_results = real_results
+            except Exception as e:
+                logger.warning(f"Sandbox execution failed: {e}")
+
+        if not test_results:
+            file_names = package.get("manifest", {}).get("files_flat", [])
+            test_results = build_test_results(package_id, file_names)
 
     await db.rsb_packages.update_one({"id": package_id}, {"$set": {"test_results": test_results, "status": "tested"}})
     await record_audit(

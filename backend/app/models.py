@@ -531,6 +531,8 @@ class PEPExportRequest(BaseModel):
     env_tag: str = "sandbox"
     include_eval_suite: bool = False
     include_model_bundle: bool = False
+    rsb_ids: List[str] = []
+    brc_ids: List[str] = []
 
 
 class PEPPack(BaseModel):

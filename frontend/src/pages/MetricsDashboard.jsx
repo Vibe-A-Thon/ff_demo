@@ -72,6 +72,7 @@ const MetricsDashboard = () => {
   const [ragEvalLoading, setRagEvalLoading] = useState(false);
   const [ragSettings, setRagSettings] = useState(null);
   const [perfMetrics, setPerfMetrics] = useState(null);
+  const [agentMetrics, setAgentMetrics] = useState([]);
 
   useEffect(() => {
     loadMetrics();
@@ -126,12 +127,14 @@ const MetricsDashboard = () => {
   const loadMetrics = useCallback(async () => {
     setLoading(true);
     try {
-      const [response, perfResponse] = await Promise.all([
+      const [response, perfResponse, agentResponse] = await Promise.all([
         metricsAPI.getDashboard(),
         metricsAPI.getPerf(),
+        metricsAPI.getAgentEffectiveness(),
       ]);
       setMetrics(response.data);
       setPerfMetrics(perfResponse?.data || null);
+      setAgentMetrics(agentResponse?.data || []);
     } catch (error) {
       console.error("Failed to load metrics:", error);
       // Use fallback data
@@ -317,6 +320,60 @@ const MetricsDashboard = () => {
       <ScrollArea className="flex-1">
         <div className="px-6 pb-6 space-y-6">
           <JudgeModeBanner active={judgeMode} />
+
+          {/* Agent Effectiveness Section */}
+          {!loading && agentMetrics.length > 0 && (
+            <Card className="border-border mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-pink-400" />
+                  Agent Effectiveness Leaderboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border border-border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="p-3 text-left font-medium">Agent ID</th>
+                        <th className="p-3 text-left font-medium">Role Impact</th>
+                        <th className="p-3 text-right font-medium">Tasks Executed</th>
+                        <th className="p-3 text-right font-medium">Success Rate</th>
+                        <th className="p-3 text-right font-medium">Memories Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {agentMetrics.slice(0, 8).map((agent) => (
+                        <tr key={agent.agent_id} className="hover:bg-muted/30">
+                          <td className="p-3 font-mono">{agent.agent_id}</td>
+                          <td className="p-3">
+                             <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-16 bg-zinc-800 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full ${agent.success_rate >= 80 ? 'bg-green-500' : 'bg-yellow-500'}`} 
+                                    style={{ width: `${agent.success_rate}%` }} 
+                                  />
+                                </div>
+                             </div>
+                          </td>
+                          <td className="p-3 text-right">{agent.tasks_total}</td>
+                          <td className={`p-3 text-right font-bold ${agent.success_rate >= 90 ? 'text-green-400' : 'text-blue-400'}`}>
+                            {agent.success_rate}%
+                          </td>
+                          <td className="p-3 text-right text-purple-400 font-mono">
+                            {agent.memories_created}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {agentMetrics.length === 0 && (
+                     <div className="p-6 text-center text-muted-foreground">No agent performance data available yet. Run a battle to populate.</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
         {/* KPI Cards */}
         {loading ? (

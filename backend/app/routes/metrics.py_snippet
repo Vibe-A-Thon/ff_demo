@@ -1,0 +1,38 @@
+
+@router.get("/metrics/agent-effectiveness")
+async def get_agent_effectiveness(current_user: dict = Depends(require_permission("metrics:read"))):
+    """Return effectiveness metrics per agent."""
+    tasks = await db.agent_tasks.find({}, {"_id": 0, "target_agent_id": 1, "status": 1, "outcome": 1}).to_list(10000)
+    memories = await db.agent_memories.find({}, {"_id": 0, "agent_id": 1}).to_list(10000)
+    
+    agent_stats = {}
+    
+    for t in tasks:
+        aid = t.get("target_agent_id")
+        if not aid: continue
+        if aid not in agent_stats:
+            agent_stats[aid] = {"tasks": 0, "success": 0, "memories": 0}
+        agent_stats[aid]["tasks"] += 1
+        if t.get("status") == "completed":
+             agent_stats[aid]["success"] += 1
+
+    for m in memories:
+        aid = m.get("agent_id")
+        if not aid: continue
+        if aid not in agent_stats:
+             agent_stats[aid] = {"tasks": 0, "success": 0, "memories": 0}
+        agent_stats[aid]["memories"] += 1
+
+    payload = []
+    for aid, stats in agent_stats.items():
+        rate = (stats["success"] / stats["tasks"] * 100) if stats["tasks"] else 0
+        payload.append({
+            "agent_id": aid,
+            "tasks_total": stats["tasks"],
+            "success_rate": round(rate, 1),
+            "memories_created": stats["memories"]
+        })
+        
+    # Enrich with agent names if possible (Team registry?)
+    # For now, return raw IDs. Frontend can map if needed or good enough.
+    return sorted(payload, key=lambda x: x["tasks_total"], reverse=True)

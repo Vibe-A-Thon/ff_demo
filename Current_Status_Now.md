@@ -27,6 +27,7 @@
 | RSB / Rule Management | 85% | 🟢 Mostly Complete |
 | APMC / Brain Surgery | 100% | ✅ **COMPLETE** |
 | BRC / Battle Capsules | 100% | ✅ **COMPLETE** |
+| PEP / Portable Evolution | 100% | ✅ **COMPLETE** |
 | Governance & Approvals | 80% | 🟢 Mostly Complete |
 | Battle Engine & War Room | 85% | 🟢 Mostly Complete |
 | Evidence Packs | 90% | 🟢 Nearly Complete |
@@ -156,7 +157,7 @@
 - ✅ Enhanced agent learning from outcomes (Memory + Reflection)
 
 **Pending Tasks:**
-- ⏳ Agent effectiveness metrics dashboard
+- ✅ Agent effectiveness metrics dashboard (Live Leaderboard)
 
 ---
 
@@ -195,7 +196,7 @@
 | Evidence graph | 95% | 🟢 | Fully implemented |
 | Counterfactuals generation | 100% | ✅ | **Just completed** - linked to real evidence |
 | Similar-case retrieval | 100% | ✅ | **Just completed** - linked to evidence packs |
-| Commentary agent ("Commentor") | 85% | 🟢 | API with synthetic fallback |
+| MIRA / XAI Commentator | 100% | ✅ | Animated, context-aware widget |
 | Multi-audience views | 75% | 🟢 | Regulator/ops/support views |
 | Evidence trace with provenance | 90% | 🟢 | Full chain traceable |
 
@@ -236,8 +237,8 @@
 | Visual patcher (diffs) | 80% | 🟢 | Diff viewer + accept/reject |
 | RSB merge / conflict detection | 80% | 🟢 | Conflict flags shown |
 | RSB staging | 85% | 🟢 | Stage for deployment |
-| RSB deploy (sandbox) | 75% | 🟢 | Sandbox deploy working |
-| RSB rollback | 70% | 🟡 | API exists, needs testing |
+| RSB deploy (sandbox) | 100% | ✅ | SandboxRunner implemented with Pytest |
+| RSB rollback | 80% | 🟢 | API exists, testing pending |
 | Re-validation endpoint | 85% | 🟢 | Re-validate staged RSBs |
 | RuleSpec → RuleCode workflow | 55% | 🟡 | Rule editor exists, pipeline incomplete |
 | Rules Connected Map (network graph) | 75% | 🟢 | Interactive visualization |
@@ -495,6 +496,23 @@
 
 ---
 
+### 16) PEP / Portable Evolution Pack (PEP)
+
+| Feature | Completion | Status | Notes |
+|---------|------------|--------|-------|
+| PEP Export | 100% | ✅ | RSB+BRC+AMC+Contracts |
+| PEP Import | 100% | ✅ | Full validation & preview |
+| PEP Management UI | 100% | ✅ | List, Export, Import, Delete |
+| PEP Validation | 100% | ✅ | Struct & hash checks |
+| Multi-Component Support | 100% | ✅ | Teams, RSB, BRC integration |
+
+**Completed Tasks:**
+- ✅ Full PEP Service (Export/Import/Validate)
+- ✅ PEP Routes & API
+- ✅ PEP Manager UI
+
+---
+
 
 ## 🎯 Priority Task List
 
@@ -616,7 +634,12 @@
 ### New Components (This Session - Self-Learning Agents)
 - ✅ `backend/app/core/agent_learning.py` (Learning Engine)
 - ✅ `backend/app/agents.py` (Self-Learning BaseAgent Runtime)
-- ✅ `backend/app/routes/xai.py` (Self-Learning Commentor)
+- ✅ `frontend/src/components/MiraCharacter.jsx` (Animation Component)
+- ✅ `frontend/src/components/XAICommentator.jsx` (MIRA Widget)
+- ✅ `backend/app/routes/xai.py` (MIRA Persona)
+- ✅ `backend/app/routes/pep.py` (Full API)
+- ✅ `frontend/src/pages/PEPManager.jsx` (New UI Page)
+- ✅ `backend/app/models.py` (PEP Schema Updates)
 
 ---
 

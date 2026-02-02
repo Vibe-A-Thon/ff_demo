@@ -292,6 +292,8 @@ export const pepAPI = {
     api.post("/pep/import", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
+  getAll: () => api.get("/pep"),
+  delete: (id) => api.delete(`/pep/${id}`),
 };
 
 // Evidence Pack APIs
@@ -366,6 +368,7 @@ export const agentAPI = {
 export const metricsAPI = {
   getDashboard: () => api.get("/metrics/dashboard"),
   getPerf: () => api.get("/metrics/perf"),
+  getAgentEffectiveness: () => api.get("/metrics/agent-effectiveness"),
 };
 
 // RAG APIs

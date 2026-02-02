@@ -51,10 +51,23 @@ def _build_contracts(team_id: str) -> Dict[str, bytes]:
         "contracts/prompt_manifest.yaml": prompt_manifest.encode("utf-8"),
         "contracts/tool_registry.yaml": tool_registry.encode("utf-8"),
     }
+    
+    # AMC Schemas
     for schema_file in ["amc_schema.json", "agent_profile_schema.json", "memory_schema.json"]:
         schema_path = SCHEMA_DIR / schema_file
         if schema_path.exists():
-            files[f"contracts/schemas/{schema_file}"] = schema_path.read_text(encoding="utf-8").encode("utf-8")
+            files[f"contracts/schemas/{schema_file}"] = schema_path.read_bytes()
+
+    # RSB Schema
+    rsb_path = Path(__file__).resolve().parent.parent / "rsb" / "schemas" / "rsb_schema.json"
+    if rsb_path.exists():
+        files["contracts/schemas/rsb_schema.json"] = rsb_path.read_bytes()
+
+    # BRC Schema
+    brc_path = Path(__file__).resolve().parent.parent / "brc" / "schemas" / "brc_schema.json"
+    if brc_path.exists():
+        files["contracts/schemas/brc_schema.json"] = brc_path.read_bytes()
+
     return files
 
 
@@ -93,8 +106,18 @@ def preview_pep_bytes(payload: bytes) -> Dict[str, Any]:
         }
 
 
-async def export_pep_pack(team_ids: List[str], env_tag: str, include_eval_suite: bool, include_model_bundle: bool) -> Tuple[bytes, Dict[str, Any], str]:
+async def export_pep_pack(
+    team_ids: List[str], 
+    env_tag: str, 
+    include_eval_suite: bool, 
+    include_model_bundle: bool,
+    rsb_ids: List[str] = None,
+    brc_ids: List[str] = None
+) -> Tuple[bytes, Dict[str, Any], str]:
     files: Dict[str, bytes] = {}
+    rsb_ids = rsb_ids or []
+    brc_ids = brc_ids or []
+
     for team_id in team_ids:
         amc_payload, amc_manifest, amc_filename = await export_amc(team_id, {
             "include_memory_layers": ["semantic", "episodic", "procedural", "distilled"],
@@ -105,10 +128,28 @@ async def export_pep_pack(team_ids: List[str], env_tag: str, include_eval_suite:
         }, env_tag)
         files[f"capsules/{amc_filename}"] = amc_payload
 
+    # Export RSBs
+    if rsb_ids:
+        cursor = db.rsb_packages.find({"id": {"$in": rsb_ids}})
+        async for rsb_pkg in cursor:
+            path = rsb_pkg.get("storage_path")
+            if path and Path(path).exists():
+                files[f"capsules/rsb/{rsb_pkg['id']}.rsb"] = Path(path).read_bytes()
+
+    # Export BRCs
+    if brc_ids:
+        cursor = db.brc_packages.find({"id": {"$in": brc_ids}})
+        async for brc_pkg in cursor:
+            path = brc_pkg.get("storage_path")
+            if path and Path(path).exists():
+                files[f"capsules/brc/{brc_pkg['id']}.brc"] = Path(path).read_bytes()
+
     contracts = _build_contracts(team_ids[0] if team_ids else "global")
     files.update(contracts)
 
     manifest = _build_transfer_manifest(team_ids, env_tag)
+    manifest["rsb_count"] = len(rsb_ids)
+    manifest["brc_count"] = len(brc_ids)
     manifest["pack_hash"] = _compute_pack_hash(files)
     files["governance/TRANSFER_MANIFEST.json"] = json.dumps(manifest, indent=2).encode("utf-8")
 

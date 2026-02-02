@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RSB Manifest",
+  "type": "object",
+  "required": [
+    "attack_type",
+    "created_at",
+    "format",
+    "name",
+    "rule_id",
+    "rule_version",
+    "version"
+  ],
+  "properties": {
+    "attack_type": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "format": {
+      "type": "string",
+      "const": "RSB"
+    },
+    "name": {
+      "type": "string"
+    },
+    "rule_id": {
+      "type": "string",
+      "pattern": "^R-[A-Z0-9_]+$"
+    },
+    "rule_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "version": {
+      "type": "string"
+    },
+    "compliance_badges": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

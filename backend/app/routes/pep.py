@@ -16,6 +16,8 @@ from app.services.capsules.pep.pep_service import (
     import_pep_bytes,
     save_pep_pack,
 )
+from typing import List
+from app.db import db
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -30,6 +32,8 @@ async def export_pep(request: PEPExportRequest, current_user: dict = Depends(req
         request.env_tag,
         request.include_eval_suite,
         request.include_model_bundle,
+        request.rsb_ids,
+        request.brc_ids,
     )
     await save_pep_pack(payload, manifest, current_user.get("id", "unknown"))
     await record_audit(
@@ -86,3 +90,23 @@ async def import_pep(file: UploadFile = File(...), current_user: dict = Depends(
         result.get("manifest", {}).get("pack_id", "import"),
     )
     return result
+
+
+@router.get("/pep")
+async def list_peps(current_user: dict = Depends(require_permission("pep:read"))):
+    cursor = db.pep_packs.find({}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(100)
+
+
+@router.delete("/pep/{pack_id}")
+async def delete_pep(pack_id: str, current_user: dict = Depends(require_permission("pep:write"))):
+    res = await db.pep_packs.delete_one({"id": pack_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="PEP pack not found")
+    await record_audit(
+        current_user.get("id", "unknown"),
+        "pep.deleted",
+        "pep_pack",
+        pack_id,
+    )
+    return {"status": "deleted", "id": pack_id}
