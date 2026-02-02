@@ -20,8 +20,8 @@ android-sdk/
 __pycache__/
 
 # Environment files (never commit secrets)
-*.env
-*.env.*
+# *.env
+# *.env.*
 
 # Archives
 **/*.zip

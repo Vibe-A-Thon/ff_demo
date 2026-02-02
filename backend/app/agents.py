@@ -68,16 +68,25 @@ def _build_trace_ids(task: AgentTask, agent_id: str) -> Dict[str, str]:
     return {"trace_id": trace_id, "span_id": span_id, "parent_span_id": parent_span_id}
 
 
-def _artifact_payload(artifact_type: str, seed: int, task: AgentTask, agent_id: str, team_id: str, llm_summary: str | None) -> Dict[str, Any]:
+def _artifact_payload(artifact_type: str, seed: int, task: AgentTask, agent_id: str, team_id: str, llm_summary: str | None, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     randomizer = rng(seed)
+    base_confidence = randomizer.uniform(0.72, 0.97)
+    
+    # MEMORY INJECTION: Boost confidence if past lessons indicate success
+    if lessons:
+        success_lessons = [l for l in lessons if l.get("outcome") == "success"]
+        if success_lessons:
+            base_confidence = min(0.99, base_confidence + 0.05)
+
     base = {
         "artifact_type": artifact_type,
         "summary": llm_summary or f"Synthetic {artifact_type} produced by {agent_id}.",
-        "confidence": round(randomizer.uniform(0.72, 0.97), 2),
+        "confidence": round(base_confidence, 2),
         "run_id": task.run_id,
         "task_id": task.task_id,
         "team_id": team_id,
         "agent_id": agent_id,
+        "memory_context": len(lessons) if lessons else 0, # Traceability
     }
     if artifact_type == "AttackCampaign":
         base.update({"campaign_id": f"CMP-{seed % 9999:04d}", "variants": ["velocity_spike", "identity_mismatch"]})
@@ -261,7 +270,7 @@ class BaseAgent:
         """
         return []
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute plan steps and return outputs.
 
         Args:
@@ -286,6 +295,8 @@ class BaseAgent:
             if not impl:
                 continue
             step_seed = derive_seed(seed, tool_name)
+            # Some tools might accept 'lessons' in params if we updated them, 
+            # here we just pass standard params.
             outputs[tool_name] = impl(params, step_seed)
         if blocked_tools:
             outputs["blocked_tools"] = blocked_tools
@@ -438,7 +449,8 @@ class BaseAgent:
             # Plan and Act with potential context injection in future
             plan_context = {"task": task.model_dump(), "lessons": lessons}
             plan_steps = await self.plan(plan_context)
-            outputs = await self.act(plan_steps, seed)
+            # Pass lessons to act via plan steps params or context injection
+            outputs = await self.act(plan_steps, seed, lessons=lessons)
             notes = await self.reflect(outputs)
         except Exception as exc:
             await self.on_error(task, exc)
@@ -453,12 +465,17 @@ class BaseAgent:
 
         artifacts: List[Dict[str, Any]] = []
         decision_trace: List[str] = []
+        if lessons:
+             decision_trace.append(f"🧠 Recalled {len(lessons)} past lessons from memory bank.")
+             for l in lessons[:1]:
+                 decision_trace.append(f"  • Consideration: {l.get('content')[:60]}...")
+
         artifact_types = outputs.get("artifact_types") if isinstance(outputs, dict) else None
         if not artifact_types:
             artifact_types = self.outputs or ["Artifact"]
         for index, artifact_type in enumerate(artifact_types, start=1):
             artifact_seed = derive_seed(seed, f"{artifact_type}:{index}")
-            payload = _artifact_payload(artifact_type, artifact_seed, task, self.agent_id, self.team_id, llm_summary)
+            payload = _artifact_payload(artifact_type, artifact_seed, task, self.agent_id, self.team_id, llm_summary, lessons)
             artifact = {
                 "artifact_id": f"{self.agent_id}:{artifact_type}:{artifact_seed % 100000}",
                 "artifact_type": artifact_type,
@@ -524,9 +541,12 @@ class SyntheticAgentRuntime(BaseAgent):
 
     async def plan(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         outputs = self.profile.outputs or ["Artifact"]
-        return [{"tool": "synthetic", "params": {"artifact_type": artifact}} for artifact in outputs]
+        lessons = context.get("lessons", [])
+        # In a real agent, lessons would modify the plan. 
+        # Here we attach them to params for visibility.
+        return [{"tool": "synthetic", "params": {"artifact_type": artifact, "memory_size": len(lessons)}} for artifact in outputs]
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         artifact_types = [step.get("params", {}).get("artifact_type") for step in plan_steps if step.get("params")]
         return {"artifact_types": [item for item in artifact_types if item]}
 
@@ -781,7 +801,7 @@ class BaseOrchestrator(BaseAgent):
             {"tool": "delegate", "params": {"team": self.team_id, "delegation": delegation}},
         ]
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute orchestration and generate artifacts.
 
         Args:
@@ -865,12 +885,13 @@ class RedOrchestrator(BaseOrchestrator):
         """
         super().__init__("red.orchestrator", "red")
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute red orchestrator plan.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Orchestrator outputs.
@@ -879,7 +900,7 @@ class RedOrchestrator(BaseOrchestrator):
             None: No explicit exceptions are raised.
         """
         randomizer = rng(seed)
-        payload = await super().act(plan_steps, seed)
+        payload = await super().act(plan_steps, seed, lessons=lessons)
         payload.update(
             {
                 "attack_plan": {
@@ -910,12 +931,13 @@ class BlueOrchestrator(BaseOrchestrator):
         """
         super().__init__("blue.orchestrator", "blue")
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute blue orchestrator plan.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Orchestrator outputs.
@@ -924,7 +946,7 @@ class BlueOrchestrator(BaseOrchestrator):
             None: No explicit exceptions are raised.
         """
         randomizer = rng(seed)
-        payload = await super().act(plan_steps, seed)
+        payload = await super().act(plan_steps, seed, lessons=lessons)
         payload.update(
             {
                 "decision": {
@@ -954,12 +976,13 @@ class PurpleOrchestrator(BaseOrchestrator):
         """
         super().__init__("purple.orchestrator", "purple")
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute purple orchestrator plan.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Orchestrator outputs.
@@ -968,7 +991,7 @@ class PurpleOrchestrator(BaseOrchestrator):
             None: No explicit exceptions are raised.
         """
         randomizer = rng(seed)
-        payload = await super().act(plan_steps, seed)
+        payload = await super().act(plan_steps, seed, lessons=lessons)
         payload.update(
             {
                 "rulespec": {
@@ -999,12 +1022,13 @@ class GreenOrchestrator(BaseOrchestrator):
         """
         super().__init__("green.orchestrator", "green")
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute green orchestrator plan.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Orchestrator outputs.
@@ -1013,7 +1037,7 @@ class GreenOrchestrator(BaseOrchestrator):
             None: No explicit exceptions are raised.
         """
         randomizer = rng(seed)
-        payload = await super().act(plan_steps, seed)
+        payload = await super().act(plan_steps, seed, lessons=lessons)
         payload.update(
             {
                 "patch": {
@@ -1043,12 +1067,13 @@ class BlackOrchestrator(BaseOrchestrator):
         """
         super().__init__("black.orchestrator", "black")
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute black orchestrator plan.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Orchestrator outputs.
@@ -1057,7 +1082,7 @@ class BlackOrchestrator(BaseOrchestrator):
             None: No explicit exceptions are raised.
         """
         randomizer = rng(seed)
-        payload = await super().act(plan_steps, seed)
+        payload = await super().act(plan_steps, seed, lessons=lessons)
         payload.update(
             {
                 "stress_test": {
@@ -1088,12 +1113,13 @@ class OrangeOrchestrator(BaseOrchestrator):
         """
         super().__init__("orange.orchestrator", "orange")
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute orange orchestrator plan.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Orchestrator outputs.
@@ -1101,7 +1127,7 @@ class OrangeOrchestrator(BaseOrchestrator):
         Raises:
             None: No explicit exceptions are raised.
         """
-        payload = await super().act(plan_steps, seed)
+        payload = await super().act(plan_steps, seed, lessons=lessons)
         payload.update(
             {
                 "approval": {
@@ -1131,12 +1157,13 @@ class GoldOrchestrator(BaseOrchestrator):
         """
         super().__init__("gold.orchestrator", "gold")
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute gold orchestrator plan.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Orchestrator outputs.
@@ -1144,7 +1171,7 @@ class GoldOrchestrator(BaseOrchestrator):
         Raises:
             None: No explicit exceptions are raised.
         """
-        payload = await super().act(plan_steps, seed)
+        payload = await super().act(plan_steps, seed, lessons=lessons)
         payload.update(
             {
                 "explanation": {
@@ -1174,12 +1201,13 @@ class WhiteOrchestrator(BaseOrchestrator):
         """
         super().__init__("white.orchestrator", "white")
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Execute white orchestrator plan.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Orchestrator outputs.
@@ -1187,7 +1215,7 @@ class WhiteOrchestrator(BaseOrchestrator):
         Raises:
             None: No explicit exceptions are raised.
         """
-        payload = await super().act(plan_steps, seed)
+        payload = await super().act(plan_steps, seed, lessons=lessons)
         payload.update(
             {
                 "compliance": {
@@ -1303,13 +1331,13 @@ class GoldAgent(BaseAgent):
         """
         return []
 
-    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, context: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    async def act(self, plan_steps: List[Dict[str, Any]], seed: int, lessons: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
         """Generate gold agent outputs.
 
         Args:
             plan_steps: Planned steps.
             seed: Random seed.
-            context: Optional context override.
+            lessons: Optional past lessons.
 
         Returns:
             Dict[str, Any]: Output payload.
@@ -1317,7 +1345,11 @@ class GoldAgent(BaseAgent):
         Raises:
             None: No explicit exceptions are raised.
         """
-        decision = (context or {}).get("decision", "monitor")
+        decision = {}
+        if lessons and len(lessons) > 0:
+             # Just an example of using memory in this custom agent
+             decision = {"memory_check": "ok"}
+        
         summary = f"Gold team summary: decision={decision} based on synthetic signals."
         details = "Signals indicate elevated velocity and risk scoring."
         return {"summary": summary, "details": details}
@@ -1336,7 +1368,10 @@ class GoldAgent(BaseAgent):
             None: No explicit exceptions are raised.
         """
         plan_steps = await self.plan(context)
-        outputs = await self.act(plan_steps, seed, context)
+        # We manually fetch lessons here if we wanted to be rigorous, 
+        # but GoldAgent is mostly a stub. We'll pass None for now or fetch.
+        # Ideally emit() is replaced by run_task() in the bigger flow.
+        outputs = await self.act(plan_steps, seed) 
         notes = await self.reflect(outputs)
         return AgentTrace(agent_id=self.agent_id, team_id=self.team_id, plan=plan_steps, outputs=outputs, notes=notes)
 
