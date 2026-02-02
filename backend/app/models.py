@@ -490,6 +490,41 @@ class AgentProfileCreate(BaseModel):
     status: str = "idle"
     metrics: Dict[str, Any] = {}
 
+
+class AMCExportScope(BaseModel):
+    include_memory_layers: List[str] = ["semantic", "episodic", "procedural", "distilled"]
+    include_logs: str = "sanitized_only"
+    include_models: bool = False
+    include_battle_refs: bool = True
+    time_window_days: int = 180
+
+
+class AMCExportRequest(BaseModel):
+    team_id: str
+    env_tag: str = "sandbox"
+    export_scope: AMCExportScope = Field(default_factory=AMCExportScope)
+
+
+class AMCImportRequest(BaseModel):
+    mode: str = "merge"
+    activate: bool = False
+
+
+class AMCPackage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    team_id: str
+    team_name: str
+    team_version: str
+    env_tag: str = "sandbox"
+    status: str = "exported"
+    manifest: Dict[str, Any] = {}
+    validation: Dict[str, Any] = {}
+    storage_path: Optional[str] = None
+    source: str = "export"
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
 class AgentRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
     request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))

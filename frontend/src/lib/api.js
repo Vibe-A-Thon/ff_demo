@@ -100,6 +100,32 @@ export const rsbAPI = {
   delete: (id) => api.delete(`/rsb-packages/${id}`),
 };
 
+// AMC Capsule APIs
+export const amcAPI = {
+  export: (data) => api.post('/amc/export', data, { responseType: 'blob' }),
+  validate: (formData) =>
+    api.post('/amc/validate', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  preview: (formData) =>
+    api.post('/amc/preview', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  import: (formData) =>
+    api.post('/amc/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  diff: (formData) =>
+    api.post('/amc/diff', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  catalog: () => api.get('/amc/catalog'),
+  activate: (formData) =>
+    api.post('/amc/activate', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
 // Evidence Pack APIs
 export const evidenceAPI = {
   getAll: () => api.get('/evidence-packs'),

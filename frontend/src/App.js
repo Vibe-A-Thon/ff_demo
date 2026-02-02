@@ -37,13 +37,14 @@ const RAGConsole = lazy(() => import("./pages/RAGConsole"));
 const Neo4jSyncDashboard = lazy(() => import("./pages/Neo4jSyncDashboard"));
 const RAGEvaluationDashboard = lazy(() => import("./pages/RAGEvaluationDashboard"));
 const LLMProviderSetup = lazy(() => import("./pages/LLMProviderSetup"));
+const AmcManager = lazy(() => import("./pages/AmcManager"));
 
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
   admin: ["*"], // Access to everything
-  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync", "llm-setup"],
-  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync", "llm-setup"],
-  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync", "llm-setup"],
+  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync", "llm-setup", "amc-manager"],
+  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync", "llm-setup", "amc-manager"],
+  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs", "teams", "rag-console", "rag-evaluation", "agent-queue", "neo4j-sync", "llm-setup", "amc-manager"],
 };
 
 // Check if user has access to a route
@@ -204,6 +205,7 @@ function AppRoutes() {
           <Route path="rag-evaluation" element={<RoleGate route="rag-evaluation"><SuspenseRoute><RAGEvaluationDashboard /></SuspenseRoute></RoleGate>} />
           <Route path="neo4j-sync" element={<RoleGate route="neo4j-sync"><SuspenseRoute><Neo4jSyncDashboard /></SuspenseRoute></RoleGate>} />
           <Route path="llm-setup" element={<RoleGate route="llm-setup"><SuspenseRoute><LLMProviderSetup /></SuspenseRoute></RoleGate>} />
+          <Route path="amc-manager" element={<RoleGate route="amc-manager"><SuspenseRoute><AmcManager /></SuspenseRoute></RoleGate>} />
           <Route path="settings" element={<RoleGate route="settings"><SuspenseRoute><SettingsConfiguration /></SuspenseRoute></RoleGate>} />
           <Route path="users" element={<RoleGate route="users"><SuspenseRoute><UserManagement /></SuspenseRoute></RoleGate>} />
         </Route>

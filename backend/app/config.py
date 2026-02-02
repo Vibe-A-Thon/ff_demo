@@ -58,4 +58,7 @@ OPENAI_EMBEDDING_MODEL = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embeddin
 RSB_STORAGE_DIR = ROOT_DIR / "data" / "rsb_packages"
 RSB_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
+AMC_STORAGE_DIR = ROOT_DIR / "data" / "amc_capsules"
+AMC_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+
 TRACE_ROOT = ROOT_DIR / "run_artifacts"

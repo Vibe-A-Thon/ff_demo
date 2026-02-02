@@ -61,6 +61,7 @@ const navItems = [
   { path: "/metrics", label: "Metrics", icon: BarChart3, team: "blue" },
   { path: "/taxonomy", label: "Fraud Taxonomy", icon: Database, team: "gold" },
   { path: "/rsb-manager", label: "RSB Manager", icon: Package, team: "green" },
+  { path: "/amc-manager", label: "AMC Manager", icon: Package, team: "purple" },
   { path: "/diff-viewer", label: "Diff Viewer", icon: GitCompare, team: "orange" },
   { path: "/rules", label: "Rule Editor", icon: FileCode, team: "blue" },
   { path: "/approvals", label: "Approvals", icon: ShieldCheck, team: "green" },
@@ -90,9 +91,9 @@ const teamColors = {
 // Role-based access configuration
 const ROLE_PERMISSIONS = {
   admin: ["*"],
-  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy", "teams", "neo4j-sync", "rag-console", "rag-evaluation", "llm-setup"],
-  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy", "teams", "neo4j-sync", "rag-console", "rag-evaluation", "llm-setup"],
-  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs", "teams", "neo4j-sync", "rag-console", "rag-evaluation", "llm-setup"],
+  analyst: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "evidence", "battle-replay", "incidents", "taxonomy", "teams", "neo4j-sync", "rag-console", "rag-evaluation", "llm-setup", "amc-manager"],
+  engineer: ["dashboard", "war-room", "war-practice", "brain-surgery", "metrics", "rsb-manager", "diff-viewer", "rules", "battle-replay", "agents", "taxonomy", "teams", "neo4j-sync", "rag-console", "rag-evaluation", "llm-setup", "amc-manager"],
+  compliance: ["dashboard", "metrics", "evidence", "approvals", "battle-replay", "audit-logs", "teams", "neo4j-sync", "rag-console", "rag-evaluation", "llm-setup", "amc-manager"],
 };
 
 const ROLE_ICONS = {
