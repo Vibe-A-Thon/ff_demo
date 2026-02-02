@@ -9,7 +9,6 @@ from typing import Dict, Set
 
 ROLE_SUPER_ADMIN = "super_admin"
 ROLE_BANK_ADMIN = "bank_admin"
-        "settings:read",
 ROLE_FRAUD_OPERATOR = "bank_fraud_operator"
 ROLE_FRAUD_ARCHITECT = "bank_fraud_architect"
 ROLE_FRAUD_DEV = "bank_fraud_dev"

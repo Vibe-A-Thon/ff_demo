@@ -181,6 +181,9 @@ const MetricsDashboard = () => {
     patternsLearned: item.patterns_learned || idx * 5,
   })) || [];
 
+  const operational = metrics?.operational_kpis || {};
+  const stageFailurePercent = Math.round((operational.stage_failure_rate || 0) * 100);
+
   const moneySaved = Math.round(((metrics?.avg_success_rate || 0) / 100) * 120000);
   const moneyAtRisk = Math.round(160000);
   const defenseCost = Math.round(42000 + (metrics?.total_rules || 0) * 600);
@@ -380,6 +383,32 @@ const MetricsDashboard = () => {
                 trend="up"
                 icon={BarChart3}
                 color="#34D399"
+              />
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              <MetricCard
+                title="Runs Completed"
+                value={`${operational.completed_runs || 0}/${operational.total_runs || 0}`}
+                icon={Activity}
+                color="#22D3EE"
+              />
+              <MetricCard
+                title="Awaiting Approvals"
+                value={operational.awaiting_approval_runs || 0}
+                icon={Shield}
+                color="#F59E0B"
+              />
+              <MetricCard
+                title="Avg Stage Duration"
+                value={`${Math.round(operational.avg_stage_duration_sec || 0)}s`}
+                icon={Clock}
+                color="#60A5FA"
+              />
+              <MetricCard
+                title="Stage Failure Rate"
+                value={`${stageFailurePercent}%`}
+                icon={AlertTriangle}
+                color="#F97316"
               />
             </div>
           </>
@@ -811,7 +840,7 @@ const MetricsDashboard = () => {
 
         {/* Plain English Explanation (conditionally shown) */}
         {viewMode === "plain" && (
-          <Card className="border-border border-yellow-500/30 bg-yellow-500/5">
+          <Card className="border-yellow-500/30 bg-yellow-500/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-yellow-400">
                 <FileText className="h-5 w-5" />

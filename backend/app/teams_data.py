@@ -151,7 +151,7 @@ def default_agent_payloads() -> List[Dict[str, Any]]:
         _agent_payload("black.adversarial_replay", "Adversarial Replay Agent", "black", "Replay", ["replay", "regression"], ["AttackPlan"], ["ReplayReport"], "auto"),
         _agent_payload("black.edge_case", "Edge-Case Generator", "black", "Edge Case", ["edge-cases", "mutation"], ["Scenario"], ["EdgeCaseSet"], "auto"),
         _agent_payload("black.chaos_injection", "Chaos Injection Agent", "black", "Chaos", ["chaos", "fault"], ["CodePatch"], ["ChaosReport"], "auto"),
-        _agent_payload("black.load_burst", "Load/Burst Simulation Agent", "black", "Load Simulation", ["Scenario"], ["LoadTestReport"], "auto"),
+        _agent_payload("black.load_burst", "Load/Burst Simulation Agent", "black", "Load Simulation", ["load", "burst"], ["Scenario"], ["LoadTestReport"], "auto"),
         _agent_payload("black.regression_auditor", "Regression & Coverage Auditor", "black", "Regression", ["coverage", "regression"], ["TestPlan"], ["CoverageReport"], "auto"),
         _agent_payload("black.defect_reporter", "Defect Reporting Agent", "black", "Defect Reporter", ["defects", "reporting"], ["TestPlan"], ["DefectReport"], "auto"),
 

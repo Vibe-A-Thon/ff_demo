@@ -393,30 +393,30 @@ class BaseAgent:
 
         seed = _derive_task_seed(task, self.agent_id)
         await self.pre_execute(task, seed)
-            llm_service = get_llm_service()
-            llm_summary: str | None = None
-            try:
-                prompt = (
-                    "You are an AI agent in Fraud Forge. Summarize the task output in 1-2 sentences. "
-                    "Keep it synthetic and defensive.\n"
-                    f"Team: {task.team_id}. Task: {task.task_type}. Objective: {task.params.get('objective', 'N/A')}."
-                )
-                llm_summary = await llm_service.generate(
-                    messages=[
-                        {"role": "system", "content": "You are a defensive fraud simulation assistant."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=120,
-                    requested_model=_get_llm_model(),
-                    team_id=task.team_id,
-                    agent_id=self.agent_id,
-                    actor_id=self.agent_id,
-                    run_id=task.run_id,
-                    trace_id=trace_info["trace_id"],
-                )
-                llm_summary = llm_summary.strip()
-            except Exception:
-                llm_summary = None
+        llm_service = get_llm_service()
+        llm_summary: str | None = None
+        try:
+            prompt = (
+                "You are an AI agent in Fraud Forge. Summarize the task output in 1-2 sentences. "
+                "Keep it synthetic and defensive.\n"
+                f"Team: {task.team_id}. Task: {task.task_type}. Objective: {task.params.get('objective', 'N/A')}."
+            )
+            llm_summary = await llm_service.generate(
+                messages=[
+                    {"role": "system", "content": "You are a defensive fraud simulation assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=120,
+                requested_model=_get_llm_model(),
+                team_id=task.team_id,
+                agent_id=self.agent_id,
+                actor_id=self.agent_id,
+                run_id=task.run_id,
+                trace_id=trace_info["trace_id"],
+            )
+            llm_summary = llm_summary.strip()
+        except Exception:
+            llm_summary = None
         try:
             plan_steps = await self.plan({"task": task.model_dump()})
             outputs = await self.act(plan_steps, seed)
