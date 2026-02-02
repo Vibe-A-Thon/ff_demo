@@ -391,7 +391,7 @@ ui/src/components/
 **Goal:** RSB becomes part of portability, not a standalone artifact.
 
 **Deliverables**
-- RSB export participates in `FF_PORTABLE_EVOLUTION_PACK.pep.zip` structure:
+- RSB export participates in `FF_PORTABLE_EVOLUTION_PACK.pep` structure:
   - `/capsules/*.rsb`
   - `/contracts/schemas/rsb_schema.json`
   - `/contracts/tool_registry.yaml` + `/contracts/prompt_manifest.yaml`

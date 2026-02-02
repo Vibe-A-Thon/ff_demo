@@ -425,6 +425,50 @@ export const seedAPI = {
   seed: () => api.post("/seed-data"),
   seedComprehensive: () => api.post("/seed-comprehensive"),
   clearAll: () => api.delete("/clear-all-data"),
+  seedFullRoster: () => api.post("/seed/full-roster"),
+  seedRagCollections: () => api.post("/seed/rag-collections"),
+  seedComplete: () => api.post("/seed/complete"),
+};
+
+// Portable Intelligence APIs (PEP, APMC, RSB, BRC)
+export const portableAPI = {
+  // Export endpoints
+  exportPep: (data) =>
+    api.post("/portable/export/pep", data, { responseType: "blob" }),
+  exportRsb: (data) =>
+    api.post("/portable/export/rsb", data, { responseType: "blob" }),
+  exportBrc: (data) =>
+    api.post("/portable/export/brc", data, { responseType: "blob" }),
+
+  // Import endpoint (accepts any package type)
+  import: (formData, mergeMode = "merge") =>
+    api.post(`/portable/import?merge_mode=${mergeMode}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+
+  // Validate package before import
+  validate: (formData) =>
+    api.post("/portable/validate", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+
+  // Get export/import history
+  getHistory: (limit = 50) =>
+    api.get("/portable/history", { params: { limit } }),
+};
+
+// Learning Loop APIs (Never Fail Twice)
+export const learningAPI = {
+  // Learn from a completed battle
+  learnFromBattle: (battleId, data) =>
+    api.post(`/learn-from-battle/${battleId}`, data),
+
+  // Get immunity score for an agent or team
+  getImmunityScore: (agentId, period = 30) =>
+    api.get("/immunity/score", { params: { agent_id: agentId, period } }),
+
+  // Check if immune to a vector
+  checkImmunity: (data) => api.post("/immunity/check", data),
 };
 
 // Legacy export for backwards compatibility

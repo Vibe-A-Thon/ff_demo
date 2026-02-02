@@ -8,6 +8,8 @@ import SplashScreen from "./components/SplashScreen";
 // Contexts
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AlertProvider } from "./contexts/AlertContext";
+import { GovernanceProvider } from "./components/GovernanceControl";
+import { GoldTeamProvider } from "./components/GoldTeamPanel";
 
 // Layout
 import Layout from "./components/Layout";
@@ -235,10 +237,14 @@ function App() {
       {showSplash && <SplashScreen />}
       <AuthProvider>
         <AlertProvider>
-          <ErrorBoundary>
-            <AppRoutes />
-          </ErrorBoundary>
-          <Toaster position="bottom-right" theme="dark" richColors />
+          <GovernanceProvider>
+            <GoldTeamProvider>
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
+              <Toaster position="bottom-right" theme="dark" richColors />
+            </GoldTeamProvider>
+          </GovernanceProvider>
         </AlertProvider>
       </AuthProvider>
     </div>

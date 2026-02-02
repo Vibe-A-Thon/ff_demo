@@ -63,7 +63,7 @@
 2. Compute hashes (`PACK_HASHES.json` optional).
 3. (Future) sign the pack; (hackathon) show pack hash.
 
-**Exit criteria:** `.pep.zip` is created deterministically, validates locally, and contains all required contracts/manifest.
+**Exit criteria:** `.pep` is created deterministically, validates locally, and contains all required contracts/manifest.
 
 ---
 

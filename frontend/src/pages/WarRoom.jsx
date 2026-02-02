@@ -12,6 +12,8 @@ import { Input } from "../components/ui/input";
 import { battleAPI, aiAPI, createBattleWebSocket } from "../lib/api";
 import { useAlerts } from "../contexts/AlertContext";
 import { toast } from "sonner";
+import ThinkingVisualizer from "../components/ThinkingVisualizer";
+import { ExplainButton } from "../components/GoldTeamPanel";
 import {
   Play,
   Pause,
@@ -90,6 +92,21 @@ const ThinkingVisualizer = ({ team, thinking, isStreaming, streamingText }) => {
         )}
       </div>
     </div>
+  );
+};
+
+// Enhanced Thinking Visualizer wrapper for WarRoom
+const WarRoomThinkingVisualizerWrapper = ({ team, thinking, isStreaming, streamingText, battleId }) => {
+  // Map the team to the expected format for the new visualizer
+  const variant = team === 'red' ? 'attack' : 'defense';
+  
+  return (
+    <ThinkingVisualizer
+      battleId={battleId || 'demo-battle'}
+      variant={variant}
+      isCompact={false}
+      showHeader={true}
+    />
   );
 };
 
@@ -886,6 +903,17 @@ const WarRoom = () => {
                 >
                   Stop
                 </Button>
+                <ExplainButton
+                  context={{
+                    screen: "War Room",
+                    type: "battle_decision",
+                    battleId: selectedBattle?.id,
+                    currentTurn: currentTurn,
+                    summary: `Battle ${selectedBattle?.scenario_name || 'N/A'} - Turn ${currentTurn}`
+                  }}
+                  size="sm"
+                  variant="ghost"
+                />
               </>
             )}
           </div>
@@ -1045,10 +1073,10 @@ const WarRoom = () => {
         {/* Red Team Panel */}
         <div className="flex-1 p-4 border-r border-border overflow-hidden">
           <ThinkingVisualizer 
-            team="red" 
-            thinking={redThinking} 
-            streamingText={redStreamText}
-            isStreaming={isStreaming} 
+            battleId={selectedBattle?.id || 'demo-battle'}
+            variant="attack"
+            isCompact={false}
+            showHeader={true}
           />
         </div>
 
@@ -1087,10 +1115,10 @@ const WarRoom = () => {
         {/* Blue Team Panel */}
         <div className="flex-1 p-4 overflow-hidden">
           <ThinkingVisualizer 
-            team="blue" 
-            thinking={blueThinking} 
-            streamingText={blueStreamText}
-            isStreaming={isStreaming} 
+            battleId={selectedBattle?.id || 'demo-battle'}
+            variant="defense"
+            isCompact={false}
+            showHeader={true}
           />
         </div>
       </div>

@@ -1,0 +1,163 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "Fraud Forge",
+      "archetype": "The Cyber-Tactical Sentinel",
+      "vibe": "Enterprise-Grade War Room. Dark, precise, high-contrast, data-dense. Not a toy, but a weapon against fraud.",
+      "principles": [
+        "Density is Clarity: In a war room, seeing everything at once is better than clicking through tabs.",
+        "Neon Signals: Use color only to signal status (Red=Attack, Blue=Defense, Green=Safe). Everything else is monochrome.",
+        "Glass & Steel: Surfaces should feel like physical tactical equipment—matte finishes, subtle borders, no soft shadows.",
+        "Motion is Information: Animations should only exist to show data flow or state change (e.g., a live attack stream)."
+      ]
+    },
+    "typography": {
+      "primary_font": "Manrope",
+      "secondary_font": "JetBrains Mono",
+      "usage": {
+        "headings": "Manrope (Weights: 600/800) - Use for section titles, modal headers.",
+        "body": "Manrope (Weights: 400/500) - Standard UI text.",
+        "code_data": "JetBrains Mono (Weights: 400/500) - Use for logs, rule definitions, JSON payloads, and 'Thinking' streams.",
+        "numbers": "JetBrains Mono - All metrics, KPIs, and timestamps must use monospace for alignment."
+      },
+      "scale": {
+        "h1": "text-4xl font-bold tracking-tight",
+        "h2": "text-2xl font-semibold tracking-tight",
+        "h3": "text-xl font-medium",
+        "body": "text-sm leading-relaxed",
+        "caption": "text-xs text-muted-foreground",
+        "mono_sm": "font-mono text-xs",
+        "mono_base": "font-mono text-sm"
+      }
+    },
+    "colors": {
+      "theme": "dark",
+      "palette": {
+        "background": {
+          "default": "#09090B",
+          "surface": "#18181B",
+          "surface_highlight": "#27272A"
+        },
+        "primary": {
+          "blue_team": "#3B82F6",
+          "red_team": "#EF4444",
+          "purple_ai": "#A855F7",
+          "gold_admin": "#EAB308"
+        },
+        "functional": {
+          "success": "#10B981",
+          "warning": "#F59E0B",
+          "error": "#EF4444",
+          "info": "#3B82F6",
+          "muted": "#71717A"
+        },
+        "border": {
+          "default": "#27272A",
+          "active": "#52525B",
+          "highlight": "#A1A1AA"
+        }
+      },
+      "gradients": {
+        "blue_glow": "linear-gradient(180deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0) 100%)",
+        "red_glow": "linear-gradient(180deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0) 100%)"
+      }
+    },
+    "layout": {
+      "spacing_scale": "Generous (p-6, p-8) for containers, Tight (gap-2, gap-4) for data grids.",
+      "container_style": "Bordered, no shadow, matte background (bg-card).",
+      "radius": "rounded-md (sm) or rounded-lg (md). Avoid full rounded-full unless for status pills.",
+      "grid_system": {
+        "war_room": "Grid Mode B (High Density). 12-column grid. Hero metrics top, split view center, logs bottom.",
+        "dashboard": "Bento Grid. Mix of 1x1, 2x1, and 2x2 tiles."
+      }
+    },
+    "components": {
+      "buttons": {
+        "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_10px_rgba(59,130,246,0.5)]",
+        "destructive": "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-[0_0_10px_rgba(239,68,68,0.5)]",
+        "outline": "border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        "ghost": "hover:bg-accent hover:text-accent-foreground"
+      },
+      "cards": {
+        "default": "bg-card text-card-foreground border border-border shadow-sm",
+        "glass": "bg-black/40 backdrop-blur-md border border-white/10"
+      },
+      "inputs": {
+        "default": "bg-background border-input focus:ring-2 focus:ring-primary focus:border-primary"
+      },
+      "status_badges": {
+        "success": "bg-green-500/15 text-green-500 border border-green-500/20",
+        "failure": "bg-red-500/15 text-red-500 border border-red-500/20",
+        "neutral": "bg-zinc-800 text-zinc-400 border border-zinc-700"
+      }
+    },
+    "visual_enhancers": {
+      "glassmorphism": "Use for sticky headers and floating panels (Brain Surgery tools).",
+      "borders": "1px solid borders are preferred over shadows for depth.",
+      "glows": "Use subtle drop-shadow glows for 'Live' elements (e.g., active battle status).",
+      "scrolling": "Use 'Lenis' for smooth scrolling if the page is long. For internal data streams, use native scroll with custom scrollbar styling."
+    },
+    "motion": {
+      "transitions": "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+      "micro_interactions": "Buttons scale down slightly (0.98) on click. Links underline expands from center.",
+      "loading": "Skeleton loaders for data. Spinning notches for actions."
+    },
+    "accessibility": {
+      "contrast": "Ensure 4.5:1 for text. Use APCA for colored badges.",
+      "focus_states": "Visible ring-2 ring-offset-2 ring-primary.",
+      "reduced_motion": "Respect user preference."
+    }
+  },
+  "pages": {
+    "war_room": {
+      "layout": "Split screen: Red Team (Left) vs Blue Team (Right). Center timeline.",
+      "key_elements": [
+        "Live Metrics Ticker (Top)",
+        "Streaming Text Areas (Monospace)",
+        "Turn-based Timeline (Vertical)",
+        "Action Buttons (Floating or Fixed Bottom)"
+      ]
+    },
+    "brain_surgery": {
+      "layout": "Full-screen canvas.",
+      "key_elements": [
+        "Force-Directed Graph (D3/React-Force-Graph)",
+        "Floating Toolbar (Glassmorphism)",
+        "Node Inspector Panel (Slide-over Sheet)"
+      ]
+    },
+    "metrics": {
+      "layout": "Bento Grid.",
+      "key_elements": [
+        "Line Charts (Time to Immunity)",
+        "Bar Charts (Success Rate)",
+        "Heatmaps (Pattern Novelty)"
+      ]
+    }
+  },
+  "assets": {
+    "icons": "Lucide React (default). Use specific icons for security: Shield, Sword, Lock, Unlock, Eye, Activity, Zap.",
+    "libraries": {
+      "charts": "Recharts (via Shadcn Charts)",
+      "graph": "react-force-graph-2d or d3",
+      "animations": "framer-motion",
+      "toast": "sonner"
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. THEME: Force 'dark' class on the HTML element. Do not implement a light mode toggle unless explicitly asked. This is a dark-mode-first app.",
+    "2. FONTS: Import 'Manrope' and 'JetBrains Mono' from Google Fonts in index.css.",
+    "3. GRAPH: For the 'Brain Surgery' page, use 'react-force-graph-2d'. It is easier to integrate with React than raw D3. Style the nodes to match the 'Blue Sentinel' aesthetic (Blue nodes, Red links for attacks).",
+    "4. STREAMING: For the 'Thinking Visualizer', create a component that simulates typing text. Use a blinking cursor.",
+    "5. BORDERS: Use 'border-border' (zinc-800) for layout structure. Avoid heavy backgrounds.",
+    "6. DATA-TESTID: Add 'data-testid' to every interactive element (buttons, inputs, graph nodes). Format: 'page-section-element'.",
+    "7. NAVIGATION: Sidebar navigation with color-coded borders for the teams (Red/Blue/etc).",
+    "8. EXPORT: Ensure the 'Evidence Pack Viewer' has a prominent 'Export ZIP' button with a download icon."
+  ],
+  "universal_guidelines": [
+    "Avoid 'AI Slop': No generic centered layouts. No purple/teal gradients unless specifically for the 'AI' team identity.",
+    "Depth: Use z-index and varying background shades (zinc-900 vs zinc-950) to create depth, not just shadows.",
+    "Micro-animations: Hover states must be obvious. Active states must be distinct.",
+    "Spacing: Use 'gap-6' or 'gap-8' for main layout sections. Don't cram content."
+  ]
+}

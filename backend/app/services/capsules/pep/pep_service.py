@@ -166,13 +166,13 @@ async def export_pep_pack(
             for path, content in files.items():
                 zf.writestr(path, content)
         buffer.seek(0)
-        filename = f"FF_PORTABLE_EVOLUTION_PACK_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{env_tag}.pep.zip"
+        filename = f"FF_PORTABLE_EVOLUTION_PACK_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{env_tag}.pep"
         return buffer.read(), manifest, filename
 
 
 async def save_pep_pack(payload: bytes, manifest: Dict[str, Any], created_by: str, source: str = "export") -> Dict[str, Any]:
     pack_id = hashlib.sha256(payload).hexdigest()[:16]
-    storage_path = PEP_STORAGE_DIR / f"{pack_id}.pep.zip"
+    storage_path = PEP_STORAGE_DIR / f"{pack_id}.pep"
     storage_path.write_bytes(payload)
     record = {
         "id": pack_id,

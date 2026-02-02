@@ -10,7 +10,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../c
 import { Switch } from "../components/ui/switch";
 import { Progress } from "../components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { knowledgeAPI } from "../lib/api";
+import BrainMergePanel from "../components/BrainMergePanel";
 import { toast } from "sonner";
 import {
   Plus,
@@ -26,6 +28,9 @@ import {
   Lock,
   Lightbulb,
   AlertTriangle,
+  GitMerge,
+  Upload,
+  Brain,
 } from "lucide-react";
 
 const nodeColors = {
@@ -74,6 +79,7 @@ const BrainSurgery = () => {
   const graphRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [activeTab, setActiveTab] = useState("graph");
 
   const patches = [
     { id: "patch-ato-01", name: "ATO Patch v1.2", risk: "low", coverage: "+12%" },
@@ -317,7 +323,32 @@ const BrainSurgery = () => {
 
   return (
     <div ref={containerRef} className="h-full flex flex-col bg-background" data-testid="brain-surgery">
-      {/* Floating Toolbar */}
+      {/* Tab Header */}
+      <div className="border-b border-border bg-card/50 px-4 py-2">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="bg-transparent h-auto p-0 gap-4">
+            <TabsTrigger 
+              value="graph" 
+              className="data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none bg-transparent px-4 py-2"
+            >
+              <Brain className="h-4 w-4 mr-2" />
+              Knowledge Graph
+            </TabsTrigger>
+            <TabsTrigger 
+              value="import" 
+              className="data-[state=active]:border-b-2 data-[state=active]:border-purple-500 rounded-none bg-transparent px-4 py-2"
+            >
+              <GitMerge className="h-4 w-4 mr-2" />
+              Import &amp; Merge
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Knowledge Graph Tab */}
+      {activeTab === "graph" && (
+        <>
+          {/* Floating Toolbar */}
       <div className="absolute top-20 left-72 right-4 z-10 flex items-center justify-between glass rounded-lg px-4 py-3">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -769,6 +800,23 @@ const BrainSurgery = () => {
           </div>
         </DialogContent>
       </Dialog>
+        </>
+      )}
+
+      {/* Import & Merge Tab */}
+      {activeTab === "import" && (
+        <div className="flex-1 p-4 overflow-auto">
+          <BrainMergePanel 
+            currentBrain={graphData}
+            onMergeComplete={(mergedGraph, packageData) => {
+              // Update the graph data with merged result
+              setGraphData(mergedGraph);
+              loadNodes(); // Refresh from backend
+              setActiveTab("graph"); // Switch back to graph view
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 };

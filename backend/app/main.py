@@ -47,6 +47,8 @@ from app.routes import (
     brain_surgery,
     lessons,
     codegen,
+    learning,
+    portable,
 )
 
 
@@ -102,6 +104,8 @@ protected_routers = [
     brain_surgery.router,
     lessons.router,
     codegen.router,
+    learning.router,
+    portable.router,
 ]
 
 

@@ -17,6 +17,8 @@ import OnboardingWizard from "./OnboardingWizard";
 import FloatingHelp from "./FloatingHelp";
 import ExplainabilityPanel from "./ExplainabilityPanel";
 import XAICommentator from "./XAICommentator";
+import { GovernanceToggle } from "./GovernanceControl";
+import { ExplainButton } from "./GoldTeamPanel";
 import { toast } from "sonner";
 import {
   Swords,
@@ -650,6 +652,20 @@ const Layout = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Governance Toggle - HitL/HotL Mode */}
+            <GovernanceToggle className="mr-2" />
+            
+            {/* Gold Team Explain Button */}
+            <ExplainButton 
+              context={{ 
+                screen: location.pathname, 
+                type: "navigation", 
+                summary: explainContext?.summary 
+              }} 
+              size="sm"
+              variant="ghost"
+            />
+            
             <Button
               variant="ghost"
               size="sm"
