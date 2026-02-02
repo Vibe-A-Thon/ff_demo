@@ -5,6 +5,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
+import { ScrollArea } from "../components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../components/ui/sheet";
 import { Switch } from "../components/ui/switch";
@@ -146,9 +147,10 @@ const BrainSurgery = () => {
     
     const updateDimensions = () => {
       if (containerRef.current) {
+        const height = containerRef.current.offsetHeight;
         setDimensions({
           width: containerRef.current.offsetWidth,
-          height: containerRef.current.offsetHeight - 120, // Account for toolbar
+          height: Math.max(height, 420),
         });
       }
     };
@@ -584,7 +586,7 @@ const BrainSurgery = () => {
   );
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col bg-background" data-testid="brain-surgery">
+    <div className="h-full flex flex-col bg-background relative" data-testid="brain-surgery">
       {/* Floating Toolbar */}
       <div className="absolute top-20 left-72 right-4 z-10 flex items-center justify-between glass rounded-lg px-4 py-3">
         <div className="flex items-center gap-4">
@@ -692,145 +694,147 @@ const BrainSurgery = () => {
         </div>
       </div>
 
-      {/* AMC Import (3-frame) */}
-      <div className="px-6 py-4" data-testid="amc-import-panel">
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-sm">AMC Import (3-Frame Merge View)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div>
-                <label className="text-xs text-muted-foreground">Upload AMC</label>
-                <Input
-                  type="file"
-                  accept=".amc,.zip"
-                  onChange={(event) => setAmcFile(event.target.files?.[0] || null)}
-                  data-testid="amc-upload"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Import Mode</label>
-                <Select value={amcMode} onValueChange={setAmcMode}>
-                  <SelectTrigger className="w-full" data-testid="amc-mode-trigger">
-                    <SelectValue placeholder="Select mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="merge">Merge</SelectItem>
-                    <SelectItem value="replace">Replace</SelectItem>
-                    <SelectItem value="merge_calibrate">Merge + Calibrate</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-end gap-2">
-                <Button variant="outline" onClick={handleAmcValidate} data-testid="amc-validate-btn">
-                  <Shield className="h-4 w-4 mr-2" /> Validate
-                </Button>
-                <Button variant="outline" onClick={handleAmcPreview} data-testid="amc-preview-btn">
-                  <FileDiff className="h-4 w-4 mr-2" /> Preview
-                </Button>
-                <Button onClick={handleAmcImport} disabled={amcImporting} data-testid="amc-import-btn">
-                  <Upload className="h-4 w-4 mr-2" /> {amcImporting ? "Importing" : "Import"}
-                </Button>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <Button
-                variant={amcActivate ? "default" : "outline"}
-                onClick={() => setAmcActivate((prev) => !prev)}
-                data-testid="amc-activate-toggle"
-              >
-                {amcActivate ? "Activate After Import" : "Activate Later"}
-              </Button>
-              {amcValidation && (
-                <Badge variant="outline" className={amcValidation.valid ? "status-success" : "status-error"}>
-                  {amcValidation.valid ? "Validation Passed" : "Validation Failed"}
-                </Badge>
-              )}
-            </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Card className="border-border bg-black/20" data-testid="amc-frame-baseline">
-                <CardHeader>
-                  <CardTitle className="text-xs">Baseline</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                    {JSON.stringify(baselineFrame, null, 2)}
-                  </pre>
-                </CardContent>
-              </Card>
-              <Card className="border-border bg-black/20" data-testid="amc-frame-import">
-                <CardHeader>
-                  <CardTitle className="text-xs">AMC Import</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                    {JSON.stringify(amcPreview || { status: "Awaiting preview" }, null, 2)}
-                  </pre>
-                </CardContent>
-              </Card>
-              <Card className="border-border bg-black/20" data-testid="amc-frame-merged">
-                <CardHeader>
-                  <CardTitle className="text-xs">Merged (Sandbox)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                    {JSON.stringify(
-                      amcPreview
-                        ? { ...amcPreview, merge_mode: amcMode, activation: amcActivate ? "pending" : "manual" }
-                        : { status: "Awaiting import" },
-                      null,
-                      2
-                    )}
-                  </pre>
-                </CardContent>
-              </Card>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="px-6 pb-6" data-testid="pep-import-panel">
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-sm">PEP Import (Portable Evolution Pack)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div>
-                <label className="text-xs text-muted-foreground">Upload PEP</label>
-                <Input
-                  type="file"
-                  accept=".pep.zip,.zip"
-                  onChange={(event) => setPepFile(event.target.files?.[0] || null)}
-                  data-testid="pep-upload"
-                />
-              </div>
-              <div className="flex items-end gap-2">
-                <Button variant="outline" onClick={handlePepPreview} data-testid="pep-preview-btn">
-                  <FileDiff className="h-4 w-4 mr-2" /> Preview
-                </Button>
-                <Button onClick={handlePepImport} disabled={pepImporting} data-testid="pep-import-btn">
-                  <Upload className="h-4 w-4 mr-2" /> {pepImporting ? "Importing" : "Import"}
-                </Button>
-              </div>
-            </div>
-            <Card className="border-border bg-black/20" data-testid="pep-preview-frame">
+      <ScrollArea className="flex-1 pt-24" data-testid="brain-surgery-scroll">
+        <div className="flex flex-col gap-6 pb-6">
+          {/* AMC Import (3-frame) */}
+          <div className="px-6" data-testid="amc-import-panel">
+            <Card className="border-border">
               <CardHeader>
-                <CardTitle className="text-xs">PEP Preview</CardTitle>
+                <CardTitle className="text-sm">AMC Import (3-Frame Merge View)</CardTitle>
               </CardHeader>
-              <CardContent>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                  {JSON.stringify(pepPreview || { status: "Awaiting preview" }, null, 2)}
-                </pre>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Upload AMC</label>
+                    <Input
+                      type="file"
+                      accept=".amc,.zip"
+                      onChange={(event) => setAmcFile(event.target.files?.[0] || null)}
+                      data-testid="amc-upload"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Import Mode</label>
+                    <Select value={amcMode} onValueChange={setAmcMode}>
+                      <SelectTrigger className="w-full" data-testid="amc-mode-trigger">
+                        <SelectValue placeholder="Select mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="merge">Merge</SelectItem>
+                        <SelectItem value="replace">Replace</SelectItem>
+                        <SelectItem value="merge_calibrate">Merge + Calibrate</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button variant="outline" onClick={handleAmcValidate} data-testid="amc-validate-btn">
+                      <Shield className="h-4 w-4 mr-2" /> Validate
+                    </Button>
+                    <Button variant="outline" onClick={handleAmcPreview} data-testid="amc-preview-btn">
+                      <FileDiff className="h-4 w-4 mr-2" /> Preview
+                    </Button>
+                    <Button onClick={handleAmcImport} disabled={amcImporting} data-testid="amc-import-btn">
+                      <Upload className="h-4 w-4 mr-2" /> {amcImporting ? "Importing" : "Import"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <Button
+                    variant={amcActivate ? "default" : "outline"}
+                    onClick={() => setAmcActivate((prev) => !prev)}
+                    data-testid="amc-activate-toggle"
+                  >
+                    {amcActivate ? "Activate After Import" : "Activate Later"}
+                  </Button>
+                  {amcValidation && (
+                    <Badge variant="outline" className={amcValidation.valid ? "status-success" : "status-error"}>
+                      {amcValidation.valid ? "Validation Passed" : "Validation Failed"}
+                    </Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <Card className="border-border bg-black/20" data-testid="amc-frame-baseline">
+                    <CardHeader>
+                      <CardTitle className="text-xs">Baseline</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                        {JSON.stringify(baselineFrame, null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border bg-black/20" data-testid="amc-frame-import">
+                    <CardHeader>
+                      <CardTitle className="text-xs">AMC Import</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                        {JSON.stringify(amcPreview || { status: "Awaiting preview" }, null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border bg-black/20" data-testid="amc-frame-merged">
+                    <CardHeader>
+                      <CardTitle className="text-xs">Merged (Sandbox)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                        {JSON.stringify(
+                          amcPreview
+                            ? { ...amcPreview, merge_mode: amcMode, activation: amcActivate ? "pending" : "manual" }
+                            : { status: "Awaiting import" },
+                          null,
+                          2
+                        )}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                </div>
               </CardContent>
             </Card>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
 
-      {/* Graph Canvas */}
-      <div className="flex-1 relative">
+          <div className="px-6" data-testid="pep-import-panel">
+            <Card className="border-border">
+              <CardHeader>
+                <CardTitle className="text-sm">PEP Import (Portable Evolution Pack)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Upload PEP</label>
+                    <Input
+                      type="file"
+                      accept=".pep.zip,.zip"
+                      onChange={(event) => setPepFile(event.target.files?.[0] || null)}
+                      data-testid="pep-upload"
+                    />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button variant="outline" onClick={handlePepPreview} data-testid="pep-preview-btn">
+                      <FileDiff className="h-4 w-4 mr-2" /> Preview
+                    </Button>
+                    <Button onClick={handlePepImport} disabled={pepImporting} data-testid="pep-import-btn">
+                      <Upload className="h-4 w-4 mr-2" /> {pepImporting ? "Importing" : "Import"}
+                    </Button>
+                  </div>
+                </div>
+                <Card className="border-border bg-black/20" data-testid="pep-preview-frame">
+                  <CardHeader>
+                    <CardTitle className="text-xs">PEP Preview</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+                      {JSON.stringify(pepPreview || { status: "Awaiting preview" }, null, 2)}
+                    </pre>
+                  </CardContent>
+                </Card>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Graph Canvas */}
+          <div ref={containerRef} className="relative min-h-[520px]">
         {graphLoading && (
           <div className="absolute inset-0 z-10 bg-background/60 backdrop-blur-sm flex items-center justify-center">
             <div className="w-2/3 space-y-3">
@@ -955,6 +959,169 @@ const BrainSurgery = () => {
           </div>
         )}
       </div>
+
+          {/* Brain Surgery Control Deck */}
+          <div className="border-t border-border bg-zinc-900/70 px-6 py-4">
+            <div className="grid grid-cols-4 gap-4">
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Patch Library</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {patches.map((patch) => (
+                    <div
+                      key={patch.id}
+                      draggable
+                      onDragStart={handlePatchDragStart(patch)}
+                      className="p-3 rounded-lg border border-border bg-black/30 cursor-move hover:border-zinc-600"
+                      data-testid={`patch-${patch.id}`}
+                    >
+                      <div className="text-sm font-medium">{patch.name}</div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {patch.risk} risk
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          Coverage {patch.coverage}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Agent Mapping</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {agents.map((agent) => (
+                    <div
+                      key={agent.id}
+                      onDrop={handleAgentDrop(agent.id)}
+                      onDragOver={handleAgentDragOver}
+                      className="p-3 rounded-lg border border-dashed border-border bg-black/20"
+                      data-testid={`agent-drop-${agent.id}`}
+                    >
+                      <div className="text-xs text-muted-foreground">{agent.name}</div>
+                      <div className="text-sm font-medium mt-1">
+                        {patchAssignments[agent.id]?.name || "Drop patch here"}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Sandbox & Safety</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Sandbox Status</span>
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {sandboxStatus}
+                    </Badge>
+                  </div>
+                  <Button variant="outline" onClick={runSandboxTest} data-testid="sandbox-run-btn">
+                    <Play className="h-4 w-4 mr-2" />
+                    Run Sandbox
+                  </Button>
+                  <div className="space-y-2">
+                    {patches.map((patch) => {
+                      const badge = getSafetyBadge(patch.risk);
+                      return (
+                        <div key={patch.id} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{patch.name}</span>
+                          <Badge className={badge.className}>{badge.label}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="space-y-2" data-testid="sandbox-cases">
+                    {sandboxCases.map((testCase) => {
+                      const badge = getSandboxBadge(testCase.status);
+                      return (
+                        <div key={testCase.id} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{testCase.name}</span>
+                          <Badge className={badge.className}>{badge.label}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="rounded-md border border-border bg-black/30 p-2 text-xs font-mono h-24 overflow-auto" data-testid="sandbox-log">
+                    {sandboxLogs.length === 0 ? (
+                      <div className="text-muted-foreground">Sandbox logs will appear here.</div>
+                    ) : (
+                      sandboxLogs.map((log, index) => (
+                        <div key={`${log}-${index}`} className="text-muted-foreground">
+                          {log}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="text-sm">Deployment Controls</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Hot-Swap</span>
+                    <Switch checked={hotSwapEnabled} onCheckedChange={setHotSwapEnabled} data-testid="hotswap-toggle" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Rollback Window</span>
+                    <Badge variant="outline" className="text-xs">15 min</Badge>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Performance Impact</span>
+                      <span>{perfImpact}%</span>
+                    </div>
+                    <Progress value={perfImpact} className="h-2" />
+                    <Input
+                      type="range"
+                      min="5"
+                      max="45"
+                      step="1"
+                      value={perfImpact}
+                      onChange={(e) => handlePerfImpactChange(e.target.value)}
+                      className="mt-2"
+                      data-testid="perf-impact-slider"
+                    />
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center justify-between">
+                        <span>Latency Δ</span>
+                        <span>+{perfLatency}ms</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>CPU Δ</span>
+                        <span>+{perfCpu}%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <Button onClick={handleMergeDeploy} data-testid="merge-deploy-btn">
+                    <Shield className="h-4 w-4 mr-2" />
+                    Merge & Deploy
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => setConflictOpen(true)} data-testid="conflict-resolve-btn">
+                      <FileText className="h-4 w-4 mr-2" />
+                      Resolve Conflicts
+                    </Button>
+                    <Button variant="ghost" size="icon" data-testid="rollback-btn">
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </ScrollArea>
 
       {/* Node Inspector Sheet */}
       <Sheet open={!!selectedNode} onOpenChange={(open) => !open && setSelectedNode(null)}>
@@ -1184,167 +1351,6 @@ const BrainSurgery = () => {
           </div>
         </SheetContent>
       </Sheet>
-
-      {/* Brain Surgery Control Deck */}
-      <div className="border-t border-border bg-zinc-900/70 px-6 py-4">
-        <div className="grid grid-cols-4 gap-4">
-          <Card className="border-border">
-            <CardHeader>
-              <CardTitle className="text-sm">Patch Library</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {patches.map((patch) => (
-                <div
-                  key={patch.id}
-                  draggable
-                  onDragStart={handlePatchDragStart(patch)}
-                  className="p-3 rounded-lg border border-border bg-black/30 cursor-move hover:border-zinc-600"
-                  data-testid={`patch-${patch.id}`}
-                >
-                  <div className="text-sm font-medium">{patch.name}</div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {patch.risk} risk
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      Coverage {patch.coverage}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border">
-            <CardHeader>
-              <CardTitle className="text-sm">Agent Mapping</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {agents.map((agent) => (
-                <div
-                  key={agent.id}
-                  onDrop={handleAgentDrop(agent.id)}
-                  onDragOver={handleAgentDragOver}
-                  className="p-3 rounded-lg border border-dashed border-border bg-black/20"
-                  data-testid={`agent-drop-${agent.id}`}
-                >
-                  <div className="text-xs text-muted-foreground">{agent.name}</div>
-                  <div className="text-sm font-medium mt-1">
-                    {patchAssignments[agent.id]?.name || "Drop patch here"}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border">
-            <CardHeader>
-              <CardTitle className="text-sm">Sandbox & Safety</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Sandbox Status</span>
-                <Badge variant="outline" className="text-xs capitalize">
-                  {sandboxStatus}
-                </Badge>
-              </div>
-              <Button variant="outline" onClick={runSandboxTest} data-testid="sandbox-run-btn">
-                <Play className="h-4 w-4 mr-2" />
-                Run Sandbox
-              </Button>
-              <div className="space-y-2">
-                {patches.map((patch) => {
-                  const badge = getSafetyBadge(patch.risk);
-                  return (
-                    <div key={patch.id} className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{patch.name}</span>
-                      <Badge className={badge.className}>{badge.label}</Badge>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="space-y-2" data-testid="sandbox-cases">
-                {sandboxCases.map((testCase) => {
-                  const badge = getSandboxBadge(testCase.status);
-                  return (
-                    <div key={testCase.id} className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{testCase.name}</span>
-                      <Badge className={badge.className}>{badge.label}</Badge>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="rounded-md border border-border bg-black/30 p-2 text-xs font-mono h-24 overflow-auto" data-testid="sandbox-log">
-                {sandboxLogs.length === 0 ? (
-                  <div className="text-muted-foreground">Sandbox logs will appear here.</div>
-                ) : (
-                  sandboxLogs.map((log, index) => (
-                    <div key={`${log}-${index}`} className="text-muted-foreground">
-                      {log}
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border">
-            <CardHeader>
-              <CardTitle className="text-sm">Deployment Controls</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Hot-Swap</span>
-                <Switch checked={hotSwapEnabled} onCheckedChange={setHotSwapEnabled} data-testid="hotswap-toggle" />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Rollback Window</span>
-                <Badge variant="outline" className="text-xs">15 min</Badge>
-              </div>
-              <div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Performance Impact</span>
-                  <span>{perfImpact}%</span>
-                </div>
-                <Progress value={perfImpact} className="h-2" />
-                <Input
-                  type="range"
-                  min="5"
-                  max="45"
-                  step="1"
-                  value={perfImpact}
-                  onChange={(e) => handlePerfImpactChange(e.target.value)}
-                  className="mt-2"
-                  data-testid="perf-impact-slider"
-                />
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  <div className="flex items-center justify-between">
-                    <span>Latency Δ</span>
-                    <span>+{perfLatency}ms</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>CPU Δ</span>
-                    <span>+{perfCpu}%</span>
-                  </div>
-                </div>
-              </div>
-              <Button onClick={handleMergeDeploy} data-testid="merge-deploy-btn">
-                <Shield className="h-4 w-4 mr-2" />
-                Merge & Deploy
-              </Button>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => setConflictOpen(true)} data-testid="conflict-resolve-btn">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Resolve Conflicts
-                </Button>
-                <Button variant="ghost" size="icon" data-testid="rollback-btn">
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
 
       <Dialog open={conflictOpen} onOpenChange={setConflictOpen}>
         <DialogContent className="bg-card border-border" data-testid="conflict-dialog">

@@ -380,134 +380,136 @@ Reviewed and validated via sandbox testing.`;
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={runSandboxValidation}
-                  disabled={running}
-                  data-testid="sandbox-validate-btn"
-                  data-explain="Run sandbox validation"
-                  data-explain-title="Sandbox checks"
-                  data-explain-summary="Runs syntactic and logic validation against safe test data."
-                  data-explain-rules="DIFF-VAL-01,SAFE-003"
-                  data-explain-evidence="Sandbox results,Test suite"
-                >
-                  <Play className={`h-4 w-4 mr-2 ${running ? 'animate-spin' : ''}`} />
-                  Validate
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleReject}
-                  disabled={selectedDiff.status !== "pending"}
-                  data-testid="reject-btn"
-                  data-explain="Reject diff"
-                  data-explain-title="Rejection reason"
-                  data-explain-summary="Rejects changes that violate policy, performance, or risk thresholds."
-                  data-explain-rules="DIFF-DEC-02,RISK-004"
-                  data-explain-evidence="Risk delta,Policy mismatch"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Reject
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleRequestChanges}
-                  disabled={selectedDiff.status !== "pending"}
-                  data-testid="request-changes-btn"
-                  data-explain="Request changes"
-                  data-explain-title="Change request"
-                  data-explain-summary="Sends the diff back for revision with reviewer notes."
-                  data-explain-rules="DIFF-DEC-03"
-                  data-explain-evidence="Reviewer notes,Policy checklist"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Request Changes
-                </Button>
-                <Button
-                  onClick={handleAccept}
-                  disabled={selectedDiff.status !== "pending"}
-                  data-testid="accept-btn"
-                  data-explain="Accept diff"
-                  data-explain-title="Acceptance rationale"
-                  data-explain-summary="Approves changes after validation, enabling deployment workflows."
-                  data-explain-rules="DIFF-DEC-01,COM-012"
-                  data-explain-evidence="Sandbox pass,Review notes,Audit trail"
-                >
-                  <Check className="h-4 w-4 mr-2" />
-                  Accept
-                </Button>
-              </div>
-            </div>
-
-            {/* Sandbox Result */}
-            {sandboxResult && (
-              <div className={`mx-4 mt-4 p-4 rounded-lg border ${
-                sandboxResult.passed 
-                  ? 'bg-green-500/10 border-green-500/30' 
-                  : 'bg-red-500/10 border-red-500/30'
-              }`}>
-                <div className="flex items-center gap-2 mb-2">
-                  {sandboxResult.passed 
-                    ? <CheckCircle2 className="h-5 w-5 text-green-400" />
-                    : <AlertTriangle className="h-5 w-5 text-red-400" />
-                  }
-                  <span className="font-semibold">
-                    {sandboxResult.passed ? 'Sandbox Validation Passed' : 'Sandbox Validation Failed'}
-                  </span>
                 </div>
-                <p className="text-sm text-muted-foreground mb-3">{sandboxResult.message}</p>
-                <div className="flex flex-wrap gap-4">
-                  {Object.entries(sandboxResult.tests).map(([test, results]) => {
-                    const failed = results?.failed ?? 0;
-                    const passed = results?.passed ?? 0;
-                    const total = results?.total ?? passed + failed;
-                    const ok = failed === 0;
-                    return (
-                      <div key={test} className="flex items-center gap-1">
-                        {ok ? <Check className="h-3 w-3 text-green-400" /> : <X className="h-3 w-3 text-red-400" />}
-                        <span className="text-xs capitalize">{test}</span>
-                        <span className="text-[10px] text-muted-foreground">{passed}/{total}</span>
+
+                <ScrollArea className="flex-1">
+                  <div className="pb-6">
+                    {/* Sandbox Result */}
+                    {sandboxResult && (
+                      <div className={`mx-4 mt-4 p-4 rounded-lg border ${
+                        sandboxResult.passed 
+                          ? 'bg-green-500/10 border-green-500/30' 
+                          : 'bg-red-500/10 border-red-500/30'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {sandboxResult.passed 
+                            ? <CheckCircle2 className="h-5 w-5 text-green-400" />
+                            : <AlertTriangle className="h-5 w-5 text-red-400" />
+                          }
+                          <span className="font-semibold">
+                            {sandboxResult.passed ? 'Sandbox Validation Passed' : 'Sandbox Validation Failed'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-3">{sandboxResult.message}</p>
+                        <div className="flex flex-wrap gap-4">
+                          {Object.entries(sandboxResult.tests).map(([test, results]) => {
+                            const failed = results?.failed ?? 0;
+                            const passed = results?.passed ?? 0;
+                            const total = results?.total ?? passed + failed;
+                            const ok = failed === 0;
+                            return (
+                              <div key={test} className="flex items-center gap-1">
+                                {ok ? <Check className="h-3 w-3 text-green-400" /> : <X className="h-3 w-3 text-red-400" />}
+                                <span className="text-xs capitalize">{test}</span>
+                                <span className="text-[10px] text-muted-foreground">{passed}/{total}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                    )}
 
-            {/* Three-Pane Preview */}
-            <div className="mx-4 mt-4 grid grid-cols-3 gap-4" data-testid="three-pane-preview">
-              <Card className="border-border">
-                <CardHeader>
-                  <CardTitle className="text-sm">Existing Model</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-lg overflow-hidden">
-                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
-                      {selectedDiff.oldCode}
-                    </SyntaxHighlighter>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border">
-                <CardHeader>
-                  <CardTitle className="text-sm">APMC (Patched)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-lg overflow-hidden">
-                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
-                      {selectedDiff.newCode}
-                    </SyntaxHighlighter>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border border-green-500/30 bg-green-500/5">
-                <CardHeader>
-                  <CardTitle className="text-sm text-green-300">Merged Model</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-lg overflow-hidden">
-                    <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
-                      {mergedPreview}
-                    </SyntaxHighlighter>
+                    {/* Three-Pane Preview */}
+                    <div className="mx-4 mt-4 grid grid-cols-3 gap-4" data-testid="three-pane-preview">
+                      <Card className="border-border">
+                        <CardHeader>
+                          <CardTitle className="text-sm">Existing Model</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="rounded-lg overflow-hidden">
+                            <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                              {selectedDiff.oldCode}
+                            </SyntaxHighlighter>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-border">
+                        <CardHeader>
+                          <CardTitle className="text-sm">APMC (Patched)</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="rounded-lg overflow-hidden">
+                            <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                              {selectedDiff.newCode}
+                            </SyntaxHighlighter>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-green-500/30 bg-green-500/5">
+                        <CardHeader>
+                          <CardTitle className="text-sm text-green-300">Merged Model</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="rounded-lg overflow-hidden">
+                            <SyntaxHighlighter language="python" style={vscDarkPlus} customStyle={{ margin: 0, background: "transparent" }}>
+                              {mergedPreview}
+                            </SyntaxHighlighter>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Patch Overlay */}
+                    <div className="mx-4 mt-4">
+                      <Card className="border-border">
+                        <CardHeader>
+                          <CardTitle className="text-sm">Patch Overlay</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-3 gap-3 text-xs">
+                            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                              <div className="text-green-300 font-semibold">Additions</div>
+                              <div className="font-mono text-lg">+12</div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                              <div className="text-red-300 font-semibold">Removals</div>
+                              <div className="font-mono text-lg">-4</div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                              <div className="text-yellow-300 font-semibold">Hotspots</div>
+                              <div className="font-mono text-lg">2</div>
+                            </div>
+                          </div>
+                          <div className="mt-4">
+                            <div className="text-xs text-muted-foreground mb-2">Impact Map</div>
+                            <div className="flex items-center gap-2" data-testid="overlay-map">
+                              {overlaySegments.map((segment) => (
+                                <div
+                                  key={segment.id}
+                                  className={`h-3 rounded-full ${getOverlayClass(segment.kind)}`}
+                                  style={{ flex: segment.intensity * 10 }}
+                                  title={`${segment.label} • ${(segment.intensity * 100).toFixed(0)}%`}
+                                />
+                              ))}
+                            </div>
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full bg-green-500/60" />
+                                Additions
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full bg-red-500/60" />
+                                Removals
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full bg-yellow-400/60" />
+                                Hotspots
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -728,6 +730,8 @@ Reviewed and validated via sandbox testing.`;
                 data-testid="commit-message-input"
               />
             </div>
+              </div>
+            </ScrollArea>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">

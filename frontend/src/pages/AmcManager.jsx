@@ -208,7 +208,7 @@ const AmcManager = () => {
   };
 
   return (
-    <div className="space-y-6" data-testid="amc-manager-root">
+    <div className="flex h-full flex-col gap-6" data-testid="amc-manager-root">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">AMC Manager</h1>
@@ -218,46 +218,47 @@ const AmcManager = () => {
           <RefreshCw className="mr-2 h-4 w-4" /> Refresh
         </Button>
       </div>
+      <ScrollArea className="flex-1">
+        <div className="space-y-4 pr-2">
+          <Tabs defaultValue="export" className="space-y-4">
+            <TabsList className="bg-muted" data-testid="amc-manager-tabs">
+              <TabsTrigger value="export" data-testid="amc-manager-tab-export">Export</TabsTrigger>
+              <TabsTrigger value="import" data-testid="amc-manager-tab-import">Import</TabsTrigger>
+              <TabsTrigger value="diff" data-testid="amc-manager-tab-diff">Diff</TabsTrigger>
+              <TabsTrigger value="catalog" data-testid="amc-manager-tab-catalog">Catalog</TabsTrigger>
+            </TabsList>
 
-      <Tabs defaultValue="export" className="space-y-4">
-        <TabsList className="bg-muted" data-testid="amc-manager-tabs">
-          <TabsTrigger value="export" data-testid="amc-manager-tab-export">Export</TabsTrigger>
-          <TabsTrigger value="import" data-testid="amc-manager-tab-import">Import</TabsTrigger>
-          <TabsTrigger value="diff" data-testid="amc-manager-tab-diff">Diff</TabsTrigger>
-          <TabsTrigger value="catalog" data-testid="amc-manager-tab-catalog">Catalog</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="export">
-          <Card className="bg-card" data-testid="amc-export-card">
-            <CardHeader>
-              <CardTitle>Export AMC Capsule</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div>
-                  <label className="text-xs text-muted-foreground">Team</label>
-                  <Select value={teamId} onValueChange={setTeamId} data-testid="amc-export-team">
-                    <SelectTrigger data-testid="amc-export-team-trigger">
-                      <SelectValue placeholder="Select team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teams.map((team) => (
-                        <SelectItem key={team.team_id} value={team.team_id}>
-                          {team.bank_facing_name || team.internal_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">Environment Tag</label>
-                  <Input value={envTag} onChange={(event) => setEnvTag(event.target.value)} data-testid="amc-export-env" />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">Time Window (days)</label>
-                  <Input
-                    type="number"
-                    value={scope.time_window_days}
+            <TabsContent value="export">
+              <Card className="bg-card" data-testid="amc-export-card">
+                <CardHeader>
+                  <CardTitle>Export AMC Capsule</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Team</label>
+                      <Select value={teamId} onValueChange={setTeamId} data-testid="amc-export-team">
+                        <SelectTrigger data-testid="amc-export-team-trigger">
+                          <SelectValue placeholder="Select team" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teams.map((team) => (
+                            <SelectItem key={team.team_id} value={team.team_id}>
+                              {team.bank_facing_name || team.internal_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Environment Tag</label>
+                      <Input value={envTag} onChange={(event) => setEnvTag(event.target.value)} data-testid="amc-export-env" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Time Window (days)</label>
+                      <Input
+                        type="number"
+                        value={scope.time_window_days}
                     onChange={(event) => setScope((prev) => ({ ...prev, time_window_days: Number(event.target.value || 0) }))}
                     data-testid="amc-export-window"
                   />
@@ -508,7 +509,9 @@ const AmcManager = () => {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+          </Tabs>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

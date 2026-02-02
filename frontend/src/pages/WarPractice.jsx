@@ -448,72 +448,73 @@ const WarPractice = () => {
           <Badge className="bg-emerald-500/20 text-emerald-300">Sandbox Mode</Badge>
         </div>
       </div>
-
-      <Card className="border-border" data-testid="war-practice-registry">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-sm">Registry Snapshot</CardTitle>
-          <Badge variant="outline" className="border-border">
-            {registrySnapshot?.agents?.length || 0} agents
-          </Badge>
-        </CardHeader>
-        <CardContent className="space-y-2 text-xs text-muted-foreground">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="border-border">
-              {registrySnapshot?.teams?.length || 0} teams
-            </Badge>
-            <Badge variant="outline" className="border-border">
-              {(registrySnapshot?.delegation_preview || []).length} on deck
-            </Badge>
-          </div>
-          <div className="grid gap-2 md:grid-cols-3">
-            {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
-              <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-3">
-                <div className="text-white text-xs font-medium">{item.agent_name}</div>
-                <div className="text-[11px] text-muted-foreground">{item.role}</div>
-              </div>
-            ))}
-            {!registrySnapshot?.delegation_preview?.length && (
-              <div className="text-xs text-muted-foreground">Registry data not available.</div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-6">
-          <Card className="border-border">
+      <ScrollArea className="flex-1">
+        <div className="space-y-6 pr-2">
+          <Card className="border-border" data-testid="war-practice-registry">
             <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Scenario Setup</CardTitle>
-                <p className="text-xs text-muted-foreground">Define the attack narrative and payload scope.</p>
-              </div>
-              <Badge className="bg-red-500/15 text-red-300">Manual Mode</Badge>
+              <CardTitle className="text-sm">Registry Snapshot</CardTitle>
+              <Badge variant="outline" className="border-border">
+                {registrySnapshot?.agents?.length || 0} agents
+              </Badge>
             </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="scenario-name">Scenario name</Label>
-                <Input
-                  id="scenario-name"
-                  value={scenarioName}
-                  onChange={(event) => setScenarioName(event.target.value)}
-                  data-testid="war-practice-scenario-name"
-                />
+            <CardContent className="space-y-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="border-border">
+                  {registrySnapshot?.teams?.length || 0} teams
+                </Badge>
+                <Badge variant="outline" className="border-border">
+                  {(registrySnapshot?.delegation_preview || []).length} on deck
+                </Badge>
               </div>
-              <div className="space-y-2">
-                <Label>Preset</Label>
-                <Select value={preset} onValueChange={setPreset}>
-                  <SelectTrigger data-testid="war-practice-preset">
-                    <SelectValue placeholder="Select preset" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SCENARIO_PRESETS.map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {item}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid gap-2 md:grid-cols-3">
+                {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+                  <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-3">
+                    <div className="text-white text-xs font-medium">{item.agent_name}</div>
+                    <div className="text-[11px] text-muted-foreground">{item.role}</div>
+                  </div>
+                ))}
+                {!registrySnapshot?.delegation_preview?.length && (
+                  <div className="text-xs text-muted-foreground">Registry data not available.</div>
+                )}
               </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="space-y-6">
+              <Card className="border-border">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Scenario Setup</CardTitle>
+                    <p className="text-xs text-muted-foreground">Define the attack narrative and payload scope.</p>
+                  </div>
+                  <Badge className="bg-red-500/15 text-red-300">Manual Mode</Badge>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="scenario-name">Scenario name</Label>
+                    <Input
+                      id="scenario-name"
+                      value={scenarioName}
+                      onChange={(event) => setScenarioName(event.target.value)}
+                      data-testid="war-practice-scenario-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Preset</Label>
+                    <Select value={preset} onValueChange={setPreset}>
+                      <SelectTrigger data-testid="war-practice-preset">
+                        <SelectValue placeholder="Select preset" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SCENARIO_PRESETS.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {item}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
               <div className="space-y-2">
                 <Label>Primary payment rail</Label>
                 <Select value={rail} onValueChange={setRail}>
@@ -1093,6 +1094,8 @@ const WarPractice = () => {
           </div>
         </CardContent>
       </Card>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

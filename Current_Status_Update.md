@@ -1,14 +1,14 @@
 # Fraud Forge — Current Status Update
 
 ## Overall Progress
-- **Estimated completion:** **78%**
-- **Completed:** **78%**
-- **Pending:** **22%**
+- **Estimated completion:** **80%**
+- **Completed:** **80%**
+- **Pending:** **20%**
 - [agentic-fraud-defense.md](agentic-fraud-defense.md)
 - [AI_DEV_plan_cp.md](AI_DEV_plan_cp.md)
 - [AI_DEV_requirements_c.md](AI_DEV_requirements_c.md)
-- **Action-level RBAC + SoD enforcement** — **80%**
-  - SoD enforced for visual patch actions, brain surgery edits, approvals, and exports; UI warnings still partial.
+- **Action-level RBAC + SoD enforcement** — **85%**
+  - SoD enforced for visual patch actions, brain surgery edits, approvals, exports, and RSB patch approvals; UI warnings still partial.
 - [app_RAG_Implementation.md](app_RAG_Implementation.md)
 - [app_requirements.md](app_requirements.md)
 ### 10) XAI / Explainability
@@ -45,7 +45,7 @@
 3. **Story-mode report export** with stage timeline + diffs + approvals. — **Complete**
 4. **Evidence pack polish** (PDF export + signed checksum chain). — **Complete**
 ## Overall Progress
-- **Governance SoD enforcement:** 20% pending
+- **Governance SoD enforcement:** 15% pending
 - **Demo story-mode automation:** 0% pending
 
 ## Feature / Requirement Completion Matrix
@@ -63,7 +63,7 @@
   - Endpoints and UI exist; role mapping and token flow are in place.
 - **Role-based navigation + guardrails** — **70%**
   - Require-permission enforced on most APIs; UI role separation partial.
-- **Action-level RBAC + SoD enforcement** — **40%**
+- **Action-level RBAC + SoD enforcement** — **45%**
   - SoD warnings in UI; enforcement for all actions not yet complete.
 - **Audit logging** — **75%**
   - Audit events logged across major routes with metadata and evidence links.
@@ -95,14 +95,14 @@
   - Scenario block builder and demo controls implemented.
 
 ### 6) RSB / Rule Management
-- **RSB import / inspect / validate** — **75%**
-  - Upload + manifest validation + compliance docs + conflicts in place.
+- **RSB import / inspect / validate** — **85%**
+  - Upload + manifest validation + compliance docs + conflicts + hash integrity + policy scan + re-validation endpoint.
 - **Visual patcher (diffs + approvals)** — **70%**
   - Diff viewer + accept/reject + sandbox validation hooks.
 - **RuleSpec → RuleCode workflow** — **50%**
   - Rule editor exists; real code execution and deployment pipeline pending.
-- **RSB merge / stage / export** — **70%**
-  - Staging and export are implemented with audit events.
+- **RSB merge / stage / export** — **75%**
+  - Staging + audit events + export fallback when stored archive is missing.
 
 ### 7) APMC / Brain Surgery
 - **APMC import / inspect / attach** — **10%**
@@ -168,7 +168,7 @@
 - Core FastAPI API surface built (runs, workflow, approvals, agents, RSB, RAG, evidence, XAI).
 - War Room UI with streaming thinking, timeline, scenario builder, and demo mode.
 - Workflow lifecycle controls with approval gates and governance status in UI.
-- RSB pipeline: upload, validation, diffs, patch apply, merge, stage, export.
+- RSB pipeline: upload, validation, diffs, patch apply, merge, stage, export, plus hash integrity + policy scan re-validation.
 - Evidence pack generation for battles and war-loop runs with checksum.
 - Knowledge graph CRUD + Brain Surgery UI (non-APMC).
 - RAG endpoints with hybrid scoring and seeded taxonomy.
@@ -205,7 +205,7 @@
 - **APMC / Brain Surgery integration:** 70% pending
 - **Advanced RAG modes:** 0% pending
 - **Evidence lineage + provenance:** 15% pending
-- **Governance SoD enforcement:** 60% pending
+- **Governance SoD enforcement:** 55% pending
 - **Live data wiring (metrics + battle outputs):** 45% pending
 - **Demo story-mode automation:** 55% pending
 

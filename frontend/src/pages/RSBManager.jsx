@@ -766,7 +766,9 @@ const RSBManager = () => {
                 </div>
               </div>
 
-              <Card className="border-border mt-4" data-testid="rsb-registry">
+              <ScrollArea className="flex-1">
+                <div className="p-6 space-y-6">
+                <Card className="border-border" data-testid="rsb-registry">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Registry Snapshot</CardTitle>
                 </CardHeader>
@@ -793,7 +795,7 @@ const RSBManager = () => {
                 </CardContent>
               </Card>
 
-              <Card className="border-border mt-4" data-testid="rsb-xai-linkage">
+              <Card className="border-border" data-testid="rsb-xai-linkage">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">XAI Linkage</CardTitle>
                 </CardHeader>
@@ -812,7 +814,7 @@ const RSBManager = () => {
                 </CardContent>
               </Card>
 
-              <div className="grid grid-cols-4 gap-4 mt-6">
+              <div className="grid grid-cols-4 gap-4">
                 <Card className="border-border">
                   <CardHeader>
                     <CardTitle className="text-sm">Validation Status</CardTitle>
@@ -995,11 +997,10 @@ const RSBManager = () => {
                   </CardContent>
                 </Card>
               )}
-            </div>
 
             {/* Tabs */}
-            <Tabs defaultValue="manifest" className="flex-1 flex flex-col overflow-hidden">
-              <TabsList className="mx-6 mt-4 w-fit">
+            <Tabs defaultValue="manifest" className="flex flex-col overflow-hidden">
+              <TabsList className="mt-4 w-fit">
                 <TabsTrigger value="manifest">
                   <FileJson className="h-4 w-4 mr-2" />
                   Manifest
@@ -1161,6 +1162,8 @@ const RSBManager = () => {
                 </TabsContent>
               </ScrollArea>
             </Tabs>
+              </div>
+            </ScrollArea>
           </div>
         ) : (
           <div className="h-full flex items-center justify-center text-muted-foreground">

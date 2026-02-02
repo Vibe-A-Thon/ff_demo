@@ -139,92 +139,90 @@ const BattleTimeline = ({ turns, currentTurn, onJumpTo, onHoverTurn }) => {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className={turn.red_team?.success ? 'border-red-500 text-red-400' : 'border-zinc-600'}>
-                  <Sword className="h-3 w-3 mr-1" />
-                  {turn.red_team?.action?.slice(0, 15) || 'N/A'}
-                </Badge>
-              </div>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className={turn.blue_team?.blocked ? 'border-blue-500 text-blue-400' : 'border-zinc-600'}>
-                  <Shield className="h-3 w-3 mr-1" />
-                  {turn.blue_team?.action?.slice(0, 15) || 'N/A'}
-                </Badge>
-              </div>
-            </div>
-            {turn.red_team?.success ? (
-              <AlertTriangle className="h-4 w-4 text-red-400" />
-            ) : (
-              <Shield className="h-4 w-4 text-green-400" />
-            )}
-          </div>
-        ))}
-        {turns.length === 0 && (
-          <div className="text-center text-muted-foreground py-8">
-            No turns yet. Start the battle!
-          </div>
-        )}
-      </div>
-    </ScrollArea>
-  );
-};
+                      {/* Main Battle Area */}
+                      <div className="flex min-h-[420px] overflow-hidden">
+                        {blockedBursts.map((burstId) => (
+                          <div key={burstId} className="particle-burst">
+                            {Array.from({ length: 12 }).map((_, particleIndex) => (
+                              <span
+                                key={`${burstId}-${particleIndex}`}
+                                className="particle"
+                                style={{
+                                  "--x": `${Math.cos((particleIndex / 12) * Math.PI * 2) * 160}px`,
+                                  "--y": `${Math.sin((particleIndex / 12) * Math.PI * 2) * 120}px`,
+                                  animationDelay: `${particleIndex * 10}ms`,
+                                }}
+                              />
+                            ))}
+                          </div>
+                        ))}
+                        {/* Red Team Panel */}
+                        <div className="flex-1 p-4 border-r border-border overflow-hidden">
+                          <ThinkingVisualizer
+                            team="red"
+                            thinking={redThinking}
+                            streamingText={redStreamText}
+                            isStreaming={isStreaming}
+                          />
+                        </div>
 
-// Metrics Strip Component with Alert Indicators
-const MetricsStrip = ({ metrics, onMetricClick }) => {
-  const items = [
-    { 
-      key: "success_rate",
-      label: "Success Rate", 
-      value: `${metrics.success_rate || 0}%`, 
-      icon: Activity, 
-      color: "text-green-400",
-      alert: (metrics.success_rate || 0) < 60 ? 'critical' : (metrics.success_rate || 0) < 75 ? 'warning' : null
-    },
-    { 
-      key: "money_at_risk",
-      label: "Money at Risk", 
-      value: `$${(metrics.money_at_risk || 0).toLocaleString()}`, 
-      icon: DollarSign, 
-      color: "text-red-400",
-      alert: (metrics.money_at_risk || 0) > 40000 ? 'critical' : (metrics.money_at_risk || 0) > 25000 ? 'warning' : null
-    },
-    { 
-      key: "money_saved",
-      label: "Money Saved", 
-      value: `$${(metrics.money_saved || 0).toLocaleString()}`, 
-      icon: Shield, 
-      color: "text-green-400",
-      alert: null
-    },
-    { 
-      key: "time_to_immunity",
-      label: "Time to Immunity", 
-      value: `${metrics.time_to_immunity || 0}m`, 
-      icon: Clock, 
-      color: "text-blue-400",
-      alert: (metrics.time_to_immunity || 0) > 8 ? 'critical' : (metrics.time_to_immunity || 0) > 5 ? 'warning' : null
-    },
-    { 
-      key: "patterns_learned",
-      label: "Patterns Learned", 
-      value: metrics.patterns_learned || 0, 
-      icon: Brain, 
-      color: "text-purple-400",
-      alert: null
-    },
-  ];
+                        {/* Timeline */}
+                        <div className="w-72 border-r border-border bg-zinc-900/50 flex flex-col">
+                          <div className="p-4 border-b border-border">
+                            <h3 className="text-sm font-semibold flex items-center gap-2">
+                              <Activity className="h-4 w-4" />
+                              Battle Timeline
+                            </h3>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {selectedBattle?.turns?.length || 0} turns • Turn {currentTurn}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {resolveTeamModel("red") && (
+                                <Badge variant="outline" className="border-red-500/50 text-red-300">
+                                  Red • {resolveModelLabel(resolveTeamModel("red"))}
+                                </Badge>
+                              )}
+                              {resolveTeamModel("blue") && (
+                                <Badge variant="outline" className="border-blue-500/50 text-blue-300">
+                                  Blue • {resolveModelLabel(resolveTeamModel("blue"))}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex-1 overflow-hidden">
+                            <BattleTimeline
+                              turns={selectedBattle?.turns || []}
+                              currentTurn={currentTurn}
+                              onJumpTo={jumpToTurn}
+                              onHoverTurn={setHoverTurnIndex}
+                            />
+                          </div>
+                          <div className="border-t border-border p-3 text-xs text-muted-foreground" data-testid="turn-hover-preview">
+                            {hoverTurnIndex !== null ? (
+                              <div>
+                                <div className="font-semibold">Turn {hoverTurnIndex + 1} Preview</div>
+                                <div className="mt-1">Red: {selectedBattle?.turns?.[hoverTurnIndex]?.red_team?.action || "N/A"}</div>
+                                <div>Blue: {selectedBattle?.turns?.[hoverTurnIndex]?.blue_team?.action || "N/A"}</div>
+                              </div>
+                            ) : (
+                              <div>Hover a turn to preview details.</div>
+                            )}
+                          </div>
+                        </div>
 
-  return (
-    <div className="grid grid-cols-5 gap-4 p-4 border-b border-border bg-card glass-panel">
-      {items.map((item) => {
-        const Icon = item.icon;
-        return (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => onMetricClick?.(item)}
-            className={`flex items-center gap-3 p-2 rounded-lg transition-all text-left ${
-              item.alert === 'critical' ? 'bg-red-500/10 border border-red-500/30 animate-pulse' :
-              item.alert === 'warning' ? 'bg-yellow-500/10 border border-yellow-500/30' : 'border border-transparent'
-            } hover:border-zinc-600 hover:bg-zinc-800/60`}
+                        {/* Blue Team Panel */}
+                        <div className="flex-1 p-4 overflow-hidden">
+                          <ThinkingVisualizer
+                            team="blue"
+                            thinking={blueThinking}
+                            streamingText={blueStreamText}
+                            isStreaming={isStreaming}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Stage Outputs Detail */}
+                      <div className="border-t border-border bg-card/40 px-6 py-4" data-testid="war-room-stage-outputs">
             data-testid={`metric-${item.label.toLowerCase().replace(/\s/g, '-')}`}
           >
             <div className={`p-2 rounded-lg bg-zinc-800 ${item.color}`}>
@@ -726,189 +724,187 @@ const WarRoom = () => {
         await new Promise(r => setTimeout(r, 15 + Math.random() * 10));
       }
       
-      setThinking(prev => prev + `[${stage.toUpperCase()}]\n${text}\n`);
-      setStream("");
-      await new Promise(r => setTimeout(r, 300));
-    }
-  }, []);
+      <ScrollArea className="flex-1" data-testid="war-room-scroll">
+        <div className="flex flex-col">
+          <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-lifecycle">
+            <Card className="border-border">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-sm">Lifecycle Workflow Controls</CardTitle>
+                <div className="flex items-center gap-2">
+                  {workflowApprovalRequired && (
+                    <Badge className="bg-yellow-500/15 text-yellow-300 border border-yellow-500/30">
+                      Approval Required
+                    </Badge>
+                  )}
+                  {workflowRunId && (
+                    <Badge className={governanceBadgeClass(governanceStatus?.status)}>
+                      {(governanceStatus?.status || "Governance").replace(/_/g, " ")}
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-[1.2fr_1fr]">
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>Run ID</span>
+                    <span className="text-white truncate max-w-[220px]">
+                      {workflowRunId || "Not started"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>State</span>
+                    <Badge className="bg-slate-500/15 text-slate-200 border border-slate-500/30">
+                      {workflowState}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Status</span>
+                    <Badge className={workflowStatus === "awaiting_approval" ? "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30" : "bg-blue-500/15 text-blue-300 border border-blue-500/30"}>
+                      {workflowStatus}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Governance</span>
+                    <Badge className={governanceBadgeClass(governanceStatus?.status)}>
+                      {(governanceStatus?.status || "—").replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Approvals</span>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                        Pending {approvalSummary.pending}
+                      </Badge>
+                      <Badge className="bg-red-500/15 text-red-300 border border-red-500/30">
+                        Rejected {approvalSummary.rejected}
+                      </Badge>
+                    </div>
+                  </div>
+                  <ScrollArea className="h-16 pr-3">
+                    <ul className="mt-2 space-y-1">
+                      {(workflowHistory || []).slice(-4).map((item, idx) => (
+                        <li key={`${item.state}-${idx}`} className="flex items-center justify-between">
+                          <span className="text-white">{item.state}</span>
+                          <span>{item.timestamp?.slice(11, 19)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </ScrollArea>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                  <Button
+                    className="gap-2"
+                    onClick={handleLifecycleAutoRun}
+                    disabled={workflowBusy}
+                    data-testid="war-room-workflow-auto"
+                  >
+                    <Play className="h-4 w-4" />
+                    Auto-Run
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={handleWorkflowAdvance}
+                    disabled={workflowBusy}
+                    data-testid="war-room-workflow-advance"
+                  >
+                    <SkipForward className="h-4 w-4" />
+                    Advance
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="gap-2"
+                    onClick={handleWorkflowFreeze}
+                    disabled={!workflowRunId || workflowBusy}
+                    data-testid="war-room-workflow-freeze"
+                  >
+                    <Snowflake className="h-4 w-4" />
+                    Freeze
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={handleWorkflowRollback}
+                    disabled={!workflowRunId || workflowBusy}
+                    data-testid="war-room-workflow-rollback"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    Rollback
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="gap-2"
+                    onClick={handleWorkflowReset}
+                    disabled={!workflowRunId || workflowBusy}
+                    data-testid="war-room-workflow-reset"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Reset
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="gap-2"
+                    onClick={handleDeterministicReplay}
+                    disabled={!workflowRunId || workflowBusy}
+                    data-testid="war-room-workflow-replay-full"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Replay (Seeded)
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="gap-2"
+                    onClick={handleRunReplay}
+                    disabled={!workflowRunId || workflowBusy}
+                    data-testid="war-room-run-replay"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Replay
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="gap-2"
+                    onClick={() => handleExportStory("story")}
+                    disabled={!workflowRunId}
+                    data-testid="war-room-story-export"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Export Story
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="gap-2"
+                    onClick={() => handleExportStory("story_pdf")}
+                    disabled={!workflowRunId}
+                    data-testid="war-room-story-export-pdf"
+                  >
+                    <FileDown className="h-4 w-4" />
+                    Export Story PDF
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="gap-2"
+                    onClick={handleExportBrc}
+                    disabled={!workflowRunId}
+                    data-testid="war-room-workflow-export"
+                  >
+                    Export BRC
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="gap-2 col-span-2 md:col-span-3"
+                    onClick={handleWorkflowRefresh}
+                    disabled={!workflowRunId}
+                    data-testid="war-room-workflow-refresh"
+                  >
+                    Refresh State
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-  const simulateTurn = useCallback((turnNumber, prevMetrics) => {
-    const redActions = ["Account Takeover", "Velocity Attack", "Device Spoofing", "Credential Stuffing", "Social Engineering"];
-    const blueActions = ["Pattern Detection", "Velocity Check", "Device Fingerprinting", "ML Score", "Rule Match"];
-    const redSuccess = Math.random() < 0.35;
-
-    const moneyAtRisk = Math.floor(5000 + Math.random() * 45000);
-    const savedThisTurn = redSuccess ? 0 : Math.floor(moneyAtRisk * (0.6 + Math.random() * 0.3));
-    const totalSaved = (prevMetrics.money_saved || 0) + savedThisTurn;
-
-    // Time to immunity decreases over time (learning effect)
-    const baseImmunity = Math.max(1, 10 - Math.floor(turnNumber / 3));
-    const immunityVariation = Math.random() * 2 - 1;
-    const timeToImmunity = Math.max(1, Math.round(baseImmunity + immunityVariation));
-
-    return {
-      type: "turn_update",
-      turn_number: turnNumber,
-      red_team: { action: redActions[Math.floor(Math.random() * redActions.length)], success: redSuccess },
-      blue_team: { action: blueActions[Math.floor(Math.random() * blueActions.length)], blocked: !redSuccess },
-      metrics: {
-        success_rate: Math.floor(65 + Math.random() * 30),
-        money_at_risk: moneyAtRisk,
-        money_saved: totalSaved,
-        time_to_immunity: timeToImmunity,
-        patterns_learned: turnNumber
-      }
-    };
-  }, []);
-
-  const runTurn = useCallback(async () => {
-    if (!selectedBattle || !isRunning) return;
-    
-    setIsStreaming(true);
-    const turnNum = currentTurn + 1;
-    
-    // Stream thinking for both teams in parallel
-    await Promise.all([
-      streamThinking("red", turnNum),
-      streamThinking("blue", turnNum)
-    ]);
-
-    // Send turn via WebSocket or simulate
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "run_turn", turn_number: turnNum }));
-    } else {
-      // Simulate locally
-      const turn = simulateTurn(turnNum, selectedBattle?.metrics || {});
-      setSelectedBattle(prev => ({
-        ...prev,
-        turns: [...(prev.turns || []), turn],
-        metrics: turn.metrics
-      }));
-      setCurrentTurn(turnNum);
-      if (turn.blue_team?.blocked) {
-        triggerBlockedEffect(turnNum);
-      }
-    }
-
-    setIsStreaming(false);
-  }, [selectedBattle, isRunning, currentTurn, streamThinking, simulateTurn, triggerBlockedEffect]);
-
-  useEffect(() => {
-    const handleKey = (event) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-      if (event.code === "Space") {
-        event.preventDefault();
-        if (!isRunning) {
-          startBattle();
-        } else {
-          setAutoPlay((prev) => !prev);
-          setDemoMode(false);
-        }
-      }
-      if (event.key === "ArrowRight") {
-        runTurn();
-      }
-      if (event.key === "ArrowLeft" && currentTurn > 0) {
-        jumpToTurn(currentTurn - 1);
-      }
-      if (event.key.toLowerCase() === "d") {
-        setDemoMode((prev) => !prev);
-        setAutoPlay(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [isRunning, currentTurn, startBattle, runTurn, jumpToTurn]);
-
-  // Demo Mode - Auto-runs battle with dramatic pacing
-  const runDemoMode = useCallback(async () => {
-    if (!demoMode || !isRunning) return;
-    
-    await runTurn();
-    
-    // Variable delay for dramatic effect
-    const baseDelay = Math.max(800, 3000 - speed[0] * 20);
-    const variation = Math.random() * 500;
-    
-    demoRef.current = setTimeout(() => {
-      if (demoMode && isRunning) {
-        runDemoMode();
-      }
-    }, baseDelay + variation);
-  }, [demoMode, isRunning, speed, runTurn]);
-
-  useEffect(() => {
-    if (demoMode && isRunning) {
-      runDemoMode();
-    } else if (demoRef.current) {
-      clearTimeout(demoRef.current);
-    }
-    return () => {
-      if (demoRef.current) clearTimeout(demoRef.current);
-    };
-  }, [demoMode, isRunning, runDemoMode]);
-
-  // Regular autoplay
-  useEffect(() => {
-    if (autoPlay && isRunning && !demoMode) {
-      const interval = Math.max(500, 2000 - speed[0] * 15);
-      autoPlayRef.current = setInterval(runTurn, interval);
-    } else {
-      if (autoPlayRef.current) clearInterval(autoPlayRef.current);
-    }
-    return () => {
-      if (autoPlayRef.current) clearInterval(autoPlayRef.current);
-    };
-  }, [autoPlay, isRunning, speed, demoMode, runTurn]);
-
-  const jumpToTurn = useCallback((index) => {
-    setCurrentTurn(index);
-    const turn = selectedBattle?.turns?.[index];
-    if (turn) {
-      setRedThinking(`--- Replaying Turn ${index + 1} ---\n[ACTION] ${turn.red_team?.action || 'N/A'}\n[RESULT] ${turn.red_team?.success ? 'Attack succeeded' : 'Attack blocked'}`);
-      setBlueThinking(`--- Replaying Turn ${index + 1} ---\n[ACTION] ${turn.blue_team?.action || 'N/A'}\n[RESULT] ${turn.blue_team?.blocked ? 'Successfully defended' : 'Defense bypassed'}`);
-    }
-  }, [selectedBattle]);
-
-  const resetBattle = () => {
-    setCurrentTurn(0);
-    setRedThinking("");
-    setBlueThinking("");
-    if (selectedBattle) {
-      setSelectedBattle({ ...selectedBattle, turns: [], metrics: { success_rate: 0, money_at_risk: 0, money_saved: 0, time_to_immunity: 10, patterns_learned: 0 } });
-    }
-    toast.info("Battle reset");
-  };
-
-  const runWowFactor = () => {
-    if (!isRunning) {
-      startBattle();
-    }
-    setDemoMode(true);
-    setAutoPlay(false);
-  };
-
-  const refreshRunEvents = useCallback(async (runId) => {
-    if (!runId) return;
-    try {
-      const response = await runAPI.get(runId);
-      setRunEvents(response?.data?.events || []);
-    } catch (error) {
-      console.error("Failed to load run events:", error);
-    }
-  }, []);
-
-  const syncWorkflow = useCallback(async (runId) => {
-    if (!runId) return;
-    try {
-      const [workflowResponse, statusResponse, approvalsResponse] = await Promise.all([
-        workflowAPI.get(runId),
-        workflowAPI.getStatus(runId),
-        workflowAPI.getApprovals(runId),
-      ]);
-      const data = workflowResponse?.data;
-      if (data) {
+          <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-llm-config">
         setWorkflowState(data.workflow_state || "incident_created");
         setWorkflowStatus(data.workflow_status || "running");
         setWorkflowApprovalRequired(Boolean(data.approval_required));
@@ -1531,7 +1527,9 @@ const WarRoom = () => {
         </div>
       </div>
 
-      <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-lifecycle">
+      <ScrollArea className="flex-1" data-testid="war-room-scroll">
+        <div className="flex flex-col">
+          <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-lifecycle">
         <Card className="border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm">Lifecycle Workflow Controls</CardTitle>
@@ -1709,7 +1707,9 @@ const WarRoom = () => {
         </Card>
       </div>
 
-      <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-llm-config">
+          </div>
+
+          <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-llm-config">
         <Card className="border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm">LLM Provider Setup</CardTitle>
@@ -1834,7 +1834,9 @@ const WarRoom = () => {
         </Card>
       </div>
 
-      <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-orchestrators">
+          </div>
+
+          <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-orchestrators">
         <Card className="border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm">Orchestrator Outputs (by Stage)</CardTitle>
@@ -1882,7 +1884,9 @@ const WarRoom = () => {
         </Card>
       </div>
 
-      <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-registry">
+          </div>
+
+          <div className="border-b border-border bg-card/40 px-6 py-4" data-testid="war-room-registry">
         <Card className="border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm">Registry Snapshot</CardTitle>
@@ -1915,8 +1919,10 @@ const WarRoom = () => {
       </div>
 
       {/* Metric Drilldown */}
-      {activeMetric && (
-        <div className="border-b border-border bg-zinc-900/70 px-6 py-4" data-testid="metric-drilldown">
+          </div>
+
+          {activeMetric && (
+            <div className="border-b border-border bg-zinc-900/70 px-6 py-4" data-testid="metric-drilldown">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold">{activeMetric.label} Drilldown</h3>
@@ -1956,11 +1962,11 @@ const WarRoom = () => {
               </CardContent>
             </Card>
           </div>
-        </div>
-      )}
+            </div>
+          )}
 
-      {/* Scenario Builder */}
-      <div className="border-b border-border bg-card/40 px-6 py-4">
+          {/* Scenario Builder */}
+          <div className="border-b border-border bg-card/40 px-6 py-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold">Scenario Builder</h3>
@@ -2045,10 +2051,10 @@ const WarRoom = () => {
             </CardContent>
           </Card>
         </div>
-      </div>
+        </div>
 
-      {/* Main Battle Area */}
-      <div className="flex-1 flex overflow-hidden">
+        {/* Main Battle Area */}
+        <div className="flex min-h-[420px] overflow-hidden">
         {blockedBursts.map((burstId, idx) => (
           <div key={burstId} className="particle-burst">
             {Array.from({ length: 12 }).map((_, particleIndex) => (
@@ -2127,11 +2133,12 @@ const WarRoom = () => {
             isStreaming={isStreaming} 
           />
         </div>
+
       </div>
 
-      {/* Stage Outputs Detail */}
-      <div className="border-t border-border bg-card/40 px-6 py-4" data-testid="war-room-stage-outputs">
-        <Card className="border-border">
+        {/* Stage Outputs Detail */}
+        <div className="border-t border-border bg-card/40 px-6 py-4" data-testid="war-room-stage-outputs">
+          <Card className="border-border">
           <CardHeader className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="text-sm flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-400" />
@@ -2213,11 +2220,11 @@ const WarRoom = () => {
               </div>
             )}
           </CardContent>
-        </Card>
-      </div>
+          </Card>
+        </div>
 
-      {/* Session Trace Viewer */}
-      <div className="border-t border-border bg-zinc-900/60 px-6 py-4">
+        {/* Session Trace Viewer */}
+        <div className="border-t border-border bg-zinc-900/60 px-6 py-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold">Session Trace Viewer</h3>
@@ -2311,6 +2318,8 @@ const WarRoom = () => {
           </div>
         </div>
       )}
+        </div>
+      </ScrollArea>
 
       {/* Status Bar */}
       <div className="h-10 flex items-center justify-between px-6 border-t border-border bg-card text-sm">

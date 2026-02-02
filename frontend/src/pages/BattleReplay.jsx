@@ -494,8 +494,10 @@ const BattleReplay = () => {
         </div>
       </div>
 
-      {/* Battle Selection */}
-      <div className="grid grid-cols-2 gap-4 p-4 border-b border-border bg-zinc-900/50">
+      <ScrollArea className="flex-1">
+        <div className="space-y-6">
+          {/* Battle Selection */}
+          <div className="grid grid-cols-2 gap-4 p-4 border-b border-border bg-zinc-900/50">
         <div>
           <Label className="text-xs text-muted-foreground mb-2 block">Before (Baseline)</Label>
           <Select

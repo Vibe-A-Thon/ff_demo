@@ -109,7 +109,7 @@ const SettingsConfiguration = () => {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-6">
       <header className="space-y-2">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -163,287 +163,291 @@ const SettingsConfiguration = () => {
           Integrations
         </Button>
       </div>
-      {activeTab === "platform" && (
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <Card className="border-border" data-testid="settings-bank">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-blue-400" />
-              Bank Instance
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="bank-name">Bank Name</Label>
-              <Input
-                id="bank-name"
-                value={bankName}
-                onChange={(event) => setBankName(event.target.value)}
-                data-testid="settings-bank-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bank-region">Primary Region</Label>
-              <Input
-                id="bank-region"
-                value={region}
-                onChange={(event) => setRegion(event.target.value)}
-                data-testid="settings-bank-region"
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">HITL Mode</p>
-                  <p className="text-xs text-muted-foreground">Require human approval at every gate</p>
+      <ScrollArea className="flex-1">
+        <div className="space-y-6 pr-2">
+          {activeTab === "platform" && (
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+            <Card className="border-border" data-testid="settings-bank">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-blue-400" />
+                  Bank Instance
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bank-name">Bank Name</Label>
+                  <Input
+                    id="bank-name"
+                    value={bankName}
+                    onChange={(event) => setBankName(event.target.value)}
+                    data-testid="settings-bank-name"
+                  />
                 </div>
-                <Switch checked={hitlEnabled} onCheckedChange={setHitlEnabled} data-testid="settings-hitl-toggle" />
-              </div>
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">Auto Replay</p>
-                  <p className="text-xs text-muted-foreground">Trigger nightly replay suites</p>
+                <div className="space-y-2">
+                  <Label htmlFor="bank-region">Primary Region</Label>
+                  <Input
+                    id="bank-region"
+                    value={region}
+                    onChange={(event) => setRegion(event.target.value)}
+                    data-testid="settings-bank-region"
+                  />
                 </div>
-                <Switch checked={autoReplay} onCheckedChange={setAutoReplay} data-testid="settings-replay-toggle" />
-              </div>
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">Incident Paging</p>
-                  <p className="text-xs text-muted-foreground">Page on-call for critical incidents</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">HITL Mode</p>
+                      <p className="text-xs text-muted-foreground">Require human approval at every gate</p>
+                    </div>
+                    <Switch checked={hitlEnabled} onCheckedChange={setHitlEnabled} data-testid="settings-hitl-toggle" />
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">Auto Replay</p>
+                      <p className="text-xs text-muted-foreground">Trigger nightly replay suites</p>
+                    </div>
+                    <Switch checked={autoReplay} onCheckedChange={setAutoReplay} data-testid="settings-replay-toggle" />
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">Incident Paging</p>
+                      <p className="text-xs text-muted-foreground">Page on-call for critical incidents</p>
+                    </div>
+                    <Switch checked={incidentPaging} onCheckedChange={setIncidentPaging} data-testid="settings-paging-toggle" />
+                  </div>
                 </div>
-                <Switch checked={incidentPaging} onCheckedChange={setIncidentPaging} data-testid="settings-paging-toggle" />
+              </CardContent>
+            </Card>
+
+            <Card className="border-border" data-testid="settings-keys">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-yellow-400" />
+                  API Key Vault
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Key</TableHead>
+                      <TableHead>Last Rotated</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {apiKeys.map((key) => (
+                      <TableRow key={key.id}>
+                        <TableCell className="font-medium">{key.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{key.lastRotated}</TableCell>
+                        <TableCell>
+                          <Badge className={`border ${keyStatusStyles[key.status]}`} data-testid={`settings-key-${key.id}`}>
+                            {key.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" data-testid={`settings-rotate-${key.id}`}>
+                            Rotate
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+          )}
+
+          {activeTab === "rag" && (
+          <Card className="border-border" data-testid="settings-rag">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-purple-400" />
+                RAG Evaluation & Cache Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="rag-faith-drop">Faithfulness Drop Threshold</Label>
+                <Input
+                  id="rag-faith-drop"
+                  value={faithfulnessDrop}
+                  onChange={(event) => setFaithfulnessDrop(event.target.value)}
+                  data-testid="settings-rag-faith-drop"
+                />
+                <p className="text-xs text-muted-foreground">Used for regression alerts.</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <Label htmlFor="rag-rel-drop">Relevancy Drop Threshold</Label>
+                <Input
+                  id="rag-rel-drop"
+                  value={relevancyDrop}
+                  onChange={(event) => setRelevancyDrop(event.target.value)}
+                  data-testid="settings-rag-rel-drop"
+                />
+                <p className="text-xs text-muted-foreground">Used for regression alerts.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rag-faith-warn">Faithfulness Warning Floor</Label>
+                <Input
+                  id="rag-faith-warn"
+                  value={faithfulnessWarn}
+                  onChange={(event) => setFaithfulnessWarn(event.target.value)}
+                  data-testid="settings-rag-faith-warn"
+                />
+                <p className="text-xs text-muted-foreground">Warn when faithfulness drops below this.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rag-rel-warn">Relevancy Warning Floor</Label>
+                <Input
+                  id="rag-rel-warn"
+                  value={relevancyWarn}
+                  onChange={(event) => setRelevancyWarn(event.target.value)}
+                  data-testid="settings-rag-rel-warn"
+                />
+                <p className="text-xs text-muted-foreground">Warn when relevancy drops below this.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rag-hit-warn">Cache Hit Rate Warn</Label>
+                <Input
+                  id="rag-hit-warn"
+                  value={hitRateWarn}
+                  onChange={(event) => setHitRateWarn(event.target.value)}
+                  data-testid="settings-rag-hit-warn"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rag-hit-crit">Cache Hit Rate Critical</Label>
+                <Input
+                  id="rag-hit-crit"
+                  value={hitRateCrit}
+                  onChange={(event) => setHitRateCrit(event.target.value)}
+                  data-testid="settings-rag-hit-crit"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rag-cache-dir">Shared Model Cache</Label>
+                <Input
+                  id="rag-cache-dir"
+                  value={cacheDir}
+                  onChange={(event) => setCacheDir(event.target.value)}
+                  data-testid="settings-rag-cache-dir"
+                />
+                <p className="text-xs text-muted-foreground">Points to shared storage path.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rag-cache-ttl">CAG Cache TTL (seconds)</Label>
+                <Input
+                  id="rag-cache-ttl"
+                  value={cacheTtl}
+                  onChange={(event) => setCacheTtl(event.target.value)}
+                  data-testid="settings-rag-cache-ttl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rag-cache-max">CAG Cache Max Items</Label>
+                <Input
+                  id="rag-cache-max"
+                  value={cacheMaxItems}
+                  onChange={(event) => setCacheMaxItems(event.target.value)}
+                  data-testid="settings-rag-cache-max"
+                />
+              </div>
+            </CardContent>
+          </Card>
+          )}
 
-        <Card className="border-border" data-testid="settings-keys">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-yellow-400" />
-              API Key Vault
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Key</TableHead>
-                  <TableHead>Last Rotated</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {apiKeys.map((key) => (
-                  <TableRow key={key.id}>
-                    <TableCell className="font-medium">{key.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{key.lastRotated}</TableCell>
-                    <TableCell>
-                      <Badge className={`border ${keyStatusStyles[key.status]}`} data-testid={`settings-key-${key.id}`}>
-                        {key.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="outline" size="sm" data-testid={`settings-rotate-${key.id}`}>
-                        Rotate
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
-      )}
+          {activeTab === "llm" && (
+          <Card className="border-border" data-testid="settings-llm">
+            <CardHeader>
+              <CardTitle className="text-lg">LLM Provider Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="llm-provider">Provider</Label>
+                <Input
+                  id="llm-provider"
+                  value={llmProvider}
+                  onChange={(event) => setLlmProvider(event.target.value)}
+                  data-testid="settings-llm-provider"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="llm-model">Model</Label>
+                <Input
+                  id="llm-model"
+                  value={llmModel}
+                  onChange={(event) => setLlmModel(event.target.value)}
+                  data-testid="settings-llm-model"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="llm-version">Version Pin</Label>
+                <Input
+                  id="llm-version"
+                  value={llmVersion}
+                  onChange={(event) => setLlmVersion(event.target.value)}
+                  data-testid="settings-llm-version"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="llm-api-key">API Key</Label>
+                <Input
+                  id="llm-api-key"
+                  type="password"
+                  value={llmApiKey}
+                  onChange={(event) => setLlmApiKey(event.target.value)}
+                  data-testid="settings-llm-api-key"
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="llm-base-url">Base URL</Label>
+                <Input
+                  id="llm-base-url"
+                  value={llmBaseUrl}
+                  onChange={(event) => setLlmBaseUrl(event.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                  data-testid="settings-llm-base-url"
+                />
+              </div>
+            </CardContent>
+          </Card>
+          )}
 
-      {activeTab === "rag" && (
-      <Card className="border-border" data-testid="settings-rag">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-purple-400" />
-            RAG Evaluation & Cache Settings
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="rag-faith-drop">Faithfulness Drop Threshold</Label>
-            <Input
-              id="rag-faith-drop"
-              value={faithfulnessDrop}
-              onChange={(event) => setFaithfulnessDrop(event.target.value)}
-              data-testid="settings-rag-faith-drop"
-            />
-            <p className="text-xs text-muted-foreground">Used for regression alerts.</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rag-rel-drop">Relevancy Drop Threshold</Label>
-            <Input
-              id="rag-rel-drop"
-              value={relevancyDrop}
-              onChange={(event) => setRelevancyDrop(event.target.value)}
-              data-testid="settings-rag-rel-drop"
-            />
-            <p className="text-xs text-muted-foreground">Used for regression alerts.</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rag-faith-warn">Faithfulness Warning Floor</Label>
-            <Input
-              id="rag-faith-warn"
-              value={faithfulnessWarn}
-              onChange={(event) => setFaithfulnessWarn(event.target.value)}
-              data-testid="settings-rag-faith-warn"
-            />
-            <p className="text-xs text-muted-foreground">Warn when faithfulness drops below this.</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rag-rel-warn">Relevancy Warning Floor</Label>
-            <Input
-              id="rag-rel-warn"
-              value={relevancyWarn}
-              onChange={(event) => setRelevancyWarn(event.target.value)}
-              data-testid="settings-rag-rel-warn"
-            />
-            <p className="text-xs text-muted-foreground">Warn when relevancy drops below this.</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rag-hit-warn">Cache Hit Rate Warn</Label>
-            <Input
-              id="rag-hit-warn"
-              value={hitRateWarn}
-              onChange={(event) => setHitRateWarn(event.target.value)}
-              data-testid="settings-rag-hit-warn"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rag-hit-crit">Cache Hit Rate Critical</Label>
-            <Input
-              id="rag-hit-crit"
-              value={hitRateCrit}
-              onChange={(event) => setHitRateCrit(event.target.value)}
-              data-testid="settings-rag-hit-crit"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rag-cache-dir">Shared Model Cache</Label>
-            <Input
-              id="rag-cache-dir"
-              value={cacheDir}
-              onChange={(event) => setCacheDir(event.target.value)}
-              data-testid="settings-rag-cache-dir"
-            />
-            <p className="text-xs text-muted-foreground">Points to shared storage path.</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rag-cache-ttl">CAG Cache TTL (seconds)</Label>
-            <Input
-              id="rag-cache-ttl"
-              value={cacheTtl}
-              onChange={(event) => setCacheTtl(event.target.value)}
-              data-testid="settings-rag-cache-ttl"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rag-cache-max">CAG Cache Max Items</Label>
-            <Input
-              id="rag-cache-max"
-              value={cacheMaxItems}
-              onChange={(event) => setCacheMaxItems(event.target.value)}
-              data-testid="settings-rag-cache-max"
-            />
-          </div>
-        </CardContent>
-      </Card>
-      )}
-
-      {activeTab === "llm" && (
-      <Card className="border-border" data-testid="settings-llm">
-        <CardHeader>
-          <CardTitle className="text-lg">LLM Provider Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="llm-provider">Provider</Label>
-            <Input
-              id="llm-provider"
-              value={llmProvider}
-              onChange={(event) => setLlmProvider(event.target.value)}
-              data-testid="settings-llm-provider"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="llm-model">Model</Label>
-            <Input
-              id="llm-model"
-              value={llmModel}
-              onChange={(event) => setLlmModel(event.target.value)}
-              data-testid="settings-llm-model"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="llm-version">Version Pin</Label>
-            <Input
-              id="llm-version"
-              value={llmVersion}
-              onChange={(event) => setLlmVersion(event.target.value)}
-              data-testid="settings-llm-version"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="llm-api-key">API Key</Label>
-            <Input
-              id="llm-api-key"
-              type="password"
-              value={llmApiKey}
-              onChange={(event) => setLlmApiKey(event.target.value)}
-              data-testid="settings-llm-api-key"
-            />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="llm-base-url">Base URL</Label>
-            <Input
-              id="llm-base-url"
-              value={llmBaseUrl}
-              onChange={(event) => setLlmBaseUrl(event.target.value)}
-              placeholder="https://api.openai.com/v1"
-              data-testid="settings-llm-base-url"
-            />
-          </div>
-        </CardContent>
-      </Card>
-      )}
-
-      {activeTab === "integrations" && (
-      <Card className="border-border" data-testid="settings-integrations">
-        <CardHeader>
-          <CardTitle className="text-lg">Integrations</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-md border border-border p-4 space-y-2">
-            <p className="text-sm font-medium">Streaming Gateway</p>
-            <p className="text-xs text-muted-foreground">ws://stream.ff.local</p>
-            <Button variant="outline" size="sm" data-testid="settings-streaming-config">
-              Configure
-            </Button>
-          </div>
-          <div className="rounded-md border border-border p-4 space-y-2">
-            <p className="text-sm font-medium">Evidence Storage</p>
-            <p className="text-xs text-muted-foreground">S3 • encrypted</p>
-            <Button variant="outline" size="sm" data-testid="settings-storage-config">
-              Configure
-            </Button>
-          </div>
-          <div className="rounded-md border border-border p-4 space-y-2">
-            <p className="text-sm font-medium">Notification Hub</p>
-            <p className="text-xs text-muted-foreground">PagerDuty • 2 policies</p>
-            <Button variant="outline" size="sm" data-testid="settings-notifications-config">
-              Configure
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-      )}
+          {activeTab === "integrations" && (
+          <Card className="border-border" data-testid="settings-integrations">
+            <CardHeader>
+              <CardTitle className="text-lg">Integrations</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-md border border-border p-4 space-y-2">
+                <p className="text-sm font-medium">Streaming Gateway</p>
+                <p className="text-xs text-muted-foreground">ws://stream.ff.local</p>
+                <Button variant="outline" size="sm" data-testid="settings-streaming-config">
+                  Configure
+                </Button>
+              </div>
+              <div className="rounded-md border border-border p-4 space-y-2">
+                <p className="text-sm font-medium">Evidence Storage</p>
+                <p className="text-xs text-muted-foreground">S3 • encrypted</p>
+                <Button variant="outline" size="sm" data-testid="settings-storage-config">
+                  Configure
+                </Button>
+              </div>
+              <div className="rounded-md border border-border p-4 space-y-2">
+                <p className="text-sm font-medium">Notification Hub</p>
+                <p className="text-xs text-muted-foreground">PagerDuty • 2 policies</p>
+                <Button variant="outline" size="sm" data-testid="settings-notifications-config">
+                  Configure
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 };

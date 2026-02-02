@@ -132,7 +132,7 @@ const Neo4jSyncDashboard = () => {
   }, [health, latestSync]);
 
   return (
-    <div className="space-y-6" data-testid="neo4j-sync-page">
+    <div className="flex h-full flex-col gap-6" data-testid="neo4j-sync-page">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Neo4j Sync Health</h1>
@@ -167,126 +167,129 @@ const Neo4jSyncDashboard = () => {
           </Button>
         </div>
       </div>
+      <ScrollArea className="flex-1">
+        <div className="space-y-6 pr-2">
+          <div className="grid gap-4 lg:grid-cols-3">
+            {statusCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <Card key={card.title} className="border-border" data-testid={`neo4j-sync-card-${card.title.toLowerCase().replace(/\s/g, "-")}`}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-muted-foreground flex items-center justify-between">
+                      <span>{card.title}</span>
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-2xl font-semibold font-mono text-foreground">
+                        {card.value}
+                      </span>
+                      <StatusBadge status={card.status} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{card.detail}</p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {statusCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Card key={card.title} className="border-border" data-testid={`neo4j-sync-card-${card.title.toLowerCase().replace(/\s/g, "-")}`}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground flex items-center justify-between">
-                  <span>{card.title}</span>
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                </CardTitle>
+          <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+            <Card className="border-border" data-testid="neo4j-sync-history">
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Sync History</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-semibold font-mono text-foreground">
-                    {card.value}
-                  </span>
-                  <StatusBadge status={card.status} />
-                </div>
-                <p className="text-xs text-muted-foreground">{card.detail}</p>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[360px]">
+                  <div className="divide-y divide-border">
+                    {loading && (
+                      <div className="p-4 text-sm text-muted-foreground">Loading sync telemetry...</div>
+                    )}
+                    {!loading && syncHistory.length === 0 && (
+                      <div className="p-4 text-sm text-muted-foreground">No sync records yet.</div>
+                    )}
+                    {syncHistory.map((entry, index) => (
+                      <div
+                        key={`${entry.timestamp || "row"}-${index}`}
+                        className="p-4 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          {entry.status === "ok" ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-400" />
+                          ) : entry.status === "skipped" || entry.status === "unavailable" ? (
+                            <AlertTriangle className="h-5 w-5 text-yellow-400" />
+                          ) : (
+                            <AlertTriangle className="h-5 w-5 text-red-400" />
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-foreground">{entry.status || "unknown"}</span>
+                              <StatusBadge status={entry.status} />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {entry.reason || "Sync completed"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-mono">
+                          <span>Nodes: {entry.nodes ?? 0}</span>
+                          <span>Edges: {entry.relationships ?? 0}</span>
+                          <span>{formatTimestamp(entry.timestamp)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               </CardContent>
             </Card>
-          );
-        })}
-      </div>
 
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <Card className="border-border" data-testid="neo4j-sync-history">
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Sync History</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[360px]">
-              <div className="divide-y divide-border">
-                {loading && (
-                  <div className="p-4 text-sm text-muted-foreground">Loading sync telemetry...</div>
-                )}
-                {!loading && syncHistory.length === 0 && (
-                  <div className="p-4 text-sm text-muted-foreground">No sync records yet.</div>
-                )}
-                {syncHistory.map((entry, index) => (
-                  <div
-                    key={`${entry.timestamp || "row"}-${index}`}
-                    className="p-4 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      {entry.status === "ok" ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-400" />
-                      ) : entry.status === "skipped" || entry.status === "unavailable" ? (
-                        <AlertTriangle className="h-5 w-5 text-yellow-400" />
-                      ) : (
-                        <AlertTriangle className="h-5 w-5 text-red-400" />
-                      )}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-foreground">{entry.status || "unknown"}</span>
-                          <StatusBadge status={entry.status} />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {entry.reason || "Sync completed"}
-                        </p>
-                      </div>
+            <Card className="border-border" data-testid="neo4j-sync-scheduler">
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Scheduler Status</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-md border border-border bg-background/60 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Latest run</p>
+                      <p className="text-lg font-semibold font-mono text-foreground">
+                        {timeAgo(latestSync?.timestamp)}
+                      </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-mono">
-                      <span>Nodes: {entry.nodes ?? 0}</span>
-                      <span>Edges: {entry.relationships ?? 0}</span>
-                      <span>{formatTimestamp(entry.timestamp)}</span>
-                    </div>
+                    <Timer className="h-5 w-5 text-muted-foreground" />
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border" data-testid="neo4j-sync-scheduler">
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Scheduler Status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-border bg-background/60 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">Latest run</p>
-                  <p className="text-lg font-semibold font-mono text-foreground">
-                    {timeAgo(latestSync?.timestamp)}
-                  </p>
                 </div>
-                <Timer className="h-5 w-5 text-muted-foreground" />
-              </div>
-            </div>
 
-            <div className="rounded-md border border-border bg-background/60 p-4 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Health signal</span>
-                <StatusBadge status={health?.status} />
-              </div>
-              <Separator className="bg-border" />
-              <div className="space-y-2 text-xs text-muted-foreground">
-                <p>Reason: {health?.reason || "—"}</p>
-                <p>Last sync: {formatTimestamp(latestSync?.timestamp)}</p>
-                <p>Nodes synced: {latestSync?.nodes ?? 0}</p>
-                <p>Relationships: {latestSync?.relationships ?? 0}</p>
-              </div>
-            </div>
+                <div className="rounded-md border border-border bg-background/60 p-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Health signal</span>
+                    <StatusBadge status={health?.status} />
+                  </div>
+                  <Separator className="bg-border" />
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    <p>Reason: {health?.reason || "—"}</p>
+                    <p>Last sync: {formatTimestamp(latestSync?.timestamp)}</p>
+                    <p>Nodes synced: {latestSync?.nodes ?? 0}</p>
+                    <p>Relationships: {latestSync?.relationships ?? 0}</p>
+                  </div>
+                </div>
 
-            <div className="rounded-md border border-border bg-background/60 p-4 space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Database className="h-4 w-4" />
-                <span>Operational Notes</span>
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>• Background loop runs from backend startup if enabled.</li>
-                <li>• Manual sync records are logged with status + counts.</li>
-                <li>• Health probes verify Neo4j connectivity.</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                <div className="rounded-md border border-border bg-background/60 p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Database className="h-4 w-4" />
+                    <span>Operational Notes</span>
+                  </div>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• Background loop runs from backend startup if enabled.</li>
+                    <li>• Manual sync records are logged with status + counts.</li>
+                    <li>• Health probes verify Neo4j connectivity.</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

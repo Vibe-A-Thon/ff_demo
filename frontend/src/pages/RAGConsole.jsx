@@ -161,7 +161,7 @@ const RAGConsole = () => {
     }));
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-6">
       <header className="space-y-2">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -186,78 +186,79 @@ const RAGConsole = () => {
           Query the synthetic knowledge base, inspect hits, and review context windows used by the RAG pipeline.
         </p>
       </header>
+      <ScrollArea className="flex-1">
+        <div className="space-y-6 pr-2">
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <Card className="border-border" data-testid="rag-query">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-purple-400" />
+                  Retrieval Query
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="rag-query-input">Question</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="rag-query-input"
+                      className="pl-9"
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Ask about fraud patterns, rules, or taxonomy signals"
+                      data-testid="rag-query-input"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Collection Scope</Label>
+                    <Select value={selectedCollection} onValueChange={setSelectedCollection}>
+                      <SelectTrigger data-testid="rag-collection">
+                        <SelectValue placeholder="All collections" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All collections</SelectItem>
+                        {collections.map((collection) => (
+                          <SelectItem key={collection} value={collection}>
+                            {collection}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Top-K</Label>
+                    <Slider
+                      value={topK}
+                      onValueChange={setTopK}
+                      max={10}
+                      min={1}
+                      step={1}
+                      data-testid="rag-topk"
+                    />
+                    <div className="text-xs text-muted-foreground">{topK[0]} hits</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  <div className="flex items-center gap-2">
+                    <Switch checked={hybrid} onCheckedChange={setHybrid} data-testid="rag-hybrid" />
+                    <Label>Hybrid Retrieval</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={includeGraph} onCheckedChange={setIncludeGraph} data-testid="rag-graph" />
+                    <Label>Include Graph Context</Label>
+                  </div>
+                </div>
+                <Button onClick={runQuery} disabled={running} data-testid="rag-run">
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {running ? "Running..." : "Run Query"}
+                </Button>
+              </CardContent>
+            </Card>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <Card className="border-border" data-testid="rag-query">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Brain className="h-4 w-4 text-purple-400" />
-              Retrieval Query
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="rag-query-input">Question</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="rag-query-input"
-                  className="pl-9"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Ask about fraud patterns, rules, or taxonomy signals"
-                  data-testid="rag-query-input"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Collection Scope</Label>
-                <Select value={selectedCollection} onValueChange={setSelectedCollection}>
-                  <SelectTrigger data-testid="rag-collection">
-                    <SelectValue placeholder="All collections" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All collections</SelectItem>
-                    {collections.map((collection) => (
-                      <SelectItem key={collection} value={collection}>
-                        {collection}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Top-K</Label>
-                <Slider
-                  value={topK}
-                  onValueChange={setTopK}
-                  max={10}
-                  min={1}
-                  step={1}
-                  data-testid="rag-topk"
-                />
-                <div className="text-xs text-muted-foreground">{topK[0]} hits</div>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <Switch checked={hybrid} onCheckedChange={setHybrid} data-testid="rag-hybrid" />
-                <Label>Hybrid Retrieval</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={includeGraph} onCheckedChange={setIncludeGraph} data-testid="rag-graph" />
-                <Label>Include Graph Context</Label>
-              </div>
-            </div>
-            <Button onClick={runQuery} disabled={running} data-testid="rag-run">
-              <Sparkles className="mr-2 h-4 w-4" />
-              {running ? "Running..." : "Run Query"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border" data-testid="rag-docs">
+            <Card className="border-border" data-testid="rag-docs">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Database className="h-4 w-4 text-blue-400" />
@@ -456,6 +457,8 @@ const RAGConsole = () => {
           </CardContent>
         </Card>
       </div>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

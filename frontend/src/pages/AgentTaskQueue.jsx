@@ -203,7 +203,7 @@ const AgentTaskQueue = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-6">
       <header className="space-y-2">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -218,67 +218,22 @@ const AgentTaskQueue = () => {
           Track cross-team tasks, coordination requests, and governance responses in one place.
         </p>
       </header>
-
-      <Card className="border-border" data-testid="agent-queue-filters">
-        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
-          <Input
-            placeholder="Search run id, task type, or artifact"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            data-testid="agent-queue-search"
-          />
-          <Select value={teamFilter} onValueChange={setTeamFilter}>
-            <SelectTrigger className="w-full md:w-[200px]" data-testid="agent-queue-team">
-              <SelectValue placeholder="Team" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Teams</SelectItem>
-              {teams.map((team) => (
-                <SelectItem key={team.team_id} value={team.team_id}>
-                  {team.internal_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-[200px]" data-testid="agent-queue-status">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="running">Running</SelectItem>
-              <SelectItem value="success">Success</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-              <SelectItem value="blocked">Blocked</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="fulfilled">Fulfilled</SelectItem>
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2" data-testid="agent-routing-panel">
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Shuffle className="h-4 w-4 text-blue-400" />
-              Route Tasks (Single Team)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-2">
+      <ScrollArea className="flex-1">
+        <div className="space-y-6 pr-2">
+          <Card className="border-border" data-testid="agent-queue-filters">
+            <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
               <Input
-                placeholder="Run ID"
-                value={routeRunId}
-                onChange={(event) => setRouteRunId(event.target.value)}
-                data-testid="route-run-id"
+                placeholder="Search run id, task type, or artifact"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                data-testid="agent-queue-search"
               />
-              <Select value={routeTeam} onValueChange={setRouteTeam}>
-                <SelectTrigger data-testid="route-team">
+              <Select value={teamFilter} onValueChange={setTeamFilter}>
+                <SelectTrigger className="w-full md:w-[200px]" data-testid="agent-queue-team">
                   <SelectValue placeholder="Team" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">All Teams</SelectItem>
                   {teams.map((team) => (
                     <SelectItem key={team.team_id} value={team.team_id}>
                       {team.internal_name}
@@ -286,85 +241,131 @@ const AgentTaskQueue = () => {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <Input
-              placeholder="Objective"
-              value={routeObjective}
-              onChange={(event) => setRouteObjective(event.target.value)}
-              data-testid="route-objective"
-            />
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Input
-                placeholder="Max agents"
-                type="number"
-                min="1"
-                value={routeMaxAgents}
-                onChange={(event) => setRouteMaxAgents(event.target.value)}
-                data-testid="route-max-agents"
-              />
-              <Select value={routeAutoExecute ? "auto" : "queue"} onValueChange={(value) => setRouteAutoExecute(value === "auto")}>
-                <SelectTrigger data-testid="route-execution">
-                  <SelectValue placeholder="Execution" />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full md:w-[200px]" data-testid="agent-queue-status">
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="auto">Auto-execute</SelectItem>
-                  <SelectItem value="queue">Queue only</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="running">Running</SelectItem>
+                  <SelectItem value="success">Success</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="fulfilled">Fulfilled</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <Button className="w-full" onClick={submitRoute} data-testid="route-submit">
-              <Share2 className="mr-2 h-4 w-4" />
-              Route Tasks
-            </Button>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Workflow className="h-4 w-4 text-purple-400" />
-              Orchestrate Across Teams
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Input
-                placeholder="Run ID"
-                value={orchestrateRunId}
-                onChange={(event) => setOrchestrateRunId(event.target.value)}
-                data-testid="orchestrate-run-id"
-              />
-              <Input
-                placeholder="Teams (comma-separated)"
-                value={orchestrateTeams}
-                onChange={(event) => setOrchestrateTeams(event.target.value)}
-                data-testid="orchestrate-teams"
-              />
-            </div>
-            <Input
-              placeholder="Objective"
-              value={orchestrateObjective}
-              onChange={(event) => setOrchestrateObjective(event.target.value)}
-              data-testid="orchestrate-objective"
-            />
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Input
-                placeholder="Max agents/team"
-                type="number"
-                min="1"
-                value={orchestrateMaxAgents}
-                onChange={(event) => setOrchestrateMaxAgents(event.target.value)}
-                data-testid="orchestrate-max-agents"
-              />
-              <Select value={orchestrateAutoExecute ? "auto" : "queue"} onValueChange={(value) => setOrchestrateAutoExecute(value === "auto")}>
-                <SelectTrigger data-testid="orchestrate-execution">
-                  <SelectValue placeholder="Execution" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">Auto-execute</SelectItem>
-                  <SelectItem value="queue">Queue only</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="grid gap-4 lg:grid-cols-2" data-testid="agent-routing-panel">
+            <Card className="border-border">
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Shuffle className="h-4 w-4 text-blue-400" />
+                  Route Tasks (Single Team)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    placeholder="Run ID"
+                    value={routeRunId}
+                    onChange={(event) => setRouteRunId(event.target.value)}
+                    data-testid="route-run-id"
+                  />
+                  <Select value={routeTeam} onValueChange={setRouteTeam}>
+                    <SelectTrigger data-testid="route-team">
+                      <SelectValue placeholder="Team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((team) => (
+                        <SelectItem key={team.team_id} value={team.team_id}>
+                          {team.internal_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input
+                  placeholder="Objective"
+                  value={routeObjective}
+                  onChange={(event) => setRouteObjective(event.target.value)}
+                  data-testid="route-objective"
+                />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    placeholder="Max agents"
+                    type="number"
+                    min="1"
+                    value={routeMaxAgents}
+                    onChange={(event) => setRouteMaxAgents(event.target.value)}
+                    data-testid="route-max-agents"
+                  />
+                  <Select value={routeAutoExecute ? "auto" : "queue"} onValueChange={(value) => setRouteAutoExecute(value === "auto")}>
+                    <SelectTrigger data-testid="route-execution">
+                      <SelectValue placeholder="Execution" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto-execute</SelectItem>
+                      <SelectItem value="queue">Queue only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button className="w-full" onClick={submitRoute} data-testid="route-submit">
+                  <Share2 className="mr-2 h-4 w-4" />
+                  Route Tasks
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border">
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Workflow className="h-4 w-4 text-purple-400" />
+                  Orchestrate Across Teams
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    placeholder="Run ID"
+                    value={orchestrateRunId}
+                    onChange={(event) => setOrchestrateRunId(event.target.value)}
+                    data-testid="orchestrate-run-id"
+                  />
+                  <Input
+                    placeholder="Teams (comma-separated)"
+                    value={orchestrateTeams}
+                    onChange={(event) => setOrchestrateTeams(event.target.value)}
+                    data-testid="orchestrate-teams"
+                  />
+                </div>
+                <Input
+                  placeholder="Objective"
+                  value={orchestrateObjective}
+                  onChange={(event) => setOrchestrateObjective(event.target.value)}
+                  data-testid="orchestrate-objective"
+                />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    placeholder="Max agents/team"
+                    type="number"
+                    min="1"
+                    value={orchestrateMaxAgents}
+                    onChange={(event) => setOrchestrateMaxAgents(event.target.value)}
+                    data-testid="orchestrate-max-agents"
+                  />
+                  <Select value={orchestrateAutoExecute ? "auto" : "queue"} onValueChange={(value) => setOrchestrateAutoExecute(value === "auto")}>
+                    <SelectTrigger data-testid="orchestrate-execution">
+                      <SelectValue placeholder="Execution" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto-execute</SelectItem>
+                      <SelectItem value="queue">Queue only</SelectItem>
+                    </SelectContent>
+                  </Select>
             </div>
             <Button className="w-full" variant="secondary" onClick={submitOrchestration} data-testid="orchestrate-submit">
               <Workflow className="mr-2 h-4 w-4" />
@@ -570,6 +571,8 @@ const AgentTaskQueue = () => {
           </Card>
         </TabsContent>
       </Tabs>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

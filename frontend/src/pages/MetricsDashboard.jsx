@@ -264,9 +264,8 @@ const MetricsDashboard = () => {
   };
 
   return (
-    <ScrollArea className="h-full" data-testid="metrics-dashboard">
-      <div className="p-6 space-y-6">
-        {/* Header */}
+    <div className="flex h-full flex-col" data-testid="metrics-dashboard">
+      <div className="p-6 pb-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Metrics Dashboard</h1>
@@ -305,8 +304,11 @@ const MetricsDashboard = () => {
             </Button>
           </div>
         </div>
+      </div>
 
-        <JudgeModeBanner active={judgeMode} />
+      <ScrollArea className="flex-1">
+        <div className="px-6 pb-6 space-y-6">
+          <JudgeModeBanner active={judgeMode} />
 
         {/* KPI Cards */}
         {loading ? (
@@ -869,6 +871,7 @@ const MetricsDashboard = () => {
         )}
       </div>
     </ScrollArea>
+  </div>
   );
 };
 

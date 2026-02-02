@@ -153,7 +153,7 @@ const DashboardHome = () => {
   const visibleActivity = filterByRole(recentActivity);
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-6">
       <header className="space-y-2">
         <div className="flex items-center justify-between">
           <div>
@@ -169,163 +169,165 @@ const DashboardHome = () => {
           critical workflows.
         </p>
       </header>
+      <ScrollArea className="flex-1">
+        <div className="space-y-6 pr-2">
+          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {visibleKpis.map((kpi) => (
+              <Link
+                key={kpi.label}
+                to={kpi.path}
+                className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                data-testid={`dashboard-kpi-${kpi.label.toLowerCase().replace(/\s/g, '-')}`}
+              >
+                <Card className="border-border transition-colors hover:border-primary/50 hover:bg-muted/20">
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">{kpi.label}</p>
+                        <p className={`text-2xl font-semibold mt-2 ${kpi.color}`}>{kpi.value}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{kpi.change} vs last week</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-muted/20">
+                        <kpi.icon className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {visibleKpis.map((kpi) => (
-          <Link
-            key={kpi.label}
-            to={kpi.path}
-            className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-            data-testid={`dashboard-kpi-${kpi.label.toLowerCase().replace(/\s/g, '-')}`}
-          >
-            <Card className="border-border transition-colors hover:border-primary/50 hover:bg-muted/20">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{kpi.label}</p>
-                    <p className={`text-2xl font-semibold mt-2 ${kpi.color}`}>{kpi.value}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{kpi.change} vs last week</p>
+          <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <Card className="border-border" data-testid="dashboard-rag-status">
+              <CardHeader>
+                <CardTitle className="text-lg">RAG Quality Snapshot</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {ragLoading && <p className="text-sm text-muted-foreground">Loading RAG status...</p>}
+                {!ragLoading && !ragSnapshot && (
+                  <p className="text-sm text-muted-foreground">RAG telemetry not available.</p>
+                )}
+                {ragSnapshot && (
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-md border border-border p-3">
+                      <p className="text-xs text-muted-foreground">Last Eval</p>
+                      <p className="text-sm font-mono text-foreground">
+                        {ragSnapshot.latest?.created_at || "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-border p-3">
+                      <p className="text-xs text-muted-foreground">Cache Hit Rate</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-mono text-foreground">
+                          {ragSnapshot.telemetry ? `${(ragSnapshot.telemetry.hit_rate * 100).toFixed(1)}%` : "—"}
+                        </p>
+                        {ragSnapshot.telemetry && (
+                          <Badge className={hitRateBadge()}> {hitRateStatus().toUpperCase()} </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-border p-3">
+                      <p className="text-xs text-muted-foreground">Regression Alerts</p>
+                      <p className="text-sm font-mono text-foreground">
+                        {ragSnapshot.alerts?.length ?? 0}
+                      </p>
+                    </div>
                   </div>
-                  <div className="p-2 rounded-lg bg-muted/20">
-                    <kpi.icon className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                </div>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/rag-evaluation")}
+                  data-testid="dashboard-rag-open"
+                >
+                  Review RAG Evaluation
+                </Button>
               </CardContent>
             </Card>
-          </Link>
-        ))}
-      </section>
+          </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Card className="border-border" data-testid="dashboard-rag-status">
-          <CardHeader>
-            <CardTitle className="text-lg">RAG Quality Snapshot</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {ragLoading && <p className="text-sm text-muted-foreground">Loading RAG status...</p>}
-            {!ragLoading && !ragSnapshot && (
-              <p className="text-sm text-muted-foreground">RAG telemetry not available.</p>
-            )}
-            {ragSnapshot && (
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-md border border-border p-3">
-                  <p className="text-xs text-muted-foreground">Last Eval</p>
-                  <p className="text-sm font-mono text-foreground">
-                    {ragSnapshot.latest?.created_at || "—"}
-                  </p>
-                </div>
-                <div className="rounded-md border border-border p-3">
-                  <p className="text-xs text-muted-foreground">Cache Hit Rate</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-mono text-foreground">
-                      {ragSnapshot.telemetry ? `${(ragSnapshot.telemetry.hit_rate * 100).toFixed(1)}%` : "—"}
-                    </p>
-                    {ragSnapshot.telemetry && (
-                      <Badge className={hitRateBadge()}> {hitRateStatus().toUpperCase()} </Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-md border border-border p-3">
-                  <p className="text-xs text-muted-foreground">Regression Alerts</p>
-                  <p className="text-sm font-mono text-foreground">
-                    {ragSnapshot.alerts?.length ?? 0}
-                  </p>
-                </div>
-              </div>
-            )}
-            <Button
-              variant="outline"
-              onClick={() => navigate("/rag-evaluation")}
-              data-testid="dashboard-rag-open"
-            >
-              Review RAG Evaluation
-            </Button>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Card className="border-border" data-testid="dashboard-quick-actions">
-          <CardHeader>
-            <CardTitle className="text-lg">Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            {visibleActions.map((action) => (
-              <Button
-                key={action.id}
-                variant="outline"
-                className={`justify-start gap-3 border ${actionStyles[action.intent]}`}
-                onClick={() => action.path && navigate(action.path)}
-                data-testid={`dashboard-action-${action.id}`}
-              >
-                <action.icon className="h-4 w-4" />
-                {action.label}
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
-        <Card className="border-border" data-testid="dashboard-registry">
-          <CardHeader>
-            <CardTitle className="text-lg">Registry Snapshot</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" className="border-border">
-                {registrySnapshot?.teams?.length || 0} teams
-              </Badge>
-              <Badge variant="outline" className="border-border">
-                {registrySnapshot?.agents?.length || 0} agents
-              </Badge>
-            </div>
-            <div className="space-y-2">
-              {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
-                <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-3">
-                  <div className="text-sm font-medium text-white">{item.agent_name}</div>
-                  <div className="text-xs text-muted-foreground">{item.role}</div>
-                </div>
-              ))}
-              {!registrySnapshot?.delegation_preview?.length && (
-                <div className="text-xs text-muted-foreground">Registry data not available.</div>
-              )}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => navigate("/agent-management")}
-              data-testid="dashboard-registry-manage"
-            >
-              Manage Agents
-            </Button>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <Card className="border-border" data-testid="dashboard-activity">
-          <CardHeader>
-            <CardTitle className="text-lg">Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[280px]">
-              <div className="divide-y divide-border">
-                {visibleActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-center justify-between px-5 py-4">
-                    <div>
-                      <p className="text-sm font-medium">{activity.title}</p>
-                      <p className="text-xs text-muted-foreground">{activity.meta}</p>
-                    </div>
-                    <Badge className={`border ${badgeStyles[activity.status]}`} data-testid={`dashboard-activity-${activity.id}`}>
-                      {activity.status}
-                    </Badge>
-                  </div>
+          <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <Card className="border-border" data-testid="dashboard-quick-actions">
+              <CardHeader>
+                <CardTitle className="text-lg">Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                {visibleActions.map((action) => (
+                  <Button
+                    key={action.id}
+                    variant="outline"
+                    className={`justify-start gap-3 border ${actionStyles[action.intent]}`}
+                    onClick={() => action.path && navigate(action.path)}
+                    data-testid={`dashboard-action-${action.id}`}
+                  >
+                    <action.icon className="h-4 w-4" />
+                    {action.label}
+                  </Button>
                 ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+            <Card className="border-border" data-testid="dashboard-registry">
+              <CardHeader>
+                <CardTitle className="text-lg">Registry Snapshot</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="border-border">
+                    {registrySnapshot?.teams?.length || 0} teams
+                  </Badge>
+                  <Badge variant="outline" className="border-border">
+                    {registrySnapshot?.agents?.length || 0} agents
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {(registrySnapshot?.delegation_preview || []).slice(0, 3).map((item) => (
+                    <div key={item.agent_id} className="rounded-md border border-border bg-zinc-900/40 p-3">
+                      <div className="text-sm font-medium text-white">{item.agent_name}</div>
+                      <div className="text-xs text-muted-foreground">{item.role}</div>
+                    </div>
+                  ))}
+                  {!registrySnapshot?.delegation_preview?.length && (
+                    <div className="text-xs text-muted-foreground">Registry data not available.</div>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => navigate("/agent-management")}
+                  data-testid="dashboard-registry-manage"
+                >
+                  Manage Agents
+                </Button>
+              </CardContent>
+            </Card>
+          </section>
 
-      </section>
+          <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+            <Card className="border-border" data-testid="dashboard-activity">
+              <CardHeader>
+                <CardTitle className="text-lg">Recent Activity</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[280px]">
+                  <div className="divide-y divide-border">
+                    {visibleActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-center justify-between px-5 py-4">
+                        <div>
+                          <p className="text-sm font-medium">{activity.title}</p>
+                          <p className="text-xs text-muted-foreground">{activity.meta}</p>
+                        </div>
+                        <Badge className={`border ${badgeStyles[activity.status]}`} data-testid={`dashboard-activity-${activity.id}`}>
+                          {activity.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </section>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

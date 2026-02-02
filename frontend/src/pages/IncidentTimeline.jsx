@@ -72,7 +72,7 @@ const IncidentTimeline = () => {
   }, [severityFilter, statusFilter]);
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-6">
       <header className="space-y-2">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -88,81 +88,84 @@ const IncidentTimeline = () => {
           Track active incidents, escalation paths, and resolution checkpoints. Each event ties back to evidence packs and approvals.
         </p>
       </header>
+      <ScrollArea className="flex-1">
+        <div className="space-y-6 pr-2">
+          <Card className="border-border" data-testid="incident-filters">
+            <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
+              <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                <SelectTrigger className="w-full md:w-[200px]" data-testid="incident-filter-severity">
+                  <SelectValue placeholder="Severity" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Severity</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full md:w-[200px]" data-testid="incident-filter-status">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="escalated">Escalated</SelectItem>
+                  <SelectItem value="contained">Contained</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" data-testid="incident-export">
+                Export Timeline
+              </Button>
+            </CardContent>
+          </Card>
 
-      <Card className="border-border" data-testid="incident-filters">
-        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
-          <Select value={severityFilter} onValueChange={setSeverityFilter}>
-            <SelectTrigger className="w-full md:w-[200px]" data-testid="incident-filter-severity">
-              <SelectValue placeholder="Severity" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Severity</SelectItem>
-              <SelectItem value="critical">Critical</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-[200px]" data-testid="incident-filter-status">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="escalated">Escalated</SelectItem>
-              <SelectItem value="contained">Contained</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" data-testid="incident-export">
-            Export Timeline
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="border-border" data-testid="incident-timeline">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 text-red-400" />
-            Live Incident Feed
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[480px]">
-            <div className="relative divide-y divide-border">
-              {filteredIncidents.map((incident, index) => (
-                <div key={incident.id} className="px-5 py-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <Badge className={`border ${severityStyles[incident.severity]}`}>{incident.severity}</Badge>
-                        <span className="text-sm font-semibold">{incident.id}</span>
-                        <Badge className={`border ${statusStyles[incident.status]}`}>{incident.status}</Badge>
+          <Card className="border-border" data-testid="incident-timeline">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-red-400" />
+                Live Incident Feed
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[480px]">
+                <div className="relative divide-y divide-border">
+                  {filteredIncidents.map((incident, index) => (
+                    <div key={incident.id} className="px-5 py-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <Badge className={`border ${severityStyles[incident.severity]}`}>{incident.severity}</Badge>
+                            <span className="text-sm font-semibold">{incident.id}</span>
+                            <Badge className={`border ${statusStyles[incident.status]}`}>{incident.status}</Badge>
+                          </div>
+                          <p className="text-sm font-medium">{incident.title}</p>
+                          <p className="text-xs text-muted-foreground">{incident.notes}</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <Clock className="h-3.5 w-3.5" />
+                          {incident.timestamp}
+                        </div>
                       </div>
-                      <p className="text-sm font-medium">{incident.title}</p>
-                      <p className="text-xs text-muted-foreground">{incident.notes}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <AlertTriangle className="h-3.5 w-3.5 text-orange-400" />
+                        Owner: {incident.owner}
+                        <ArrowRight className="h-3.5 w-3.5" />
+                        Evidence Pack linked
+                      </div>
+                      {index < filteredIncidents.length - 1 && (
+                        <div className="mt-4 h-px bg-border" />
+                      )}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      {incident.timestamp}
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <AlertTriangle className="h-3.5 w-3.5 text-orange-400" />
-                    Owner: {incident.owner}
-                    <ArrowRight className="h-3.5 w-3.5" />
-                    Evidence Pack linked
-                  </div>
-                  {index < filteredIncidents.length - 1 && (
-                    <div className="mt-4 h-px bg-border" />
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

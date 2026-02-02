@@ -4,6 +4,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Label } from "../components/ui/label";
+import { ScrollArea } from "../components/ui/scroll-area";
 import { settingsAPI } from "../lib/api";
 import { toast } from "sonner";
 
@@ -75,75 +76,79 @@ const LLMProviderSetup = () => {
   }
 
   return (
-    <div className="p-6 space-y-6" data-testid="llm-provider-setup">
-      <Card className="border-border">
-        <CardHeader>
-          <CardTitle className="text-lg">LLM Provider Setup</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Configure provider details for demo routing. API key updates apply after service restart.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Provider</Label>
-              <Select
-                value={form.provider}
-                onValueChange={(value) => setForm((prev) => ({ ...prev, provider: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROVIDER_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Model</Label>
-              <Input
-                value={form.model}
-                onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
-                placeholder="gpt-4o-mini"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Version Pin</Label>
-              <Input
-                value={form.version_pin}
-                onChange={(event) => setForm((prev) => ({ ...prev, version_pin: event.target.value }))}
-                placeholder="2025-11-20"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>API Key</Label>
-              <Input
-                type="password"
-                value={form.api_key}
-                onChange={(event) => setForm((prev) => ({ ...prev, api_key: event.target.value }))}
-                placeholder="sk-..."
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Base URL (optional)</Label>
-              <Input
-                value={form.base_url}
-                onChange={(event) => setForm((prev) => ({ ...prev, base_url: event.target.value }))}
-                placeholder="https://api.openai.com/v1"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving} data-testid="llm-provider-save">
-              {saving ? "Saving..." : "Save Settings"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="flex h-full flex-col" data-testid="llm-provider-setup">
+      <ScrollArea className="flex-1">
+        <div className="p-6 space-y-6">
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-lg">LLM Provider Setup</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Configure provider details for demo routing. API key updates apply after service restart.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Provider</Label>
+                  <Select
+                    value={form.provider}
+                    onValueChange={(value) => setForm((prev) => ({ ...prev, provider: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROVIDER_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Model</Label>
+                  <Input
+                    value={form.model}
+                    onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
+                    placeholder="gpt-4o-mini"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Version Pin</Label>
+                  <Input
+                    value={form.version_pin}
+                    onChange={(event) => setForm((prev) => ({ ...prev, version_pin: event.target.value }))}
+                    placeholder="2025-11-20"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>API Key</Label>
+                  <Input
+                    type="password"
+                    value={form.api_key}
+                    onChange={(event) => setForm((prev) => ({ ...prev, api_key: event.target.value }))}
+                    placeholder="sk-..."
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Base URL (optional)</Label>
+                  <Input
+                    value={form.base_url}
+                    onChange={(event) => setForm((prev) => ({ ...prev, base_url: event.target.value }))}
+                    placeholder="https://api.openai.com/v1"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSave} disabled={saving} data-testid="llm-provider-save">
+                  {saving ? "Saving..." : "Save Settings"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

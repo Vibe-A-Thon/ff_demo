@@ -398,9 +398,8 @@ const Approvals = () => {
       {/* Approval Details */}
       <div className="flex-1 overflow-hidden">
         {selectedApproval ? (
-          <ScrollArea className="h-full">
-            <div className="p-6 space-y-6">
-              {/* Header */}
+          <div className="h-full flex flex-col">
+            <div className="p-6 border-b border-border">
               <div className="flex items-start justify-between">
                 <div>
                   <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -455,6 +454,9 @@ const Approvals = () => {
                   </div>
                 )}
               </div>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-6 space-y-6">
 
               <Card className="border-border" data-testid="approvals-registry">
                 <CardHeader className="pb-2">
@@ -738,7 +740,7 @@ const Approvals = () => {
               </Card>
 
               {/* SoD Check */}
-              <Card className="border-border border-blue-500/30 bg-blue-500/5">
+              <Card className="border-blue-500/30 bg-blue-500/5">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-blue-400">
                     <Shield className="h-5 w-5" />
@@ -775,8 +777,9 @@ const Approvals = () => {
                   </div>
                 </CardContent>
               </Card>
-            </div>
-          </ScrollArea>
+              </div>
+            </ScrollArea>
+          </div>
         ) : (
           <div className="h-full flex items-center justify-center text-muted-foreground">
             <div className="text-center">
